@@ -2141,7 +2141,7 @@ function EditorParq({
     small: true,
     color: C.success,
     onClick: () => upd("tramos", [...p.tramos, tramoVacio()])
-  }, "+ Tramo PI")), React.createElement(CalcCoordenadas, { label: "PARQUEADERO", puntos: p.coords || [], onChange: function(v) { upd("coords", v); }, onAplicar: function(ds) {   var tr = p.tramos.map(function(t,i){ return i<ds.length ? Object.assign({},t,{distancia:String(r3(ds[i]))}) : t; });   upd("tramos", tr); }}));
+  }, "+ Tramo PI")), p.modo === "independiente" && React.createElement(CalcCoordenadas, { label: "PARQUEADERO", prefijo: "Tramo", nTramos: p.tramos.length, puntos: p.coords || [], onChange: function(v) { upd("coords", v); }, onAplicar: function(ds) { upd("tramos", aplicarDistancias(p.tramos, ds)); }}));
 }
 
 // ─── PERFIL DEL EJE (linea de cotas vs abscisa, con PI marcados) ─────────────
@@ -3113,99 +3113,105 @@ function TabVolumenes({ proyecto, tabla, onChange }) {
 
 
 
-// === CALCULADORA DE COORDENADAS CARTESIANAS ===================================
-// d = sqrt((X2-X1)^2 + (Y2-Y1)^2)   X=Este  Y=Norte
+// === DISTANCIAS POR COORDENADAS DE LOS PI ====================================
+// Cuando el plano no trae distancias: se escriben las coordenadas de cada PI en orden
+// y la distancia entre P1→P2 va al tramo 1, P2→P3 al tramo 2, etc.
+// d = √((E2−E1)² + (N2−N1)²)   E = Este (X), N = Norte (Y)
 function calcDistCoords(p1, p2) {
-  var dx = (parseFloat(p2.este) || 0) - (parseFloat(p1.este) || 0);
-  var dy = (parseFloat(p2.norte) || 0) - (parseFloat(p1.norte) || 0);
-  return Math.sqrt(dx*dx + dy*dy);
+  var n1 = parseFloat(p1.norte), e1 = parseFloat(p1.este), n2 = parseFloat(p2.norte), e2 = parseFloat(p2.este);
+  if ([n1, e1, n2, e2].some(function(v){ return isNaN(v); })) return null;
+  return Math.sqrt((e2 - e1) * (e2 - e1) + (n2 - n1) * (n2 - n1));
+}
+// Pasa las distancias a los tramos (por posición). Si hay más distancias que tramos,
+// crea los tramos que faltan. Las distancias vacías no tocan su tramo.
+function aplicarDistancias(tramos, ds) {
+  var out = tramos.slice();
+  ds.forEach(function(d, i) {
+    if (d === null) return;
+    var base = out[i];
+    if (!base) {
+      // tramo nuevo: su cota inicio es la cota fin del tramo anterior
+      base = tramoVacio();
+      var prev = i > 0 && out[i - 1] ? resolverTramo(out[i - 1]) : null;
+      if (prev && prev.cotaFin !== null && !isNaN(prev.cotaFin)) base.cotaInicio = String(prev.cotaFin);
+    }
+    out[i] = Object.assign({}, base, { distancia: String(r3(d)) });
+  });
+  return out.map(function(t) { return t || tramoVacio(); });
 }
 
 function CalcCoordenadas(props) {
   var label = props.label || '';
+  var prefijo = props.prefijo || 'PI';
   var puntos = props.puntos || [];
   var onChange = props.onChange;
   var onAplicar = props.onAplicar;
+  var nTramos = props.nTramos || 0;
+  var [abierto, setAbierto] = React.useState(puntos.some(function(p){ return p.norte || p.este; }));
+  var [aviso, setAviso] = React.useState('');
 
-  React.useEffect(function() {
-    if (puntos.length === 0) {
-      onChange([
-        { id: Math.random(), norte: '', este: '' },
-        { id: Math.random(), norte: '', este: '' }
-      ]);
-    }
-  }, []);
-
-  var pts = puntos.length >= 1 ? puntos : [];
-  var distancias = pts.length >= 2 ? pts.slice(0,-1).map(function(p,i) {
-    var d = calcDistCoords(p, pts[i+1]);
-    return (isNaN(d) || !isFinite(d)) ? null : r3(d);
-  }) : [];
-  var conDatos = distancias.filter(function(d){ return d !== null && d > 0; });
-  var puedeAplicar = conDatos.length > 0;
-  var headerColor = label === 'IZQUIERDO' ? C.accent2 : label === 'PARQUEADERO' ? C.parq : C.accent;
+  var pts = puntos.length >= 2 ? puntos : puntos.concat([0, 1].slice(puntos.length).map(function(){ return { id: Math.random(), norte: '', este: '' }; }));
+  var distancias = pts.slice(0, -1).map(function(p, i) {
+    var d = calcDistCoords(p, pts[i + 1]);
+    return d === null || !isFinite(d) ? null : r3(d);
+  });
+  var nValidas = distancias.filter(function(d){ return d !== null; }).length;
+  var headerColor = label === 'PARQUEADERO' ? C.parq : label ? C.accent2 : C.accent;
+  var setPts = function(a) { setAviso(''); onChange(a); };
+  var inpS = { width: '100%', minWidth: 80, fontFamily: 'monospace' };
 
   var filas = pts.map(function(p, i) {
     var d = i < pts.length - 1 ? distancias[i] : null;
-    var dText = d !== null ? d.toFixed(3) + ' m' : '—';
-    var dColor = d !== null && d > 0 ? C.success : C.muted;
-    return React.createElement('tr', { key: p.id },
-      React.createElement('td', { style: Object.assign({}, tdS, { fontWeight: 700, color: headerColor, width: 32 }) }, 'P'+(i+1)),
-      React.createElement('td', { style: tdS },
-        React.createElement(Input, {
-          style: { width: 148, fontFamily: 'monospace' },
-          value: p.norte, placeholder: '1234567.890',
-          onChange: function(e) { var a=[].concat(pts); a[i]=Object.assign({},p,{norte:e.target.value}); onChange(a); }
-        })
+    return React.createElement(React.Fragment, { key: p.id },
+      React.createElement('tr', null,
+        React.createElement('td', { style: Object.assign({}, tdS, { fontWeight: 700, color: headerColor, width: 36 }) }, 'P' + (i + 1)),
+        React.createElement('td', { style: tdS },
+          React.createElement(Input, { style: inpS, value: p.norte, placeholder: 'Norte (Y)', inputMode: 'decimal',
+            onChange: function(e) { var a = pts.slice(); a[i] = Object.assign({}, p, { norte: e.target.value }); setPts(a); } })),
+        React.createElement('td', { style: tdS },
+          React.createElement(Input, { style: inpS, value: p.este, placeholder: 'Este (X)', inputMode: 'decimal',
+            onChange: function(e) { var a = pts.slice(); a[i] = Object.assign({}, p, { este: e.target.value }); setPts(a); } })),
+        React.createElement('td', { style: Object.assign({}, tdS, { width: 30 }) },
+          pts.length > 2 ? React.createElement(Btn, { small: true, color: C.danger,
+            onClick: function() { setPts(pts.filter(function(_, j){ return j !== i; })); } }, '✕') : null)
       ),
-      React.createElement('td', { style: tdS },
-        React.createElement(Input, {
-          style: { width: 148, fontFamily: 'monospace' },
-          value: p.este, placeholder: '987654.321',
-          onChange: function(e) { var a=[].concat(pts); a[i]=Object.assign({},p,{este:e.target.value}); onChange(a); }
-        })
-      ),
-      React.createElement('td', { style: Object.assign({}, tdS, { fontWeight: 700, fontFamily: 'monospace', color: dColor }) }, dText),
-      React.createElement('td', { style: Object.assign({}, tdS, { width: 30 }) },
-        pts.length > 2 ? React.createElement(Btn, {
-          small: true, color: C.danger,
-          onClick: function() { onChange(pts.filter(function(_,j){ return j!==i; })); }
-        }, '✕') : null
-      )
+      i < pts.length - 1 && React.createElement('tr', null,
+        React.createElement('td', { colSpan: 4, style: { padding: '3px 10px', fontSize: 12, fontFamily: 'monospace', background: '#F8FAFC',
+          color: d !== null ? C.success : C.muted, borderLeft: '1px solid ' + C.border, borderRight: '1px solid ' + C.border } },
+          '↓ ' + prefijo + ' ' + (i + 1) + ': ', d !== null ? React.createElement('strong', null, d.toFixed(3) + ' m') : 'faltan coordenadas'))
     );
   });
 
-  var btnAplicar = puedeAplicar ? React.createElement(Btn, {
-    color: C.warn,
-    onClick: function() { onAplicar(conDatos); }
-  }, '⬇ Aplicar ' + conDatos.length + ' distancia(s) a tramos') : null;
-
-  return React.createElement(Card, { title: 'Coords → Distancias' + (label ? '  —  ' + label : '') },
-    React.createElement('div', { style: { fontSize: 12, color: C.muted, marginBottom: 8 } },
-      'X = Este, Y = Norte.  d = √((X₂-X₁)² + (Y₂-Y₁)²)'
+  return React.createElement(Card, { title: '📍 Distancias por coordenadas' + (label ? ' — ' + label : ''), accent: headerColor },
+    React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
+      React.createElement('div', { style: { fontSize: 12, color: C.muted, lineHeight: 1.5 } },
+        '¿El plano no trae las distancias? Escribe las coordenadas de cada PI en orden (P1 = inicio). ',
+        'La distancia P1→P2 va al ' + prefijo + ' 1, P2→P3 al ' + prefijo + ' 2, y así.'),
+      React.createElement(Btn, { small: true, color: abierto ? C.muted : headerColor, onClick: function(){ setAbierto(!abierto); } },
+        abierto ? 'Ocultar' : 'Usar coordenadas')
     ),
-    React.createElement('div', { style: { overflowX: 'auto' } },
-      React.createElement('table', { style: { width: '100%', borderCollapse: 'collapse', fontSize: 12 } },
-        React.createElement('thead', null,
-          React.createElement('tr', null,
-            ['#','Norte (Y)','Este (X)','Distancia →',''].map(function(h){
-              return React.createElement('th', { key: h, style: Object.assign({}, thS, { background: C.bg, textAlign: 'left', padding: '5px 8px' }) }, h);
-            })
-          )
-        ),
-        React.createElement('tbody', null, filas)
-      )
-    ),
-    React.createElement('div', { style: { display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' } },
-      React.createElement(Btn, {
-        small: true, color: C.success,
-        onClick: function() { onChange(pts.concat([{ id: Math.random(), norte: '', este: '' }])); }
-      }, '+ Punto'),
-      pts.length > 2 ? React.createElement(Btn, {
-        small: true, color: C.danger,
-        onClick: function() { onChange(pts.slice(0,-1)); }
-      }, '✕ Quitar último') : null,
-      btnAplicar
+    abierto && React.createElement('div', { style: { marginTop: 10 } },
+      React.createElement('div', { style: { overflowX: 'auto' } },
+        React.createElement('table', { style: { width: '100%', borderCollapse: 'collapse', fontSize: 12 } },
+          React.createElement('thead', null,
+            React.createElement('tr', null,
+              ['Punto', 'Norte (Y)', 'Este (X)', ''].map(function(h, k){
+                return React.createElement('th', { key: k, style: Object.assign({}, thS, { background: C.bg, color: C.text, textAlign: 'left', padding: '5px 8px' }) }, h);
+              }))),
+          React.createElement('tbody', null, filas))),
+      React.createElement('div', { style: { display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' } },
+        React.createElement(Btn, { small: true, color: C.success,
+          onClick: function() { setPts(pts.concat([{ id: Math.random(), norte: '', este: '' }])); } }, '+ Punto'),
+        nValidas > 0 && React.createElement(Btn, { color: C.warn,
+          onClick: function() {
+            onAplicar(distancias);
+            var nuevos = Math.max(0, distancias.length - nTramos);
+            setAviso('✓ ' + nValidas + ' distancia(s) pasadas a los tramos' + (nuevos > 0 ? ' (se crearon ' + nuevos + ' tramo(s) nuevos)' : '') + '.');
+          } }, '⬇ Pasar ' + nValidas + ' distancia(s) a los tramos'),
+        aviso && React.createElement('span', { style: { fontSize: 12, fontWeight: 700, color: C.success } }, aviso)
+      ),
+      distancias.length > nTramos && nTramos > 0 && React.createElement('div', { style: { fontSize: 11, color: C.muted, marginTop: 6 } },
+        'Hay ' + distancias.length + ' distancias y ' + nTramos + ' tramo(s): al pasarlas se crearán los tramos que faltan.')
     )
   );
 }
@@ -3528,7 +3534,7 @@ function App() {
         }]
       });
     }
-  }, "+ Agregar tramo (PI)")), /*#__PURE__*/React.createElement(Card, {
+  }, "+ Agregar tramo (PI)")), React.createElement(CalcCoordenadas, { label: "", prefijo: "PI", nTramos: proy.tramos.length, puntos: proy.coordsEje || [], onChange: function(arr) { updSinRecalcular({ coordsEje: arr }); }, onAplicar: function(ds) { upd({ tramos: aplicarDistancias(proy.tramos, ds) }); }}), /*#__PURE__*/React.createElement(Card, {
     title: "Abscisas intermedias adicionales"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -3572,7 +3578,7 @@ function App() {
         valor: ""
       }]
     })
-  }, "+ Abscisa intermedia")), React.createElement(CalcCoordenadas, { label: "", puntos: proy.coordsEje || [], onChange: function(arr) { updSinRecalcular({ coordsEje: arr }); }, onAplicar: function(ds) {   var tr = proy.tramos.map(function(t,i){ return i<ds.length ? Object.assign({},t,{distancia:String(r3(ds[i]))}) : t; });   upd({ tramos: tr }); }})), tab === "laterales" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, "+ Abscisa intermedia"))), tab === "laterales" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#FFF9E6",
       border: `1px solid ${C.warn}`,
@@ -3593,7 +3599,7 @@ function App() {
     onChange: v => upd({
       lateralIzq: v
     })
-  }), React.createElement(CalcCoordenadas, { label: "DERECHO", puntos: proy.coordsDer || [], onChange: function(arr) { updSinRecalcular({ coordsDer: arr }); }, onAplicar: function(ds) {   var lat = Object.assign({}, proy.lateralDer, { tramos: proy.lateralDer.tramos.map(function(t,i){ return i<ds.length ? Object.assign({},t,{distancia:String(r3(ds[i]))}) : t; }) });   upd({ lateralDer: lat }); }}), React.createElement(CalcCoordenadas, { label: "IZQUIERDO", puntos: proy.coordsIzq || [], onChange: function(arr) { updSinRecalcular({ coordsIzq: arr }); }, onAplicar: function(ds) {   var lat = Object.assign({}, proy.lateralIzq, { tramos: proy.lateralIzq.tramos.map(function(t,i){ return i<ds.length ? Object.assign({},t,{distancia:String(r3(ds[i]))}) : t; }) });   upd({ lateralIzq: lat }); }})), tab === "estructura" && /*#__PURE__*/React.createElement(Card, {
+  }), proy.lateralDer.modo === "longitudinal" && React.createElement(CalcCoordenadas, { label: "LATERAL DERECHO", prefijo: "Tramo", nTramos: proy.lateralDer.tramos.length, puntos: proy.coordsDer || [], onChange: function(arr) { updSinRecalcular({ coordsDer: arr }); }, onAplicar: function(ds) { upd({ lateralDer: Object.assign({}, proy.lateralDer, { tramos: aplicarDistancias(proy.lateralDer.tramos, ds) }) }); }}), proy.lateralIzq.modo === "longitudinal" && React.createElement(CalcCoordenadas, { label: "LATERAL IZQUIERDO", prefijo: "Tramo", nTramos: proy.lateralIzq.tramos.length, puntos: proy.coordsIzq || [], onChange: function(arr) { updSinRecalcular({ coordsIzq: arr }); }, onAplicar: function(ds) { upd({ lateralIzq: Object.assign({}, proy.lateralIzq, { tramos: aplicarDistancias(proy.lateralIzq.tramos, ds) }) }); }})), tab === "estructura" && /*#__PURE__*/React.createElement(Card, {
     title: "Capas de Estructura de Pavimento"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
