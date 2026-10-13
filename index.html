@@ -1411,7 +1411,8 @@ function nivelesEtiquetas(xs, minDist) {
 }
 
 function svgPerfil(d) {
-  const W = 1100, PL = 64, PR = 26, PB = 44;
+  // PB incluye la franja de abajo con la cota de la rasante cada 10 m (texto vertical)
+  const W = 1100, PL = 64, PR = 26, PB = 44 + 62;
   const xsPI = d.PI.map(p => PL + (p.abs - d.absMin) / ((d.absMax - d.absMin) || 1) * (W - PL - PR));
   const nivE = nivelesEtiquetas(xsPI, 150);
   const dosFilas = nivE.some(n => n === 1);
@@ -1433,6 +1434,20 @@ function svgPerfil(d) {
     o.push(`<line x1="${X(x).toFixed(1)}" x2="${X(x).toFixed(1)}" y1="${PT}" y2="${H - PB}" stroke="#F1F3F5"/>`,
       `<line x1="${X(x).toFixed(1)}" x2="${X(x).toFixed(1)}" y1="${H - PB}" y2="${H - PB + 5}" stroke="${GC.texto}"/>`,
       svgT(X(x), H - PB + 18, formatoAbscisa(x), `text-anchor="middle" font-size="11" fill="${GC.texto}"`)); }
+  // franja: cota de la rasante cada 10 m (cada 20 o más si la vía es muy larga, para que no se monte)
+  {
+    const yF = H - PB + 27;
+    let paso = 10; while ((X(paso) - X(0)) < 14) paso *= 2;
+    o.push(`<rect x="${PL}" y="${yF}" width="${W - PL - PR}" height="${H - yF - 3}" fill="#FBF4F3" stroke="#E8CFCB"/>`,
+      svgT(PL - 6, yF + 20, "Cota", `text-anchor="end" font-size="10" font-weight="bold" fill="${GC.rasante}"`),
+      svgT(PL - 6, yF + 33, "rasante", `text-anchor="end" font-size="10" font-weight="bold" fill="${GC.rasante}"`));
+    for (let x = Math.ceil(d.absMin / paso - 1e-9) * paso; x <= d.absMax + 1e-9; x += paso) {
+      const c = interp(d.filas, x, r => r.cotaEje);
+      if (c === null || isNaN(c)) continue;
+      const xx = Math.min(Math.max(X(x) + 4, PL + 12), W - PR - 3), yy = ((yF + H - 3) / 2).toFixed(1);
+      o.push(`<text x="${xx.toFixed(1)}" y="${yy}" transform="rotate(-90 ${xx.toFixed(1)} ${yy})" text-anchor="middle" font-size="11" fill="${GC.rasante}">${c.toFixed(3)}</text>`);
+    }
+  }
   // corte / relleno entre terreno natural y fondo de excavación
   if (d.tn.length > 1) {
     const tnEn = x => interp(d.tn, x);
@@ -1487,7 +1502,7 @@ function svgPerfil(d) {
   // en un extremo el texto va encima de la rasante (abajo están los nombres de los fondos de capa)
   d.bajos.forEach(p => { const extremo = p === d.PI[0] || p === d.PI[d.PI.length - 1];
     o.push(svgT(X(p.abs), Y(p.cota) + (extremo ? -12 : 20), "▼ punto bajo", `${ancla(X(p.abs))} font-size="12" font-weight="bold" fill="${GC.agua}"`)); });
-  o.push(svgT(W - PR, H - 6, "Abscisa →", `text-anchor="end" font-size="11" fill="${GC.gris}"`), "</svg>");
+  o.push("</svg>");
   return { svg: o.join(""), W, H };
 }
 
