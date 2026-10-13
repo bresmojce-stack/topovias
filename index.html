@@ -2,14 +2,61 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>TopoVias - Calculadora Topografica</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1A5276">
+<title>TopoVías</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; min-height: 100vh; }
-  body { font-family: 'Segoe UI', system-ui, sans-serif; }
-  #root { width: 100%; min-height: 100vh; }
+  html, body { width: 100%; min-height: 100vh; min-height: 100dvh; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #F0F2F5; }
+  #root { width: 100%; min-height: 100vh; min-height: 100dvh; }
   input, select, button { font-family: inherit; }
+  button { touch-action: manipulation; }
+
+  /* ── Cabecera ── */
+  .tv-header { background: #1A5276; color: #fff; display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap;
+    padding: 12px max(16px, env(safe-area-inset-right)) 12px max(16px, env(safe-area-inset-left)); padding-top: max(12px, env(safe-area-inset-top)); }
+  .tv-brand { font-size: 20px; font-weight: 900; letter-spacing: -0.5px; white-space: nowrap; }
+  .tv-sub { font-size: 11px; opacity: .75; font-weight: 400; letter-spacing: 0; }
+  .tv-proyecto { display: flex; gap: 6px; align-items: center; flex: 1 1 auto; min-width: 0; }
+  .tv-proyecto select { border: none; border-radius: 6px; padding: 7px 8px; font-size: 14px; color: #1C2833; min-width: 0; max-width: 260px; flex: 0 1 auto; }
+  .tv-acciones { display: flex; gap: 8px; align-items: center; }
+  .tv-acciones button { white-space: nowrap; }
+
+  /* ── Pestañas: una sola fila que se desliza, fija arriba al hacer scroll ── */
+  .tv-tabs { position: sticky; top: 0; z-index: 50; background: #fff; border-bottom: 2px solid #D1D9E0; display: flex;
+    overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding: 0 8px; }
+  .tv-tabs::-webkit-scrollbar { display: none; }
+  .tv-tabs button { flex: 0 0 auto; padding: 11px 14px; border: none; background: none; font-size: 13px; cursor: pointer; white-space: nowrap; }
+
+  /* ── Contenido a pantalla completa ── */
+  .tv-main { width: 100%; padding: 20px max(28px, env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom)) max(28px, env(safe-area-inset-left)); }
+  /* Gráficas: en pantallas angostas se pueden deslizar en vez de quedar diminutas */
+  .tv-grafica { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tv-grafica > svg { min-width: 720px; }
+
+  /* Tablet */
+  @media (max-width: 1024px) {
+    .tv-main { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+  }
+  /* Celular */
+  @media (max-width: 640px) {
+    .tv-header { padding-top: max(8px, env(safe-area-inset-top)); padding-bottom: 8px; gap: 8px; }
+    .tv-brand { font-size: 17px; order: 1; }
+    .tv-sub { display: none; }
+    .tv-acciones { order: 2; margin-left: auto; }
+    .tv-acciones .tv-txt { display: none; }
+    .tv-proyecto { order: 3; flex-basis: 100%; }
+    .tv-proyecto select { flex: 1 1 auto; max-width: none; }
+    .tv-main { padding-top: 12px; padding-left: max(10px, env(safe-area-inset-left)); padding-right: max(10px, env(safe-area-inset-right)); }
+    .tv-card { padding: 14px 12px !important; }
+  }
+  /* En pantallas táctiles la letra de las casillas es de 16 px: así el celular no hace zoom al escribir */
+  @media (pointer: coarse) {
+    input, select, textarea { font-size: 16px !important; }
+    .tv-tabs button { padding: 13px 14px; }
+  }
 </style>
 </head>
 <body>
@@ -842,6 +889,7 @@ const Card = ({
   style,
   accent
 }) => /*#__PURE__*/React.createElement("div", {
+  className: "tv-card",
   style: {
     background: C.panel,
     border: `1px solid ${C.border}`,
@@ -1293,7 +1341,7 @@ function TablaLecturas({
       key: bm.id,
       style: {
         display: "grid",
-        gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr auto",
+        gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
         gap: 8,
         marginBottom: 8,
         alignItems: "flex-end",
@@ -1914,7 +1962,7 @@ function EditorLateral({
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
-      gridTemplateColumns: "1fr 1fr",
+      gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
       gap: 10,
       marginBottom: 12
     }
@@ -1938,7 +1986,7 @@ function EditorLateral({
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
-      gridTemplateColumns: "1fr 1fr",
+      gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
       gap: 10
     }
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Tipo"), /*#__PURE__*/React.createElement(Sel, {
@@ -2110,7 +2158,7 @@ function EditorParq({
   }, "EJE → LATERAL (", p.lado === "izquierdo" ? "IZQ" : "DER", ") → ", /*#__PURE__*/React.createElement("strong", null, "PARQUEADERO"), " \xA0|\xA0 el parqueadero nace desde el borde de vía (lateral), no desde el eje."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
-      gridTemplateColumns: "repeat(3,1fr)",
+      gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
       gap: 8,
       marginBottom: 10
     }
@@ -2269,9 +2317,7 @@ function CorteTransversal({
   const LEYENDA_X = W - PAD + 12;
   const totalEspStr = totalEsp.toFixed(3);
   return /*#__PURE__*/React.createElement("div", {
-    style: {
-      overflowX: "auto"
-    }
+    className: "tv-grafica"
   }, /*#__PURE__*/React.createElement("svg", {
     width: "100%",
     viewBox: `0 0 ${W + 180} ${H + 20}`,
@@ -2485,7 +2531,7 @@ function PerfilEje({
   const toY = cota => H - PAD_B - (cota - (cotaMin - margenV)) / (rangoCota + margenV * 2) * (H - PAD_T - PAD_B);
   const piAbs = [...getPIAbscisas(proyecto.absInicio, resolverTodos(proyecto.tramos))];
   const puntos = tabla.filter(r => r.cotaEje !== null).map(r => `${toX(r.abs)},${toY(r.cotaEje)}`).join(" ");
-  return /*#__PURE__*/React.createElement("svg", {
+  return /*#__PURE__*/React.createElement("div", { className: "tv-grafica" }, /*#__PURE__*/React.createElement("svg", {
     width: "100%",
     viewBox: `0 0 ${W} ${H}`,
     style: {
@@ -2588,7 +2634,7 @@ function PerfilEje({
     fill: C.muted,
     fontWeight: "700",
     textAnchor: "end"
-  }, "Abscisa (m) →"));
+  }, "Abscisa (m) →")));
 }
 
 // ─── PLANO EN PLANTA ──────────────────────────────────────────────────────────
@@ -2620,7 +2666,7 @@ function PlanoPlanta({
   const izqPX = ejePX - anchorIzq * sY,
     derPX = ejePX + anchorDer * sY;
   const piAbs = [...getPIAbscisas(proyecto.absInicio, resolverTodos(proyecto.tramos))];
-  return /*#__PURE__*/React.createElement("svg", {
+  return /*#__PURE__*/React.createElement("div", { className: "tv-grafica" }, /*#__PURE__*/React.createElement("svg", {
     width: "100%",
     viewBox: `0 0 ${W} ${H}`,
     style: {
@@ -2774,7 +2820,7 @@ function PlanoPlanta({
     fontSize: "9",
     fill: C.accent2,
     fontWeight: "600"
-  }, "DER ", anchorDer, "m"));
+  }, "DER ", anchorDer, "m")));
 }
 
 // ─── HELPERS NIVELACIONES ─────────────────────────────────────────────────────
@@ -2901,7 +2947,7 @@ function TabNivelaciones({ proyecto, tabla, onChange }) {
             const color = estColorMap[est.id] || C.accent;
             return /*#__PURE__*/React.createElement("div", {
               key: est.id,
-              style: { display: "grid", gridTemplateColumns: "110px 1fr 1fr 1fr auto", gap: 8, marginBottom: 8, alignItems: "flex-end", padding: "6px 8px", borderLeft: "4px solid " + color, background: "#fff", borderRadius: 4 }
+              style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 8, marginBottom: 8, alignItems: "flex-end", padding: "6px 8px", borderLeft: "4px solid " + color, background: "#fff", borderRadius: 4 }
             },
               /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Nombre"),
                 /*#__PURE__*/React.createElement(Input, { value: est.nombre, onChange: e => { const a=[...niv.estaciones]; a[i]={...a[i],nombre:e.target.value}; updNivel(niv.id,{estaciones:a}); }, placeholder: "Est. 1" })),
@@ -3088,7 +3134,7 @@ function TabVolumenes({ proyecto, tabla, onChange }) {
           onClick:function(){onChange({volumenes:vols.filter(function(_,i){return i!==idx;})});}
         },"✕ Eliminar")
       ),
-      React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:12}},
+      React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:12,marginBottom:12}},
         React.createElement("div",null,
           React.createElement(Label,null,"Superficie SUPERIOR (nivelación campo)"),
           renderSel(vol.fuenteSup,function(e){updVol(idx,{fuenteSup:e.target.value});})
@@ -3429,38 +3475,18 @@ function App() {
       fontFamily: "'Segoe UI',system-ui,sans-serif",
       color: C.text
     }
+  }, /*#__PURE__*/React.createElement("header", {
+    className: "tv-header"
   }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: C.accent,
-      color: "#fff",
-      padding: "14px 24px",
-      display: "flex",
-      alignItems: "center",
-      gap: 14,
-      flexWrap: "wrap"
-    }
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 20,
-      fontWeight: 900,
-      letterSpacing: -0.5
-    }
-  }, "📏 TopoVías"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      opacity: 0.75
-    }
+    className: "tv-brand"
+  }, "📏 TopoVías", /*#__PURE__*/React.createElement("div", {
+    className: "tv-sub"
   }, "Calculadora topográfica · 3 decimales · Colombia")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: { display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }
+    className: "tv-proyecto"
   }, /*#__PURE__*/React.createElement("select", {
     value: String(proy.id),
     onChange: e => cambiarProyecto(proyectos.find(p => String(p.id) === e.target.value)?.id),
-    title: "Proyecto activo",
-    style: { border: "none", borderRadius: 6, padding: "6px 8px", fontSize: 13, maxWidth: 200, color: C.text }
+    title: "Proyecto activo"
   }, proyectos.map(p => /*#__PURE__*/React.createElement("option", {
     key: p.id,
     value: String(p.id)
@@ -3472,53 +3498,38 @@ function App() {
     onClick: eliminarProyecto,
     color: C.danger,
     small: true
-  }, "Eliminar")), /*#__PURE__*/React.createElement(Btn, {
+  }, "Eliminar")), /*#__PURE__*/React.createElement("div", {
+    className: "tv-acciones"
+  }, /*#__PURE__*/React.createElement(Btn, {
     onClick: () => exportarExcel(proy, tabla),
     color: "#154360",
     style: { fontWeight: 700, fontSize: 13, border: "1px solid rgba(255,255,255,0.4)" }
-  }, "📊 Exportar"), /*#__PURE__*/React.createElement(Btn, {
+  }, "📊", /*#__PURE__*/React.createElement("span", { className: "tv-txt" }, " Exportar")), /*#__PURE__*/React.createElement(Btn, {
     onClick: calcular,
     color: C.success,
     style: {
       fontWeight: 800,
       fontSize: 14
     }
-  }, "⚡ CALCULAR")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: C.panel,
-      borderBottom: `2px solid ${C.border}`,
-      display: "flex",
-      flexWrap: "wrap",
-      paddingLeft: 8,
-      width: "100%"
-    }
+  }, "⚡ CALCULAR"))), /*#__PURE__*/React.createElement("nav", {
+    className: "tv-tabs"
   }, TABS.map(t => /*#__PURE__*/React.createElement("button", {
     key: t.id,
-    onClick: () => setTab(t.id),
+    "data-tab": t.id,
+    onClick: e => { setTab(t.id); try { e.currentTarget.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }); } catch (_) {} },
     style: {
-      padding: "10px 14px",
-      border: "none",
       borderBottom: tab === t.id ? `3px solid ${C.accent}` : "3px solid transparent",
-      background: "none",
       fontWeight: tab === t.id ? 700 : 500,
-      color: tab === t.id ? C.accent : C.muted,
-      fontSize: 12,
-      cursor: "pointer"
+      color: tab === t.id ? C.accent : C.muted
     }
-  }, t.label))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: "100%",
-      maxWidth: "100%",
-      margin: "0",
-      padding: "20px clamp(12px, 3vw, 28px)",
-      boxSizing: "border-box"
-    }
+  }, t.label))), /*#__PURE__*/React.createElement("main", {
+    className: "tv-main"
   }, tab === "eje" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Card, {
     title: "Proyecto"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
-      gridTemplateColumns: "1fr 1fr",
+      gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
       gap: 12
     }
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Nombre del eje"), /*#__PURE__*/React.createElement(Input, {
@@ -3855,7 +3866,8 @@ function App() {
       borderTop: `3px solid ${s.color}`,
       borderRadius: 8,
       padding: "10px 18px",
-      minWidth: 130
+      minWidth: 130,
+      flex: "1 1 130px"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -3900,7 +3912,8 @@ function App() {
       borderTop: `3px solid ${C.accent}`,
       borderRadius: 8,
       padding: "10px 18px",
-      minWidth: 130
+      minWidth: 130,
+      flex: "1 1 130px"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -3920,7 +3933,8 @@ function App() {
       borderTop: `3px solid ${C.accent2}`,
       borderRadius: 8,
       padding: "10px 18px",
-      minWidth: 130
+      minWidth: 130,
+      flex: "1 1 130px"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -3940,7 +3954,8 @@ function App() {
       borderTop: `3px solid ${C.success}`,
       borderRadius: 8,
       padding: "10px 18px",
-      minWidth: 130
+      minWidth: 130,
+      flex: "1 1 130px"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -3961,7 +3976,8 @@ function App() {
       borderTop: `3px solid ${C.parq}`,
       borderRadius: 8,
       padding: "10px 18px",
-      minWidth: 130
+      minWidth: 130,
+      flex: "1 1 130px"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -3981,7 +3997,8 @@ function App() {
       borderTop: `3px solid ${C.danger}`,
       borderRadius: 8,
       padding: "10px 18px",
-      minWidth: 130
+      minWidth: 130,
+      flex: "1 1 130px"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
