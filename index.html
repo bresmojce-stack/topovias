@@ -1197,18 +1197,24 @@ function calcAreas(proy, tabla) {
   const ancho = r3(anchoIzq + anchoDer);                 // ancho del plano
   const sg = sobreanchoGeneral(proy);
   const anchoConf = r3(ancho + sg.izq + sg.der);        // ancho de conformación (con sobreancho general)
-  const via = r3(largo * anchoConf);
   const parqs = (proy.parqueaderos || []).map(p => {
     const pi = parseFloat(p.absInicio), pf = parseFloat(p.absFin);
-    const a = (parseFloat(p.ancho) || 0) + (parseFloat(p.sobreAncho) || 0);
+    const anchoP = parseFloat(p.ancho) || 0;
+    const ext = sobreanchoParq(p), extremos = sobreanchoExtremosParq(p);
     const largoP = !isNaN(pi) && !isNaN(pf) ? r3(Math.abs(pf - pi)) : 0;
-    return { p, nombre: p.nombre || "Parqueadero", largo: largoP, ancho: r3(a), area: r3(largoP * a) };
+    const largoC = r3(largoP + 2 * extremos);
+    const anchoC = r3(anchoP + ext);
+    // en este tramo el borde de trabajo es el del parqueadero: no se suma el sobreancho de la vía de ese lado
+    const saViaLado = p.lado === "izquierdo" ? sg.izq : sg.der;
+    return { p, nombre: p.nombre || "Parqueadero", lado: p.lado, largo: largoP, anchoPlano: anchoP, ext, extremos, largoC, ancho: anchoC,
+      area: r3(largoC * anchoC), areaPlano: r3(largoP * anchoP), descuentoVia: r3(largoP * saViaLado), saViaLado };
   });
+  const via = r3(largo * anchoConf - parqs.reduce((s, x) => s + x.descuentoVia, 0));
   const sumParqs = parqs.reduce((s, x) => s + x.area, 0);
   const viaPlano = r3(largo * ancho);
   return { largo, ancho, anchoConf, saIzq: sg.izq, saDer: sg.der, via, viaPlano, parqs,
     total: r3(via + sumParqs),              // área de conformación
-    totalPlano: r3(viaPlano + sumParqs) };  // área en planta según el plano
+    totalPlano: r3(viaPlano + parqs.reduce((s, x) => s + x.areaPlano, 0)) };  // área en planta según el plano
 }
 // Cantidades de una vía. Ningún nombre es fijo: las capas, volúmenes e ítems se llaman
 // como el usuario los escriba, y los que tienen el mismo nombre (y unidad) se suman.
@@ -1249,11 +1255,17 @@ function calcCantidades(proy, tabla) {
     capasVia.forEach(c => {
       const sc = sobreanchoCapa(proy, c.nombre);
       const anchoC = r3(areas.ancho + sc.izq + sc.der);
-      usarCapa(c, r3(areas.largo * anchoC), `vía ${areas.largo.toFixed(3)} m × ${anchoC.toFixed(3)} m = `);
+      const desc = r3(areas.parqs.reduce((s, x) => s + x.largo * (x.lado === "izquierdo" ? sc.izq : sc.der), 0));
+      usarCapa(c, r3(areas.largo * anchoC - desc), `vía ${areas.largo.toFixed(3)} m × ${anchoC.toFixed(3)} m${desc ? " − " + desc.toFixed(3) + " m² (sobreancho donde hay parqueadero)" : ""} = `);
     });
     areas.parqs.forEach(pq => {
       const estr = pq.p.estructura === "propia" ? capasDefinidas(pq.p.capas) : capasVia;
-      estr.forEach(c => usarCapa(c, pq.area, pq.nombre + " "));
+      estr.forEach(c => {
+        const sp = sobreanchoCapaParq(proy, pq.p, c.nombre);
+        const largoC = sp > 0 ? pq.largoC : pq.largo;   // los extremos solo cuentan en capas con sobreancho
+        const anchoC = r3(pq.anchoPlano + sp);
+        usarCapa(c, r3(largoC * anchoC), `${pq.nombre} ${largoC.toFixed(3)} m × ${anchoC.toFixed(3)} m = `);
+      });
     });
   }
   (proy.volumenes || []).forEach(v => {
@@ -1282,7 +1294,10 @@ function TabCantidades({ proyecto, tabla, onChange }) {
       fila(A.saIzq || A.saDer
         ? `Vía: ${A.largo.toFixed(3)} m × (${A.ancho.toFixed(3)} + ${A.saIzq.toFixed(3)} izq + ${A.saDer.toFixed(3)} der) m`
         : `Vía: ${A.largo.toFixed(3)} m × ${A.ancho.toFixed(3)} m (sin sobreancho)`, A.via.toFixed(3) + " m²"),
-      A.parqs.map((x, i) => React.createElement(React.Fragment, { key: i }, fila(`${x.nombre}: ${x.largo.toFixed(3)} m × ${x.ancho.toFixed(3)} m`, x.area.toFixed(3) + " m²"))),
+      A.parqs.some(x => x.descuentoVia) && fila("Menos sobreancho de la vía donde hay parqueadero", "−" + A.parqs.reduce((s, x) => s + x.descuentoVia, 0).toFixed(3) + " m²"),
+      A.parqs.map((x, i) => React.createElement(React.Fragment, { key: i }, fila(
+        `${x.nombre}: ${x.extremos ? "(" + x.largo.toFixed(3) + " + 2×" + x.extremos.toFixed(3) + ")" : x.largo.toFixed(3)} m × ${x.ext ? "(" + x.anchoPlano.toFixed(3) + " + " + x.ext.toFixed(3) + ")" : x.anchoPlano.toFixed(3)} m`,
+        x.area.toFixed(3) + " m²"))),
       fila("Total calculado", A.total.toFixed(3) + " m²", true),
       React.createElement("div", { style: { marginTop: 12, maxWidth: 360 } },
         React.createElement(Label, null, "Área conformada escrita (opcional)"),
@@ -1974,6 +1989,34 @@ function sobreanchoCapa(proy, nombre) {
   if (c.sobreancho === "propio") return { izq: numSA(c.saIzq), der: numSA(c.saDer) };
   return { izq: 0, der: 0 };
 }
+// Parqueaderos: sobreancho exterior (borde de afuera; campo "sobreAncho") y opcional en los
+// extremos (inicio y fin). Cada capa del parqueadero: sin, el del parqueadero, o propio.
+const sobreanchoParq = pq => numSA(pq && pq.sobreAncho);
+const sobreanchoExtremosParq = pq => numSA(pq && pq.saExtremos);
+function sobreanchoCapaParq(proy, pq, nombre) {
+  if (!pq) return 0;
+  if (pq.estructura === "propia") {
+    const c = capasDefinidas(pq.capas).find(x => claveCapa(x.nombre) === claveCapa(nombre));
+    if (!c) return esCapaExcavacion(nombre) ? sobreanchoParq(pq) : 0;
+    if (c.sobreancho === "general") return sobreanchoParq(pq);
+    if (c.sobreancho === "propio") return numSA(c.saExt);
+    return 0;
+  }
+  // misma estructura de la vía: la capa usa el modo que tiene en la vía
+  const c = capasDefinidas(proy.capas).find(x => claveCapa(x.nombre) === claveCapa(nombre));
+  if (!c) return esCapaExcavacion(nombre) ? sobreanchoParq(pq) : 0;
+  if (c.sobreancho === "general") return sobreanchoParq(pq);
+  if (c.sobreancho === "propio") return numSA(pq.lado === "izquierdo" ? c.saIzq : c.saDer);
+  return 0;
+}
+// Parqueadero de un lado que cubre la abscisa (para el ancho de cada sección de volumen)
+function parqEn(proy, lado, abs) {
+  return (proy.parqueaderos || []).find(p => {
+    const a = parseFloat(p.absInicio), b = parseFloat(p.absFin);
+    return p.lado === lado && !isNaN(a) && !isNaN(b) && abs >= Math.min(a, b) - 0.001 && abs <= Math.max(a, b) + 0.001;
+  }) || (proy.parqueaderos || []).find(p => p.lado === lado);
+}
+
 // Sobreancho de un volumen: si no se escribe, se toma de la capa de diseño contra la que se
 // compara (ej. contra "Tabla › roca" usa el de la roca; contra la rasante, el ancho del plano).
 function sobreanchoVolumen(vol, proy) {
@@ -1981,19 +2024,19 @@ function sobreanchoVolumen(vol, proy) {
   // volúmenes de versiones anteriores: un solo valor para ambos lados y también a lo largo
   if (vacio(vol.saIzq) && vacio(vol.saDer) && numSA(vol.sobreAncho) > 0) {
     const sa = numSA(vol.sobreAncho);
-    return { izq: sa, der: sa, origen: "escrito en el volumen", longitudinal: vol.saLongitudinal !== false };
+    return { izq: sa, der: sa, origen: "escrito en el volumen", longitudinal: vol.saLongitudinal !== false, escritoIzq: true, escritoDer: true, capa: null };
   }
-  let auto = { izq: 0, der: 0 }, origen = "ancho del plano";
+  let auto = { izq: 0, der: 0 }, origen = "ancho del plano", capa = null;
   const diseno = [vol.fuenteInf, vol.fuenteSup].find(f => f && f.startsWith("tabla__"));
   if (diseno && diseno !== "tabla__rasante") {
-    const capa = diseno.replace("tabla__", "");
+    capa = diseno.replace("tabla__", "");
     auto = sobreanchoCapa(proy, capa);
     origen = auto.izq || auto.der ? "de la capa " + capa : "capa " + capa + " sin sobreancho";
   }
   const izq = vacio(vol.saIzq) ? auto.izq : numSA(vol.saIzq);
   const der = vacio(vol.saDer) ? auto.der : numSA(vol.saDer);
   if (!vacio(vol.saIzq) || !vacio(vol.saDer)) origen = "escrito en el volumen";
-  return { izq, der, auto, origen, longitudinal: !!vol.saLongitudinal };
+  return { izq, der, auto, origen, longitudinal: !!vol.saLongitudinal, escritoIzq: !vacio(vol.saIzq), escritoDer: !vacio(vol.saDer), capa };
 }
 
 // Método de áreas promedio. Cada fila trae: dist (con sobreancho en los extremos),
@@ -2016,8 +2059,16 @@ function calcVolumen(vol, proyecto, tabla) {
     const pts = [dParqDer, dDer, dEje, dIzq, dParqIzq].filter(v => v !== null);
     if (!pts.length) return null;
     const p = prom(pts);
-    // ANCHO: vía + sobreancho izq + sobreancho der + parqueaderos donde existen
-    const ancho = r3(anchoVia + saLados + (dParqDer !== null ? anchoParqDer : 0) + (dParqIzq !== null ? anchoParqIzq : 0));
+    // ANCHO: vía + a cada lado: si hay parqueadero, su ancho + su sobreancho exterior;
+    //        si no, el sobreancho de la vía de ese lado.
+    const ladoAncho = (lado, dParq, saVia, escrito) => {
+      if (dParq === null) return saVia;
+      const pq = parqEn(proyecto, lado, pSup.abs);
+      const anchoP = parseFloat(pq && pq.ancho) || 0;
+      const saP = escrito ? saVia : (S.capa ? sobreanchoCapaParq(proyecto, pq, S.capa) : 0);
+      return anchoP + saP;
+    };
+    const ancho = r3(anchoVia + ladoAncho("izquierdo", dParqIzq, S.izq, S.escritoIzq) + ladoAncho("derecho", dParqDer, S.der, S.escritoDer));
     const area = r3(Math.max(0, p * ancho));
     const ptsVia = [dDer, dEje, dIzq].filter(v => v !== null);
     const areaVia = r3(Math.max(0, (ptsVia.length ? prom(ptsVia) : p) * (anchoVia + saLados)));
@@ -2713,18 +2764,31 @@ function EstructuraParq({ p, capasVia, onChange }) {
       !propia && React.createElement("div", { style: { flex: "2 1 260px", fontSize: 12, color: C.muted, paddingBottom: 6 } },
         viaDef.length ? "Usa: " + viaDef.map(c => c.nombre + " " + c.espesor + " m").join(" · ") : "Define las capas en 🏗 Estructura."),
       propia && viaDef.length > 0 && React.createElement(Btn, { small: true, color: C.accent2,
-        onClick: () => setCapas(viaDef.map(c => ({ nombre: c.nombre, espesor: c.espesor, id: Math.random() }))) }, "Copiar capas de la vía")),
+        onClick: () => setCapas(viaDef.map(c => ({ nombre: c.nombre, espesor: c.espesor, id: Math.random(),
+          // el sobreancho de cada capa se copia: general → el del parqueadero; propio → el valor de su lado
+          sobreancho: c.sobreancho === "general" || c.sobreancho === "propio" ? c.sobreancho : "no",
+          saExt: c.sobreancho === "propio" ? (p.lado === "izquierdo" ? c.saIzq : c.saDer) || "" : "" }))) }, "Copiar capas de la vía")),
     propia && React.createElement("div", null,
       React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 8 } },
         "Primero la capa de arriba (= rasante del parqueadero). Usa los mismos nombres de la vía para las capas que se repiten, así quedan en la misma columna de la tabla."),
-      capas.map((c, i) => React.createElement("div", { key: c.id, style: { display: "grid", gridTemplateColumns: "1fr 110px auto", gap: 8, marginBottom: 6, alignItems: "flex-end" } },
+      capas.map((c, i) => React.createElement("div", { key: c.id, style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8, marginBottom: 8, paddingBottom: 8, borderBottom: `1px dashed ${C.border}`, alignItems: "flex-end" } },
         React.createElement("div", null, React.createElement(Label, null, "Capa ", i + 1, i === 0 && " (= Rasante)"),
           React.createElement(Input, { value: c.nombre, placeholder: "Concreto, Base, Sub-base…",
             onChange: e => { const cs = [...capas]; cs[i] = { ...cs[i], nombre: e.target.value }; setCapas(cs); } })),
         React.createElement("div", null, React.createElement(Label, null, "Espesor (m)"),
           React.createElement(Input, { value: c.espesor, placeholder: "ej. 0.150", inputMode: "decimal",
             onChange: e => { const cs = [...capas]; cs[i] = { ...cs[i], espesor: e.target.value }; setCapas(cs); } })),
-        React.createElement(Btn, { small: true, color: C.danger, onClick: () => setCapas(capas.filter((_, j) => j !== i)) }, "✕"))),
+        React.createElement("div", null, React.createElement(Label, null, "Sobreancho"),
+          React.createElement(Sel, { value: c.sobreancho === "general" || c.sobreancho === "propio" ? c.sobreancho : "no",
+            onChange: e => { const cs = [...capas]; cs[i] = { ...cs[i], sobreancho: e.target.value }; setCapas(cs); } },
+            React.createElement("option", { value: "no" }, "Sin sobreancho"),
+            React.createElement("option", { value: "general" }, `Del parq. (${sobreanchoParq(p).toFixed(2)})`),
+            React.createElement("option", { value: "propio" }, "Propio"))),
+        c.sobreancho === "propio" && React.createElement("div", null, React.createElement(Label, null, "Exterior (m)"),
+          React.createElement(Input, { value: c.saExt || "", placeholder: "0.50", inputMode: "decimal",
+            onChange: e => { const cs = [...capas]; cs[i] = { ...cs[i], saExt: e.target.value }; setCapas(cs); } })),
+        React.createElement("div", { style: { display: "flex", justifyContent: "flex-end" } },
+          React.createElement(Btn, { small: true, color: C.danger, onClick: () => setCapas(capas.filter((_, j) => j !== i)) }, "✕")))),
       React.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 4 } },
         React.createElement(Btn, { small: true, color: C.success, onClick: () => setCapas([...capas, capaVacia()]) }, "+ Agregar capa"),
         def.length > 0 && React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: C.danger } },
@@ -2822,11 +2886,21 @@ function EditorParq({
     value: p.ancho,
     onChange: e => upd("ancho", e.target.value),
     placeholder: "ej. 5"
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Sobre ancho (m)"), /*#__PURE__*/React.createElement(Input, {
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Sobreancho exterior (m)"), /*#__PURE__*/React.createElement(Input, {
     value: p.sobreAncho,
     onChange: e => upd("sobreAncho", e.target.value),
-    placeholder: "0.5"
+    placeholder: "0.5",
+    inputMode: "decimal"
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Sobreancho en extremos (m)"), /*#__PURE__*/React.createElement(Input, {
+    value: p.saExtremos || "",
+    onChange: e => upd("saExtremos", e.target.value),
+    placeholder: "0 (inicio y fin)",
+    inputMode: "decimal"
   }))), /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 12, color: C.muted, marginBottom: 10, marginTop: -4 }
+  }, "Ancho de trabajo: ", (parseFloat(p.ancho) || 0).toFixed(2), " + ", sobreanchoParq(p).toFixed(2), " = ", /*#__PURE__*/React.createElement("strong", null, r3((parseFloat(p.ancho) || 0) + sobreanchoParq(p)).toFixed(2), " m"),
+    sobreanchoExtremosParq(p) > 0 ? " · largo " + r3((parseFloat(p.absFin) - parseFloat(p.absInicio) || 0) + 2 * sobreanchoExtremosParq(p)).toFixed(2) + " m" : "",
+    ". Donde está el parqueadero no se suma el sobreancho de la vía de ese lado."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 10
     }
