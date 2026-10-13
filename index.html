@@ -1260,7 +1260,26 @@ function PantallaObras({ obras, proyectos, onAbrir, onNueva }) {
           })));
 }
 
-function PantallaObra({ obra, vias, onVolver, onRenombrar, onEliminar, onAbrirVia, onNuevaVia, onDuplicarVia, onEliminarVia, onExcelVia }) {
+function ResumenObra({ obra, vias, onLibro }) {
+  const R = resumenObra(vias);
+  return React.createElement(Card, { title: "📚 Libro consolidado de " + obra.nombre, accent: C.success },
+    React.createElement("div", { style: { fontSize: 13, color: C.muted, marginBottom: 12 } },
+      "Un solo Excel con una hoja por vía y al final la hoja RESUMEN con las cantidades de todas las vías. Se arma con los datos actuales cada vez que lo creas."),
+    R.columnas.length > 0 && React.createElement("div", { style: { overflowX: "auto", marginBottom: 12 } },
+      React.createElement("table", { style: { borderCollapse: "collapse", fontSize: 12, minWidth: "100%" } },
+        React.createElement("thead", null, React.createElement("tr", null,
+          ["Vía"].concat(R.columnas.map(c => c.nombre + " (" + c.unidad + ")")).map((h, i) => React.createElement("th", { key: i, style: { ...thS, background: C.success, color: "#fff", textAlign: i ? "right" : "left" } }, h)))),
+        React.createElement("tbody", null,
+          R.filas.map((f, i) => React.createElement("tr", { key: f.via.id, style: { background: i % 2 ? C.row2 : C.row1 } },
+            React.createElement("td", { style: { ...tdS, textAlign: "left", fontWeight: 700 } }, f.via.nombre, !f.cant && React.createElement("span", { style: { color: C.warn, fontWeight: 400 } }, " (sin datos)")),
+            R.columnas.map(c => { const v = R.valor(f, c.clave); return React.createElement("td", { key: c.clave, style: { ...tdS, textAlign: "right", fontFamily: "monospace" } }, v === null ? "—" : v.toFixed(3)); }))),
+          React.createElement("tr", { style: { background: "#1A1A2E" } },
+            React.createElement("td", { style: { ...tdS, textAlign: "left", color: "#D4AF37", fontWeight: 800 } }, "TOTAL"),
+            R.totales.map((t, i) => React.createElement("td", { key: i, style: { ...tdS, textAlign: "right", fontFamily: "monospace", color: "#D4AF37", fontWeight: 800 } }, t.toFixed(3))))))),
+    React.createElement(Btn, { color: C.success, style: { padding: "12px 18px", fontSize: 15 }, onClick: onLibro }, "📚 Crear libro de " + obra.nombre));
+}
+
+function PantallaObra({ obra, vias, onVolver, onRenombrar, onEliminar, onAbrirVia, onNuevaVia, onDuplicarVia, onEliminarVia, onExcelVia, onLibro }) {
   const [editando, setEditando] = React.useState(false);
   const accion = (txt, color, fn) => React.createElement("button", {
     onClick: e => { e.stopPropagation(); fn(); },
@@ -1294,7 +1313,8 @@ function PantallaObra({ obra, vias, onVolver, onRenombrar, onEliminar, onAbrirVi
                 accion("📊 Excel", C.accent, () => onExcelVia(v)),
                 accion("⧉ Duplicar", C.accent2, () => onDuplicarVia(v.id)),
                 accion("🗑 Eliminar", C.danger, () => onEliminarVia(v.id))));
-          })));
+          })),
+    vias.length > 0 && React.createElement("div", { style: { marginTop: 16 } }, React.createElement(ResumenObra, { obra, vias, onLibro })));
 }
 
 // ─── TABLA RESULTADO ──────────────────────────────────────────────────────────
@@ -1818,20 +1838,13 @@ function calcVolumen(vol, proyecto, tabla) {
   return { filas: filasVol, volTotal, sa, anchoVia };
 }
 
-function exportarExcel(proyecto, tabla) {
-  if (!tabla || !tabla.length) {
-    alert("Primero presiona ⚡ CALCULAR para generar la tabla.");
-    return;
-  }
-  if (typeof window.XLSX === "undefined") {
-    alert("El módulo de exportación no está disponible.");
-    return;
-  }
-  try {
+// Excel no acepta \ / ? * [ ] : en el nombre de la hoja (máx. 31 caracteres)
+const nombreHoja = n => ((n || "Via").replace(/[\\\/\?\*\[\]:]/g, "-").trim() || "Via").slice(0, 31);
+
+// Arma la hoja de Excel de una vía (memoria de cálculo). La usan el Excel de la vía
+// y el libro consolidado de la obra. Devuelve la hoja y dónde quedó cada cantidad.
+function construirHojaVia(proyecto, tabla, sheetName) {
     const XLSX = window.XLSX;
-    const wb = XLSX.utils.book_new();
-    // Excel no acepta \ / ? * [ ] : en el nombre de la hoja (máx. 31 caracteres)
-    const sheetName = ((proyecto.nombre || "Via").replace(/[\\\/\?\*\[\]:]/g, "-").trim() || "Via").slice(0, 31);
 
     // ── helpers ────────────────────────────────────────────────
     const col2letter = n => { // 0-based → A, B, C...
@@ -2014,12 +2027,15 @@ function exportarExcel(proyecto, tabla) {
     });
 
     // ── 7. CANTIDADES DE LA VÍA ─────────────────────────────────
+    const cantRefs = {}; // clave de la cantidad → celda con su valor (para la hoja resumen)
+    let cantQ = null;
     {
       const q = calcCantidades(proyecto, tabla);
       const r7 = pushRow(["CANTIDADES DE LA VÍA"]);
       boldRows.add(r7);
       headerRows.add(pushRow(["CANTIDAD", "UNIDAD", "VALOR", "CÓMO SE CALCULA"]));
-      q.items.forEach(it => pushRow([it.nombre, it.unidad, it.valor, it.partes.join(" + ")]));
+      q.items.forEach(it => { const r = pushRow([it.nombre, it.unidad, it.valor, it.partes.join(" + ")]); cantRefs[it.clave] = ref(2, r); });
+      cantQ = q;
       blank();
     }
 
@@ -2072,8 +2088,39 @@ function exportarExcel(proyecto, tabla) {
     ws["!merges"] = merges;
     ws["!cols"] = Array.from({ length: maxCol + 1 }, (_, c) => ({ wch: c === 0 ? 16 : c === 1 ? 20 : 12 }));
 
-    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    return { ws, cantRefs, cant: cantQ };
+}
 
+// Formato común: números con 3 decimales (como número, no texto) y fórmulas.
+function hojaDesdeFilas(wsData, merges, anchos) {
+  const XLSX = window.XLSX;
+  const ws = XLSX.utils.aoa_to_sheet(wsData.map(r => r.map(c => c && typeof c === "object" && c.f ? (c.v != null ? c.v : 0) : c)));
+  wsData.forEach((fila, r) => fila.forEach((cell, c) => {
+    if (cell && typeof cell === "object" && cell.f) ws[XLSX.utils.encode_cell({ r, c })] = { t: "n", f: cell.f, v: cell.v != null ? cell.v : 0 };
+  }));
+  Object.keys(ws).forEach(addr => { if (addr[0] !== "!" && ws[addr].t === "n") ws[addr].z = "0.000"; });
+  ws["!merges"] = merges || [];
+  if (anchos) ws["!cols"] = anchos.map(w => ({ wch: w }));
+  return ws;
+}
+const colLetra = n => { let s = ""; n++; while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26); } return s; };
+const refHoja = h => "'" + h.replace(/'/g, "''") + "'!";
+
+// Excel de una sola vía
+function exportarExcel(proyecto, tabla) {
+  if (!tabla || !tabla.length) {
+    alert("Primero presiona ⚡ CALCULAR para generar la tabla.");
+    return null;
+  }
+  if (typeof window.XLSX === "undefined") {
+    alert("El módulo de exportación no está disponible.");
+    return null;
+  }
+  try {
+    const XLSX = window.XLSX;
+    const wb = XLSX.utils.book_new();
+    const sheetName = nombreHoja(proyecto.nombre);
+    XLSX.utils.book_append_sheet(wb, construirHojaVia(proyecto, tabla, sheetName).ws, sheetName);
     const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
     return {
       blob: new Blob([wbout], { type: MIME_XLSX }),
@@ -2081,6 +2128,75 @@ function exportarExcel(proyecto, tabla) {
     };
   } catch (e) {
     alert("Error al exportar: " + e.message);
+    console.error(e);
+    return null;
+  }
+}
+
+// Libro consolidado de la obra: una hoja por vía y al final la hoja RESUMEN con una fila
+// por vía y una columna por cantidad. Las columnas salen de las cantidades que tengan las
+// vías (ningún nombre es fijo) y cada valor es una fórmula que apunta a la hoja de su vía.
+function resumenObra(vias) {
+  const filas = vias.map(v => {
+    const t = generarTabla(v);
+    return { via: v, tabla: t, cant: t.length ? calcCantidades(v, t) : null };
+  });
+  const columnas = [];
+  filas.forEach(f => f.cant && f.cant.items.forEach(it => {
+    if (!columnas.some(c => c.clave === it.clave)) columnas.push({ clave: it.clave, nombre: it.nombre, unidad: it.unidad });
+  }));
+  const valor = (f, clave) => { const it = f.cant && f.cant.items.find(x => x.clave === clave); return it ? it.valor : null; };
+  const totales = columnas.map(c => r3(filas.reduce((s, f) => s + (valor(f, c.clave) || 0), 0)));
+  return { filas, columnas, valor, totales };
+}
+function exportarLibroObra(obra, vias) {
+  if (!vias.length) { alert("Esta obra aún no tiene vías."); return null; }
+  if (typeof window.XLSX === "undefined") { alert("El módulo de exportación no está disponible."); return null; }
+  try {
+    const XLSX = window.XLSX;
+    const wb = XLSX.utils.book_new();
+    const R = resumenObra(vias);
+    const usados = new Set(["RESUMEN"]);
+    R.filas.forEach(f => {
+      // nombre de hoja único (máx. 31 caracteres)
+      const base = nombreHoja(f.via.nombre);
+      let n = base, k = 2;
+      while (usados.has(n.toUpperCase())) { const suf = " (" + k++ + ")"; n = base.slice(0, 31 - suf.length) + suf; }
+      usados.add(n.toUpperCase());
+      f.hoja = n;
+      if (!f.tabla.length) return;
+      const h = construirHojaVia(f.via, f.tabla, n);
+      f.refs = h.cantRefs;
+      XLSX.utils.book_append_sheet(wb, h.ws, n);
+    });
+    // ── Hoja RESUMEN ──
+    const nc = R.columnas.length;
+    const data = [
+      ["RESUMEN DE CANTIDADES - " + (obra.nombre || "OBRA").toUpperCase()],
+      ["FECHA:", new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" }), "", "VÍAS:", R.filas.length],
+      [""],
+      ["VÍA"].concat(R.columnas.map(c => c.nombre + " (" + c.unidad + ")"))
+    ];
+    const ini = data.length;
+    R.filas.forEach(f => {
+      if (!f.cant) { data.push([f.via.nombre + " (sin datos: completa el primer tramo)"]); return; }
+      // si dos vías se llaman igual, se muestra el nombre de su hoja ("EJE 7 (2)")
+      data.push([f.hoja !== nombreHoja(f.via.nombre) ? f.hoja : f.via.nombre].concat(R.columnas.map(c => {
+        const v = R.valor(f, c.clave);
+        return v === null ? "" : { f: refHoja(f.hoja) + f.refs[c.clave], v };
+      })));
+    });
+    const fin = data.length - 1;
+    data.push(["TOTAL"].concat(R.columnas.map((c, i) => ({ f: "SUM(" + colLetra(i + 1) + (ini + 1) + ":" + colLetra(i + 1) + (fin + 1) + ")", v: R.totales[i] }))));
+    const ws = hojaDesdeFilas(data, [{ s: { r: 0, c: 0 }, e: { r: 0, c: Math.max(nc, 4) } }], [28].concat(R.columnas.map(c => Math.max(14, c.nombre.length + 6))));
+    XLSX.utils.book_append_sheet(wb, ws, "RESUMEN");
+    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    return {
+      blob: new Blob([wbout], { type: MIME_XLSX }),
+      nombre: nombreArchivoSeguro("TopoVias - Obra " + (obra.nombre || "")) + ".xlsx"
+    };
+  } catch (e) {
+    alert("Error al crear el libro: " + e.message);
     console.error(e);
     return null;
   }
@@ -3769,7 +3885,8 @@ function App() {
               onEliminar: () => eliminarObra(obraVista.id),
               onAbrirVia: abrirVia, onNuevaVia: n => crearVia(obraVista.id, n),
               onDuplicarVia: duplicarVia, onEliminarVia: eliminarVia,
-              onExcelVia: v => { const t = generarTabla(v); const a = exportarExcel(v, t); if (a) setArchivo(a); }
+              onExcelVia: v => { const t = generarTabla(v); const a = exportarExcel(v, t); if (a) setArchivo(a); },
+              onLibro: () => { const a = exportarLibroObra(obraVista, viasDeObra(obraVista.id)); if (a) setArchivo(a); }
             })
           : React.createElement(PantallaObras, {
               obras, proyectos,
