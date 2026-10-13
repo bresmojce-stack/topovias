@@ -3,12 +3,13 @@
 Calculadora topográfica de vías, organizada por **obras** y **vías**.
 
 - **Obras → Vías:** cada obra (como una carpeta) tiene sus vías. Cada vía tiene tramos/PI (se llenan 3 de 4 campos; distancias también por coordenadas), estructura, laterales, parqueaderos (con estructura propia si la tienen), nivelaciones, volúmenes por áreas promedio y cantidades.
-- **Excel:** de cada vía, o el **libro consolidado de la obra** (una hoja por vía + hoja RESUMEN con fórmulas a cada vía). Los números van como número con 3 decimales. Se guarda en el dispositivo o se comparte (WhatsApp, correo, Drive…).
+- **Gráficos:** perfil longitudinal (rasante roja, terreno natural negro, corte/relleno, fondos de capa) y planta (abscisado cada 10 m, PI con abscisa y cota, sentido del agua, bombeo, punto bajo).
+- **Excel:** de cada vía, o el **libro consolidado de la obra** (una hoja por vía + hoja RESUMEN con fórmulas a cada vía). Gráficos arriba de cada hoja; esquema de las hojas de obra (Arial, encabezados gris claro, bordes finos, títulos azul marino, sin cuadrícula). Abscisas sin ceros de relleno (10, 23.45, 23.456); demás números con 3 decimales. Se guarda en el dispositivo o se comparte (WhatsApp, correo, Drive…).
 - **Ningún nombre es fijo:** obras, vías, capas, volúmenes y cantidades se llaman como los escriba el usuario.
 
 ## Archivos
 
-- `index.html`: toda la app en un solo archivo (React y SheetJS incluidos).
+- `index.html`: toda la app en un solo archivo (React y ExcelJS incluidos, funciona sin internet).
 - `manifest.json`, íconos: para instalarla en el celular, tablet o PC.
 - `sw.js`: modo sin conexión. **Al publicar una versión nueva, cambiar `CACHE_VERSION`** para que los equipos la descarguen.
 
