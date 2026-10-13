@@ -1255,8 +1255,9 @@ function calcCantidades(proy, tabla) {
   const add = (nombre, unidad, valor, parte, extra) => {
     const clave = claveCapa(nombre) + "|" + unidad;
     let it = items.find(x => x.clave === clave);
-    if (!it) { it = { clave, nombre: String(nombre).trim(), unidad, valor: 0, partes: [], ...extra }; items.push(it); }
-    it.valor = r3(it.valor + valor);
+    if (!it) { it = { clave, nombre: String(nombre).trim(), unidad, valor: 0, exacto: 0, partes: [], ...extra }; items.push(it); }
+    it.exacto += valor;                 // sin redondeos intermedios (igual que las fórmulas del Excel)
+    it.valor = r3(it.exacto);
     it.partes.push(parte);
     return it;
   };
@@ -1277,16 +1278,16 @@ function calcCantidades(proy, tabla) {
     capasVia.forEach(c => {
       const sc = sobreanchoCapa(proy, c.nombre);
       const anchoC = r3(areas.ancho + sc.izq + sc.der);
-      const desc = r3(areas.parqs.reduce((s, x) => s + x.largo * (x.lado === "izquierdo" ? sc.izq : sc.der), 0));
-      usarCapa(c, r3(areas.largo * anchoC - desc), `vía ${areas.largo.toFixed(3)} m × ${anchoC.toFixed(3)} m${desc ? " − " + desc.toFixed(3) + " m² (sobreancho donde hay parqueadero)" : ""} = `);
+      const desc = areas.parqs.reduce((s, x) => s + x.largo * (x.lado === "izquierdo" ? sc.izq : sc.der), 0);
+      usarCapa(c, areas.largo * anchoC - desc, `vía ${areas.largo.toFixed(3)} m × ${anchoC.toFixed(3)} m${desc ? " − " + desc.toFixed(3) + " m² (sobreancho donde hay parqueadero)" : ""} = `);
     });
     areas.parqs.forEach(pq => {
       const estr = pq.p.estructura === "propia" ? capasDefinidas(pq.p.capas) : capasVia;
       estr.forEach(c => {
         const sp = sobreanchoCapaParq(proy, pq.p, c.nombre);
         const largoC = sp > 0 ? pq.largoC : pq.largo;   // los extremos solo cuentan en capas con sobreancho
-        const anchoC = r3(pq.anchoPlano + sp);
-        usarCapa(c, r3(largoC * anchoC), `${pq.nombre} ${largoC.toFixed(3)} m × ${anchoC.toFixed(3)} m = `);
+        const anchoC = pq.anchoPlano + sp;
+        usarCapa(c, largoC * anchoC, `${pq.nombre} ${largoC.toFixed(3)} m × ${anchoC.toFixed(3)} m = `);
       });
     });
   }
@@ -1468,7 +1469,10 @@ function svgPerfil(d) {
     if (t !== null && f !== null && d.tn.length > 1 && p.abs >= d.tn[0].abs && p.abs <= d.tn[d.tn.length - 1].abs)
       o.push(svgT(x, y0 + 28, "TN " + t.toFixed(3) + " · " + (t >= f ? "corte " : "relleno ") + Math.abs(t - f).toFixed(2) + " m", `${anc} font-size="10" fill="${GC.borde}"`));
   });
-  d.bajos.forEach(p => o.push(svgT(X(p.abs), Y(p.cota) + 20, "▼ punto bajo", `text-anchor="middle" font-size="12" font-weight="bold" fill="${GC.agua}"`)));
+  const ancla = x => x > W - 90 ? 'text-anchor="end"' : x < PL + 60 ? 'text-anchor="start"' : 'text-anchor="middle"';
+  // en un extremo el texto va encima de la rasante (abajo están los nombres de los fondos de capa)
+  d.bajos.forEach(p => { const extremo = p === d.PI[0] || p === d.PI[d.PI.length - 1];
+    o.push(svgT(X(p.abs), Y(p.cota) + (extremo ? -12 : 20), "▼ punto bajo", `${ancla(X(p.abs))} font-size="12" font-weight="bold" fill="${GC.agua}"`)); });
   o.push(svgT(W - PR, H - 6, "Abscisa →", `text-anchor="end" font-size="11" fill="${GC.gris}"`), "</svg>");
   return { svg: o.join(""), W, H };
 }
@@ -1543,7 +1547,7 @@ function svgPlanta(d) {
       svgT(x, y0, "PI " + (i + 1) + " · " + formatoAbscisa(p.abs), `${anc} font-size="11" font-weight="bold" fill="${GC.texto}"`),
       svgT(x, y0 + 14, "cota " + p.cota.toFixed(3), `${anc} font-size="11" font-weight="bold" fill="${GC.rasante}"`));
   });
-  d.bajos.forEach(p => o.push(svgT(X(p.abs), yIzq - (sg.izq + pIzq) * esc - 8, "▼ punto bajo", `text-anchor="middle" font-size="12" font-weight="bold" fill="${GC.agua}"`)));
+  d.bajos.forEach(p => { const x = X(p.abs); o.push(svgT(x, yIzq - (sg.izq + pIzq) * esc - 8, "▼ punto bajo", `${x > W - 90 ? 'text-anchor="end"' : x < PL + 60 ? 'text-anchor="start"' : 'text-anchor="middle"'} font-size="12" font-weight="bold" fill="${GC.agua}"`)); });
   o.push("</svg>");
   return { svg: o.join(""), W, H: Math.round(H) };
 }
@@ -2362,10 +2366,12 @@ function calcVolumen(vol, proyecto, tabla) {
       if (priI === 0 && i === 1) extra += filas[0].areaParqOnly * sa;
     }
     extra = r3(extra);
-    const v = r3((filas[i - 1].area + f.area) / 2 * dist + extra);
-    volTotal = r3(volTotal + v);
+    const vExacto = (filas[i - 1].area + f.area) / 2 * dist + extra;
+    const v = r3(vExacto);
+    volTotal += vExacto;   // el total se suma exacto, como la SUMA del Excel
     return { ...f, vol: v, dist, extra };
   });
+  volTotal = r3(volTotal);
   return { filas: filasVol, volTotal, sa, saIzq: S.izq, saDer: S.der, saOrigen: S.origen, longitudinal: S.longitudinal, anchoVia };
 }
 
@@ -2408,12 +2414,19 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
     merges.push({ s: { r: titleRow, c: 0 }, e: { r: titleRow, c: 9 } });
     boldRows.add(titleRow);
 
-    const fechaHoy = new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
-    pushRow(["VÍA:", proyecto.nombre || "", "", "FECHA:", fechaHoy]);
+    const fechaHoy = new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "2-digit", year: "numeric" });
+    // etiqueta | valor | (espacio) | etiqueta (D:E combinadas, para que quepa) | | valor
+    const filaDato = (a, va, b, vb) => { const r = pushRow([a, va, "", b || "", "", vb === undefined ? "" : vb]); if (b) merges.push({ s: { r, c: 3 }, e: { r, c: 4 } }); return r; };
+    filaDato("VÍA:", proyecto.nombre || "", "FECHA:", fechaHoy);
     const anchos = anchosProyecto(proyecto);
-    pushRow(["ANCHO VÍA (m):", r3(anchos.anchoIzq + anchos.anchoDer), "", "ELABORADO:", ""]);
+    const rAncho = filaDato("ANCHO VÍA (m):", r3(anchos.anchoIzq + anchos.anchoDer), "ELABORADO:", "");
     // Abscisas inicial y final tomadas de la tabla (incluye distancias calculadas, no solo las digitadas)
-    pushRow(["ABS INICIO (m):", ABS(tabla[0].abs), "", "ABS FIN (m):", ABS(tabla[tabla.length - 1].abs)]);
+    const rAbs = filaDato("ABS INICIO (m):", ABS(tabla[0].abs), "ABS FIN (m):", ABS(tabla[tabla.length - 1].abs));
+    const sgen = sobreanchoGeneral(proyecto);
+    const rLargo = filaDato("LARGO (m):", { f: `${ref(5, rAbs)}-${ref(1, rAbs)}`, v: r3(tabla[tabla.length - 1].abs - tabla[0].abs) }, "SOBREANCHO IZQ (m):", sgen.izq);
+    const rSD = filaDato("", "", "SOBREANCHO DER (m):", sgen.der);
+    // Celdas que usan las fórmulas de cantidades
+    const R = { L: ref(1, rLargo), A: ref(1, rAncho), SI: ref(5, rLargo), SD: ref(5, rSD), esp: {}, saI: {}, saD: {}, parq: {} };
     blank();
 
     // ── 2. ESTRUCTURA DE LA VÍA ─────────────────────────────────
@@ -2421,22 +2434,48 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
     merges.push({ s: { r: sec2Row, c: 0 }, e: { r: sec2Row, c: 5 } });
     boldRows.add(sec2Row);
 
-    const capHdrRow = pushRow(["N°", "CAPA / MATERIAL", "ESPESOR (m)"]);
-    headerRows.add(capHdrRow);
-
-    const listarCapas = cs => {
-      cs.forEach((capa, i) => filasConNumeroDeOrden.add(pushRow([i + 1, capa.nombre || "", parseFloat(capa.espesor) || 0])));
-      pushRow(["", "TOTAL ESTRUCTURA", espesorTotal(cs)]);
+    headerRows.add(pushRow(["N°", "CAPA / MATERIAL", "ESPESOR (m)", "SOBREANCHO IZQ (m)", "SOBREANCHO DER (m)"]));
+    const capasViaX = capasDefinidas(proyecto.capas);
+    const totalCapas = cs => {
+      const r1 = row - cs.length, r2 = row - 1;
+      pushRow(["", "TOTAL ESTRUCTURA", cs.length ? { f: `SUM(${ref(2, r1)}:${ref(2, r2)})`, v: espesorTotal(cs) } : 0]);
       boldRows.add(row - 1);
       blank();
     };
-    listarCapas(capasDefinidas(proyecto.capas));
+    capasViaX.forEach((capa, i) => {
+      const sc = sobreanchoCapa(proyecto, capa.nombre), k = claveCapa(capa.nombre);
+      const r = pushRow([i + 1, capa.nombre || "", parseFloat(capa.espesor) || 0, sc.izq, sc.der]);
+      filasConNumeroDeOrden.add(r);
+      if (!(k in R.esp)) { R.esp[k] = ref(2, r); R.saI[k] = ref(3, r); R.saD[k] = ref(4, r); }
+    });
+    totalCapas(capasViaX);
+    // Parqueaderos: medidas (las usan las fórmulas de cantidades)
+    const parqsX = (proyecto.parqueaderos || []).filter(pq => !isNaN(parseFloat(pq.absInicio)) && !isNaN(parseFloat(pq.absFin)));
+    if (parqsX.length) {
+      boldRows.add(pushRow(["PARQUEADEROS"]));
+      headerRows.add(pushRow(["PARQUEADERO", "ABS INICIO", "ABS FIN", "ANCHO (m)", "SOBREANCHO EXTERIOR (m)", "SOBREANCHO EXTREMOS (m)"]));
+      parqsX.forEach(pq => {
+        const r = row;
+        pushRow([(pq.nombre || "Parqueadero") + (pq.lado === "izquierdo" ? " (IZQ)" : " (DER)"), ABS(parseFloat(pq.absInicio)), ABS(parseFloat(pq.absFin)),
+          parseFloat(pq.ancho) || 0, sobreanchoParq(pq), sobreanchoExtremosParq(pq)]);
+        // largo del parqueadero = |fin − inicio| (dentro de cada fórmula)
+        R.parq[pq.id] = { pq, L: `ABS(${ref(2, r)}-${ref(1, r)})`, A: ref(3, r), EXT: ref(4, r), EXTR: ref(5, r), esp: {}, sa: {} };
+      });
+      blank();
+    }
     // Parqueaderos con estructura propia
-    (proyecto.parqueaderos || []).filter(pq => pq.estructura === "propia" && capasDefinidas(pq.capas).length).forEach(pq => {
+    parqsX.filter(pq => pq.estructura === "propia" && capasDefinidas(pq.capas).length).forEach(pq => {
       const r0 = pushRow([`ESTRUCTURA PARQUEADERO: ${(pq.nombre || "Parqueadero").toUpperCase()} (${pq.lado === "izquierdo" ? "IZQ" : "DER"})`]);
       boldRows.add(r0);
-      headerRows.add(pushRow(["N°", "CAPA / MATERIAL", "ESPESOR (m)"]));
-      listarCapas(capasDefinidas(pq.capas));
+      headerRows.add(pushRow(["N°", "CAPA / MATERIAL", "ESPESOR (m)", "SOBREANCHO (m)"]));
+      const cs = capasDefinidas(pq.capas), P = R.parq[pq.id];
+      cs.forEach((capa, i) => {
+        const r = pushRow([i + 1, capa.nombre || "", parseFloat(capa.espesor) || 0, sobreanchoCapaParq(proyecto, pq, capa.nombre)]);
+        filasConNumeroDeOrden.add(r);
+        const k = claveCapa(capa.nombre);
+        if (!(k in P.esp)) { P.esp[k] = ref(2, r); P.sa[k] = ref(3, r); }
+      });
+      totalCapas(cs);
     });
 
     // ── 3. CÁLCULO DE COTAS (DISEÑO) ────────────────────────────
@@ -2558,7 +2597,7 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
       const totalFormula = filas.length > 1 ? `SUM(${volSumStart}:${volSumEnd})` : "0";
       pushRow(["TOTAL", "", "", { f: totalFormula, v: resultado.volTotal }, ""]);
       boldRows.add(totalRow);
-      resumenData.push({ nombre: vol.nombre || "Volumen", totalRef: ref(colVol, totalRow), sheetName, totalVal: resultado.volTotal });
+      resumenData.push({ nombre: vol.nombre || "Volumen", totalRef: ref(colVol, totalRow), sheetName, totalVal: resultado.volTotal, vol });
       blank();
     });
 
@@ -2569,13 +2608,50 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
       const q = calcCantidades(proyecto, tabla);
       const r7 = pushRow(["6. CANTIDADES DE LA VÍA"]);
       boldRows.add(r7);
-      // "Cómo se calcula" ocupa varias columnas (D a F, dentro del ancho de la hoja) para que el texto se lea completo
-      const hC = pushRow(["CANTIDAD", "UNIDAD", "VALOR", "CÓMO SE CALCULA"]);
+      // ITEM | UNID | CANTIDAD. Cada cantidad es una fórmula de Excel con las celdas de esta hoja
+      // (largo, ancho, sobreanchos, espesores, parqueaderos y totales de volumen), igual que calcCantidades.
+      const hC = pushRow(["ITEM", "UNID", "CANTIDAD"]);
       headerRows.add(hC);
-      merges.push({ s: { r: hC, c: 3 }, e: { r: hC, c: 5 } });
+      const cfg = proyecto.cantidades || {};
+      const manual = parseFloat(cfg.areaManual), usaManual = !isNaN(manual) && manual > 0;
+      const excl = (cfg.capasExcluidas || []).map(claveCapa);
+      const areaRef = ref(2, hC + 1); // el área conformada es siempre el primer item
+      const partes = {};
+      const addF = (nombre, unidad, f) => { const k = claveCapa(nombre) + "|" + unidad; (partes[k] = partes[k] || []).push(f); };
+      const parqs = Object.values(R.parq);
+      const ladoSA = (P, izq, der) => P.pq.lado === "izquierdo" ? izq : der;
+      if (!usaManual) {
+        addF("Área conformada", "m²", `${R.L}*(${R.A}+${R.SI}+${R.SD})`
+          + parqs.map(P => `-${P.L}*${ladoSA(P, R.SI, R.SD)}+(${P.L}+2*${P.EXTR})*(${P.A}+${P.EXT})`).join(""));
+      }
+      capasViaX.forEach(c => {
+        const k = claveCapa(c.nombre);
+        if (excl.includes(k) || R.esp[k] === undefined) return;
+        if (usaManual) { addF(c.nombre, "m³", `${areaRef}*${R.esp[k]}`); return; }
+        const desc = parqs.map(P => `-${P.L}*${ladoSA(P, R.saI[k], R.saD[k])}`).join("");
+        addF(c.nombre, "m³", `(${R.L}*(${R.A}+${R.saI[k]}+${R.saD[k]})${desc})*${R.esp[k]}`);
+      });
+      if (!usaManual) parqs.forEach(P => {
+        const propia = P.pq.estructura === "propia";
+        const estr = propia ? capasDefinidas(P.pq.capas) : capasViaX;
+        estr.forEach(c => {
+          const k = claveCapa(c.nombre);
+          if (excl.includes(k)) return;
+          const esp = propia ? P.esp[k] : R.esp[k];
+          if (!esp) return;
+          // sobreancho de esta capa en el parqueadero
+          let sp = "0";
+          if (propia) sp = P.sa[k];
+          else if (c.sobreancho === "general") sp = P.EXT;
+          else if (c.sobreancho === "propio") sp = ladoSA(P, R.saI[k], R.saD[k]);
+          addF(c.nombre, "m³", sp === "0" ? `${P.L}*${P.A}*${esp}` : `IF(${sp}>0,${P.L}+2*${P.EXTR},${P.L})*(${P.A}+${sp})*${esp}`);
+        });
+      });
+      resumenData.forEach(rd => addF((rd.vol.concepto || "").trim() || rd.vol.nombre || "Volumen", "m³", rd.totalRef));
+      (cfg.extras || []).forEach(x => { if (x.nombre && x.nombre.trim()) addF(x.nombre, "m²", areaRef); });
       q.items.forEach(it => {
-        const r = pushRow([it.nombre, it.unidad, it.valor, it.partes.join(" + ")]);
-        merges.push({ s: { r, c: 3 }, e: { r, c: 5 } });
+        const fs = partes[it.clave];
+        const r = pushRow([it.nombre, it.unidad, fs && fs.length ? { f: fs.join("+"), v: it.valor } : it.valor]);
         cantRefs[it.clave] = ref(2, r);
       });
       cantQ = q;
@@ -2714,6 +2790,7 @@ function graficosParaExcel(proyecto, tabla) {
   }).catch(e => { console.warn("Gráficos no incluidos en el Excel:", e); return { graficos: [], filas: 0 }; });
 }
 async function libroABlob(wb) {
+  wb.calcProperties = { ...(wb.calcProperties || {}), fullCalcOnLoad: true }; // Excel recalcula todo al abrir
   const buf = await wb.xlsx.writeBuffer();
   return new Blob([buf], { type: MIME_XLSX });
 }
