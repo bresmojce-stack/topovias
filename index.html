@@ -22,6 +22,8 @@
   .tv-proyecto { display: flex; gap: 6px; align-items: center; flex: 1 1 auto; min-width: 0; }
   .tv-proyecto select { border: none; border-radius: 6px; padding: 7px 8px; font-size: 14px; color: #1C2833; min-width: 0; max-width: 260px; flex: 0 1 auto; }
   .tv-acciones { display: flex; gap: 8px; align-items: center; }
+  .tv-volver { background: rgba(255,255,255,0.14); color: #fff; border: 1px solid rgba(255,255,255,0.35); border-radius: 6px;
+    padding: 6px 10px; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; max-width: 45%; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; }
   .tv-acciones button { white-space: nowrap; }
 
   /* ── Pestañas: una sola fila que se desliza, fija arriba al hacer scroll ── */
@@ -1056,13 +1058,34 @@ const proyVacio = () => ({
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
+// Cada vía (proyecto) pertenece a una obra (obraId). Las obras se guardan aparte.
+const TV_KEY_OBRAS = TV_KEY + '_obras';
+function leerObras() {
+  try { var d = JSON.parse(localStorage.getItem(TV_KEY_OBRAS)); if (Array.isArray(d)) return d; } catch(e) {}
+  return null;
+}
+function guardarObras(obras) {
+  try { localStorage.setItem(TV_KEY_OBRAS, JSON.stringify(obras)); } catch(e) {}
+}
+const obraNueva = nombre => ({ id: Date.now() + Math.random(), nombre: nombre || "Nueva obra", creada: new Date().toISOString() });
+
 function useLocalProyectos() {
   const [proyectos, _setProyectos] = React.useState(function() {
+    var lista = [];
     try {
       var s = localStorage.getItem(TV_KEY);
-      if (s) { var d = JSON.parse(s); if (Array.isArray(d) && d.length) return d; }
+      if (s) { var d = JSON.parse(s); if (Array.isArray(d)) lista = d; }
     } catch(e) {}
-    return [proyVacio()];
+    // Migración: las vías guardadas antes de existir las obras quedan en la obra "Mis vías"
+    var obras = leerObras() || [];
+    var sinObra = lista.filter(function(p){ return !p.obraId || !obras.some(function(o){ return o.id === p.obraId; }); });
+    if (sinObra.length) {
+      var mis = obras.find(function(o){ return o.nombre === "Mis vías"; });
+      if (!mis) { mis = obraNueva("Mis vías"); obras = obras.concat([mis]); guardarObras(obras); }
+      lista = lista.map(function(p){ return sinObra.indexOf(p) >= 0 ? Object.assign({}, p, { obraId: mis.id }) : p; });
+      try { localStorage.setItem(TV_KEY, JSON.stringify(lista)); } catch(e) {}
+    }
+    return lista;
   });
   var setProyectos = React.useCallback(function(updater) {
     _setProyectos(function(prev) {
@@ -1073,7 +1096,93 @@ function useLocalProyectos() {
   }, []);
   return [proyectos, setProyectos];
 }
+function useLocalObras() {
+  const [obras, _setObras] = React.useState(function() { return leerObras() || []; });
+  var setObras = React.useCallback(function(updater) {
+    _setObras(function(prev) {
+      var next = typeof updater === 'function' ? updater(prev) : updater;
+      guardarObras(next);
+      return next;
+    });
+  }, []);
+  return [obras, setObras];
+}
 // =============================================================================
+// ─── PANTALLAS: OBRAS → VÍAS ──────────────────────────────────────────────────
+// Resumen rápido de una vía para las tarjetas (longitud, PI, si está completa)
+function resumenVia(v) {
+  const tr = resolverTodos(v.tramos || []);
+  const completos = tr.filter(t => t.completo);
+  const largo = r3(completos.reduce((s, t) => s + (t.distancia || 0), 0));
+  return { largo, pis: (v.tramos || []).length, incompleta: completos.length < tr.length, parqs: (v.parqueaderos || []).length };
+}
+function FormNombre({ placeholder, boton, onCrear, inicial }) {
+  const [n, setN] = React.useState(inicial || "");
+  const ok = n.trim().length > 0;
+  return React.createElement("form", {
+    onSubmit: e => { e.preventDefault(); if (ok) { onCrear(n.trim()); setN(""); } },
+    style: { display: "flex", gap: 8, flexWrap: "wrap" }
+  }, React.createElement(Input, { value: n, onChange: e => setN(e.target.value), placeholder, style: { flex: "1 1 200px", width: "auto" } }),
+     React.createElement("button", { type: "submit", disabled: !ok, style: { background: ok ? C.success : C.border, color: "#fff", border: "none", borderRadius: 6, padding: "8px 16px", fontWeight: 700, fontSize: 14, cursor: ok ? "pointer" : "default" } }, boton));
+}
+const tarjetaS = { background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: 16, cursor: "pointer", display: "flex", flexDirection: "column", gap: 6, textAlign: "left", width: "100%", fontFamily: "inherit", color: C.text };
+const gridTarjetas = { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 };
+
+function PantallaObras({ obras, proyectos, onAbrir, onNueva }) {
+  return React.createElement("div", null,
+    React.createElement(Card, { title: "📁 Obras" },
+      React.createElement("div", { style: { fontSize: 13, color: C.muted, marginBottom: 12 } },
+        "Cada obra es como una carpeta (ej. Carambolo, Tamarindo, Almendros). Dentro van sus vías, una por una."),
+      React.createElement(FormNombre, { placeholder: "Nombre de la nueva obra (ej. Carambolo)", boton: "+ Crear obra", onCrear: onNueva })),
+    obras.length === 0
+      ? React.createElement("div", { style: { textAlign: "center", color: C.muted, padding: 30, fontSize: 14 } }, "Aún no tienes obras. Crea la primera arriba.")
+      : React.createElement("div", { style: gridTarjetas },
+          obras.map(o => {
+            const vias = proyectos.filter(p => p.obraId === o.id);
+            return React.createElement("button", { key: o.id, onClick: () => onAbrir(o.id), style: { ...tarjetaS, borderLeft: `4px solid ${C.accent}` } },
+              React.createElement("div", { style: { fontSize: 17, fontWeight: 800, color: C.accent } }, "📁 ", o.nombre),
+              React.createElement("div", { style: { fontSize: 13, color: C.muted } },
+                vias.length === 0 ? "Sin vías todavía" : vias.length + (vias.length === 1 ? " vía" : " vías") + ": " + vias.slice(0, 4).map(v => v.nombre).join(", ") + (vias.length > 4 ? "…" : "")));
+          })));
+}
+
+function PantallaObra({ obra, vias, onVolver, onRenombrar, onEliminar, onAbrirVia, onNuevaVia, onDuplicarVia, onEliminarVia, onExcelVia }) {
+  const [editando, setEditando] = React.useState(false);
+  const accion = (txt, color, fn) => React.createElement("button", {
+    onClick: e => { e.stopPropagation(); fn(); },
+    style: { border: `1px solid ${color}55`, background: color + "12", color, borderRadius: 6, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer" }
+  }, txt);
+  return React.createElement("div", null,
+    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" } },
+      React.createElement(Btn, { color: C.muted, small: true, onClick: onVolver }, "‹ Obras"),
+      editando
+        ? React.createElement("div", { style: { flex: 1, minWidth: 220 } }, React.createElement(FormNombre, { inicial: obra.nombre, placeholder: "Nombre de la obra", boton: "Guardar", onCrear: n => { onRenombrar(n); setEditando(false); } }))
+        : React.createElement("div", { style: { fontSize: 20, fontWeight: 900, color: C.accent, flex: 1 } }, "📁 ", obra.nombre),
+      !editando && React.createElement(Btn, { small: true, color: C.accent2, onClick: () => setEditando(true) }, "✎ Renombrar"),
+      React.createElement(Btn, { small: true, color: C.danger, onClick: onEliminar }, "Eliminar obra")),
+    React.createElement(Card, { title: "🛣 Vías de " + obra.nombre },
+      React.createElement("div", { style: { fontSize: 13, color: C.muted, marginBottom: 12 } },
+        "Crea cada vía por separado (ej. EJE 7, EJE 6, Parqueadero visitantes). Cada una tiene sus tramos, estructura, nivelaciones y volúmenes."),
+      React.createElement(FormNombre, { placeholder: "Nombre de la vía (ej. EJE 7)", boton: "+ Nueva vía", onCrear: onNuevaVia })),
+    vias.length === 0
+      ? React.createElement("div", { style: { textAlign: "center", color: C.muted, padding: 30, fontSize: 14 } }, "Esta obra aún no tiene vías.")
+      : React.createElement("div", { style: gridTarjetas },
+          vias.map(v => {
+            const r = resumenVia(v);
+            return React.createElement("div", { key: v.id, role: "button", tabIndex: 0, onClick: () => onAbrirVia(v.id),
+              onKeyDown: e => { if (e.key === "Enter") onAbrirVia(v.id); },
+              style: { ...tarjetaS, borderLeft: `4px solid ${r.incompleta ? C.warn : C.success}` } },
+              React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: C.accent } }, "🛣 ", v.nombre || "(sin nombre)"),
+              React.createElement("div", { style: { fontSize: 12, color: C.muted, fontFamily: "monospace" } },
+                r.largo.toFixed(3) + " m · " + r.pis + " PI" + (r.parqs ? " · " + r.parqs + " parq." : "")),
+              r.incompleta && React.createElement("div", { style: { fontSize: 12, color: C.warn, fontWeight: 700 } }, "⚠ Tramos sin completar"),
+              React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 } },
+                accion("📊 Excel", C.accent, () => onExcelVia(v)),
+                accion("⧉ Duplicar", C.accent2, () => onDuplicarVia(v.id)),
+                accion("🗑 Eliminar", C.danger, () => onEliminarVia(v.id))));
+          })));
+}
+
 // ─── TABLA RESULTADO ──────────────────────────────────────────────────────────
 const RASANTE_BG = "#1B1B1B";
 const RASANTE_TEXT = "#D4AF37"; // dorado
@@ -3402,17 +3511,32 @@ function CalcCoordenadas(props) {
 // ─── APP ──────────────────────────────────────────────────────────────────────
 function App() {
   const [proyectos, setProyectos] = useLocalProyectos();
+  const [obras, setObras] = useLocalObras();
   const [activoId, setActivoId] = React.useState(function() {
     try {
       var s = localStorage.getItem(TV_KEY + '_activo');
       if (s) { var id = JSON.parse(s); if (proyectos.find(function(p){ return p.id===id; })) return id; }
     } catch(e) {}
-    return proyectos[0].id;
+    return null;
   });
+  // Pantalla: "obras" (lista de obras) → "obra" (vías de una obra) → "via" (editor de la vía)
+  const [nav, setNav] = React.useState(function() {
+    try {
+      var n = JSON.parse(localStorage.getItem(TV_KEY + '_nav'));
+      if (n && n.vista === "via" && proyectos.some(function(p){ return p.id === activoId; })) return n;
+      if (n && n.vista === "obra" && obras.some(function(o){ return o.id === n.obraId; })) return { vista: "obra", obraId: n.obraId };
+    } catch(e) {}
+    // Si solo hay una obra, se abre directo
+    return obras.length === 1 ? { vista: "obra", obraId: obras[0].id } : { vista: "obras", obraId: null };
+  });
+  React.useEffect(function() {
+    try { localStorage.setItem(TV_KEY + '_nav', JSON.stringify(nav)); } catch(e) {}
+  }, [nav]);
   // Al abrir, la tabla se calcula sola con los datos guardados (antes había que volver a presionar CALCULAR)
   const [tabla, setTabla] = React.useState(function() {
     try {
-      var p0 = proyectos.find(function(p){ return p.id === activoId; }) || proyectos[0];
+      var p0 = proyectos.find(function(p){ return p.id === activoId; });
+      if (!p0) return null;
       var t0 = generarTabla(p0);
       return t0.length ? t0 : null;
     } catch(e) { return null; }
@@ -3425,31 +3549,9 @@ function App() {
   React.useEffect(function() {
     try { localStorage.setItem(TV_KEY + '_activo', JSON.stringify(activoId)); } catch(e) {}
   }, [activoId]);
-  const proy = proyectos.find(p => p.id === activoId) || proyectos[0];
-  const cambiarProyecto = id => {
-    const np = proyectos.find(p => p.id === id);
-    if (!np) return;
-    setActivoId(id);
-    const t = generarTabla(np);
-    setTabla(t.length ? t : null);
-  };
-  const nuevoProyecto = () => {
-    const np = proyVacio();
-    setProyectos(prev => [...prev, np]);
-    setActivoId(np.id);
-    setTabla(null);
-    setTab("eje");
-  };
-  const eliminarProyecto = () => {
-    if (proyectos.length < 2) return;
-    if (!confirm(`¿Eliminar el proyecto "${proy.nombre}"? Esta acción no se puede deshacer.`)) return;
-    const resto = proyectos.filter(p => p.id !== proy.id);
-    setProyectos(resto);
-    setActivoId(resto[0].id);
-    const t = generarTabla(resto[0]);
-    setTabla(t.length ? t : null);
-  };
-  const tramosIncompletos = resolverTodos(proy.tramos).map((r, i) => r.completo ? null : i + 1).filter(Boolean);
+  const proy = proyectos.find(p => p.id === activoId) || null;
+  const obraActual = obras.find(o => o.id === (nav.vista === "via" && proy ? proy.obraId : nav.obraId)) || null;
+  const viasDeObra = obraId => proyectos.filter(p => p.obraId === obraId);
   // Sincronizar nombre del eje con ObraTrack
   React.useEffect(function() {
     if (!proy) return;
@@ -3457,6 +3559,94 @@ function App() {
       window.parent.postMessage({ type: 'TOPOVIAS_NOMBRE', nombre: proy.nombre, viaId: TV_VIA_ID }, '*');
     }
   }, [proy && proy.nombre]);
+
+  // ── Navegación ──
+  const abrirObra = id => { setNav({ vista: "obra", obraId: id }); window.scrollTo(0, 0); };
+  const abrirVia = id => {
+    const np = proyectos.find(p => p.id === id);
+    if (!np) return;
+    setActivoId(id);
+    const t = generarTabla(np);
+    setTabla(t.length ? t : null);
+    setTab("eje");
+    setNav({ vista: "via", obraId: np.obraId });
+    window.scrollTo(0, 0);
+  };
+  const cambiarProyecto = id => {
+    const np = proyectos.find(p => p.id === id);
+    if (!np) return;
+    setActivoId(id);
+    const t = generarTabla(np);
+    setTabla(t.length ? t : null);
+  };
+  // ── Obras ──
+  const crearObra = nombre => { const o = obraNueva(nombre.trim()); setObras(prev => [...prev, o]); return o; };
+  const renombrarObra = (id, nombre) => setObras(prev => prev.map(o => o.id === id ? { ...o, nombre } : o));
+  const eliminarObra = id => {
+    const o = obras.find(x => x.id === id);
+    const n = viasDeObra(id).length;
+    if (!confirm(`¿Eliminar la obra "${o ? o.nombre : ""}"${n ? ` y sus ${n} vía(s)` : ""}? Esta acción no se puede deshacer.`)) return;
+    setProyectos(prev => prev.filter(p => p.obraId !== id));
+    setObras(prev => prev.filter(x => x.id !== id));
+    setNav({ vista: "obras", obraId: null });
+  };
+  // ── Vías ──
+  const crearVia = (obraId, nombre) => {
+    const np = { ...proyVacio(), id: Date.now() + Math.random(), obraId, nombre: nombre || "Nueva vía" };
+    setProyectos(prev => [...prev, np]);
+    setActivoId(np.id);
+    setTabla(null);
+    setTab("eje");
+    setNav({ vista: "via", obraId });
+    window.scrollTo(0, 0);
+  };
+  const nuevoProyecto = () => {
+    const n = viasDeObra(proy.obraId).length + 1;
+    crearVia(proy.obraId, "Vía " + n);
+  };
+  const duplicarVia = id => {
+    const v = proyectos.find(p => p.id === id);
+    if (!v) return;
+    const copia = JSON.parse(JSON.stringify(v));
+    copia.id = Date.now() + Math.random();
+    copia.nombre = v.nombre + " (copia)";
+    setProyectos(prev => [...prev, copia]);
+  };
+  const eliminarVia = id => {
+    const v = proyectos.find(p => p.id === id);
+    if (!v || !confirm(`¿Eliminar la vía "${v.nombre}"? Esta acción no se puede deshacer.`)) return;
+    setProyectos(prev => prev.filter(p => p.id !== id));
+    if (activoId === id) { setActivoId(null); setTabla(null); setNav({ vista: "obra", obraId: v.obraId }); }
+  };
+  const eliminarProyecto = () => eliminarVia(proy.id);
+
+  // ── Pantallas de obras ──
+  if (nav.vista !== "via" || !proy) {
+    const obraVista = nav.vista === "obra" ? obras.find(o => o.id === nav.obraId) : null;
+    return React.createElement("div", { style: { fontFamily: "'Segoe UI',system-ui,sans-serif", color: C.text, minHeight: "100vh" } },
+      React.createElement("header", { className: "tv-header" },
+        React.createElement("div", { className: "tv-brand" }, "📏 TopoVías",
+          React.createElement("div", { className: "tv-sub" }, "Calculadora topográfica · 3 decimales · Colombia"))),
+      React.createElement("main", { className: "tv-main" },
+        obraVista
+          ? React.createElement(PantallaObra, {
+              obra: obraVista, vias: viasDeObra(obraVista.id),
+              onVolver: () => setNav({ vista: "obras", obraId: null }),
+              onRenombrar: n => renombrarObra(obraVista.id, n),
+              onEliminar: () => eliminarObra(obraVista.id),
+              onAbrirVia: abrirVia, onNuevaVia: n => crearVia(obraVista.id, n),
+              onDuplicarVia: duplicarVia, onEliminarVia: eliminarVia,
+              onExcelVia: v => { const t = generarTabla(v); const a = exportarExcel(v, t); if (a) setArchivo(a); }
+            })
+          : React.createElement(PantallaObras, {
+              obras, proyectos,
+              onAbrir: abrirObra,
+              onNueva: n => abrirObra(crearObra(n).id)
+            })),
+      archivo && React.createElement(VentanaArchivo, { archivo: archivo, onClose: () => setArchivo(null) }));
+  }
+
+  const tramosIncompletos = resolverTodos(proy.tramos).map((r, i) => r.completo ? null : i + 1).filter(Boolean);
   const upd = cambios => {
     setProyectos(prev => prev.map(p => p.id === proy.id ? {
       ...p,
@@ -3553,22 +3743,22 @@ function App() {
     className: "tv-sub"
   }, "Calculadora topográfica · 3 decimales · Colombia")), /*#__PURE__*/React.createElement("div", {
     className: "tv-proyecto"
-  }, /*#__PURE__*/React.createElement("select", {
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => abrirObra(proy.obraId),
+    title: "Volver a la obra",
+    className: "tv-volver"
+  }, "‹ 📁 ", obraActual ? obraActual.nombre : "Obra"), /*#__PURE__*/React.createElement("select", {
     value: String(proy.id),
     onChange: e => cambiarProyecto(proyectos.find(p => String(p.id) === e.target.value)?.id),
-    title: "Proyecto activo"
-  }, proyectos.map(p => /*#__PURE__*/React.createElement("option", {
+    title: "Vía de esta obra"
+  }, viasDeObra(proy.obraId).map(p => /*#__PURE__*/React.createElement("option", {
     key: p.id,
     value: String(p.id)
-  }, p.nombre || "(sin nombre)"))), /*#__PURE__*/React.createElement(Btn, {
+  }, "🛣 ", p.nombre || "(sin nombre)"))), /*#__PURE__*/React.createElement(Btn, {
     onClick: nuevoProyecto,
     color: C.accent2,
     small: true
-  }, "+ Nuevo"), proyectos.length > 1 && /*#__PURE__*/React.createElement(Btn, {
-    onClick: eliminarProyecto,
-    color: C.danger,
-    small: true
-  }, "Eliminar")), /*#__PURE__*/React.createElement("div", {
+  }, "+ Vía")), /*#__PURE__*/React.createElement("div", {
     className: "tv-acciones"
   }, /*#__PURE__*/React.createElement(Btn, {
     onClick: () => { const a = exportarExcel(proy, tabla); if (a) setArchivo(a); },
