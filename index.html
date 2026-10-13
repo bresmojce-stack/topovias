@@ -1194,15 +1194,21 @@ function useLocalObras() {
 function calcAreas(proy, tabla) {
   const { anchoIzq, anchoDer } = anchosProyecto(proy);
   const largo = tabla && tabla.length > 1 ? r3(tabla[tabla.length - 1].abs - tabla[0].abs) : 0;
-  const ancho = r3(anchoIzq + anchoDer);
-  const via = r3(largo * ancho);
+  const ancho = r3(anchoIzq + anchoDer);                 // ancho del plano
+  const sg = sobreanchoGeneral(proy);
+  const anchoConf = r3(ancho + sg.izq + sg.der);        // ancho de conformación (con sobreancho general)
+  const via = r3(largo * anchoConf);
   const parqs = (proy.parqueaderos || []).map(p => {
     const pi = parseFloat(p.absInicio), pf = parseFloat(p.absFin);
     const a = (parseFloat(p.ancho) || 0) + (parseFloat(p.sobreAncho) || 0);
     const largoP = !isNaN(pi) && !isNaN(pf) ? r3(Math.abs(pf - pi)) : 0;
     return { p, nombre: p.nombre || "Parqueadero", largo: largoP, ancho: r3(a), area: r3(largoP * a) };
   });
-  return { largo, ancho, via, parqs, total: r3(via + parqs.reduce((s, x) => s + x.area, 0)) };
+  const sumParqs = parqs.reduce((s, x) => s + x.area, 0);
+  const viaPlano = r3(largo * ancho);
+  return { largo, ancho, anchoConf, saIzq: sg.izq, saDer: sg.der, via, viaPlano, parqs,
+    total: r3(via + sumParqs),              // área de conformación
+    totalPlano: r3(viaPlano + sumParqs) };  // área en planta según el plano
 }
 // Cantidades de una vía. Ningún nombre es fijo: las capas, volúmenes e ítems se llaman
 // como el usuario los escriba, y los que tienen el mismo nombre (y unidad) se suman.
@@ -1239,7 +1245,12 @@ function calcCantidades(proy, tabla) {
   if (usaManual) {
     capasVia.forEach(c => usarCapa(c, areaConf, ""));
   } else {
-    capasVia.forEach(c => usarCapa(c, areas.via, "vía "));
+    // cada capa con su ancho de trabajo: plano + su sobreancho (izq + der)
+    capasVia.forEach(c => {
+      const sc = sobreanchoCapa(proy, c.nombre);
+      const anchoC = r3(areas.ancho + sc.izq + sc.der);
+      usarCapa(c, r3(areas.largo * anchoC), `vía ${areas.largo.toFixed(3)} m × ${anchoC.toFixed(3)} m = `);
+    });
     areas.parqs.forEach(pq => {
       const estr = pq.p.estructura === "propia" ? capasDefinidas(pq.p.capas) : capasVia;
       estr.forEach(c => usarCapa(c, pq.area, pq.nombre + " "));
@@ -1265,8 +1276,12 @@ function TabCantidades({ proyecto, tabla, onChange }) {
   const fila = (txt, val, fuerte) => React.createElement("div", { style: { display: "flex", justifyContent: "space-between", gap: 12, padding: "6px 0", borderBottom: `1px solid ${C.border}`, fontWeight: fuerte ? 800 : 400, flexWrap: "wrap" } },
     React.createElement("span", null, txt), React.createElement("span", { style: { fontFamily: "monospace" } }, val));
   return React.createElement("div", null,
-    React.createElement(Card, { title: "Área conformada" },
-      fila(`Vía: ${A.largo.toFixed(3)} m × ${A.ancho.toFixed(3)} m`, A.via.toFixed(3) + " m²"),
+    React.createElement(Card, { title: "Área de conformación" },
+      React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 8 } },
+        "Ancho del plano + sobreancho general de cada lado (se define en 🏗 Estructura). Las cotas siguen con el ancho del plano."),
+      fila(A.saIzq || A.saDer
+        ? `Vía: ${A.largo.toFixed(3)} m × (${A.ancho.toFixed(3)} + ${A.saIzq.toFixed(3)} izq + ${A.saDer.toFixed(3)} der) m`
+        : `Vía: ${A.largo.toFixed(3)} m × ${A.ancho.toFixed(3)} m (sin sobreancho)`, A.via.toFixed(3) + " m²"),
       A.parqs.map((x, i) => React.createElement(React.Fragment, { key: i }, fila(`${x.nombre}: ${x.largo.toFixed(3)} m × ${x.ancho.toFixed(3)} m`, x.area.toFixed(3) + " m²"))),
       fila("Total calculado", A.total.toFixed(3) + " m²", true),
       React.createElement("div", { style: { marginTop: 12, maxWidth: 360 } },
@@ -1941,10 +1956,52 @@ function anchosProyecto(proyecto) {
     anchoParqIzq: parseFloat(parq("izquierdo") && parq("izquierdo").ancho) || 0
   };
 }
+// ─── SOBREANCHO ───────────────────────────────────────────────────────────────
+// Las cotas se calculan con el ancho del plano. El sobreancho (izquierdo y derecho, pueden
+// ser distintos) solo agranda el ANCHO DE TRABAJO de lo que se excava o conforma:
+//   · Sobreancho general (en Estructura): excavación y área de conformación.
+//   · Cada capa elige: sin sobreancho (ancho del plano, ej. la base), el general, o uno propio.
+const numSA = v => { const n = parseFloat(v); return isNaN(n) || n < 0 ? 0 : n; };
+function sobreanchoGeneral(proy) {
+  const g = proy.sobreancho || {};
+  return { izq: numSA(g.izq), der: numSA(g.der) };
+}
+const esCapaExcavacion = nombre => claveCapa(nombre) === claveCapa("Excavación");
+function sobreanchoCapa(proy, nombre) {
+  const c = capasDefinidas(proy.capas).find(x => claveCapa(x.nombre) === claveCapa(nombre));
+  if (!c) return esCapaExcavacion(nombre) ? sobreanchoGeneral(proy) : { izq: 0, der: 0 };
+  if (c.sobreancho === "general") return sobreanchoGeneral(proy);
+  if (c.sobreancho === "propio") return { izq: numSA(c.saIzq), der: numSA(c.saDer) };
+  return { izq: 0, der: 0 };
+}
+// Sobreancho de un volumen: si no se escribe, se toma de la capa de diseño contra la que se
+// compara (ej. contra "Tabla › roca" usa el de la roca; contra la rasante, el ancho del plano).
+function sobreanchoVolumen(vol, proy) {
+  const vacio = v => v === undefined || v === null || String(v).trim() === "";
+  // volúmenes de versiones anteriores: un solo valor para ambos lados y también a lo largo
+  if (vacio(vol.saIzq) && vacio(vol.saDer) && numSA(vol.sobreAncho) > 0) {
+    const sa = numSA(vol.sobreAncho);
+    return { izq: sa, der: sa, origen: "escrito en el volumen", longitudinal: vol.saLongitudinal !== false };
+  }
+  let auto = { izq: 0, der: 0 }, origen = "ancho del plano";
+  const diseno = [vol.fuenteInf, vol.fuenteSup].find(f => f && f.startsWith("tabla__"));
+  if (diseno && diseno !== "tabla__rasante") {
+    const capa = diseno.replace("tabla__", "");
+    auto = sobreanchoCapa(proy, capa);
+    origen = auto.izq || auto.der ? "de la capa " + capa : "capa " + capa + " sin sobreancho";
+  }
+  const izq = vacio(vol.saIzq) ? auto.izq : numSA(vol.saIzq);
+  const der = vacio(vol.saDer) ? auto.der : numSA(vol.saDer);
+  if (!vacio(vol.saIzq) || !vacio(vol.saDer)) origen = "escrito en el volumen";
+  return { izq, der, auto, origen, longitudinal: !!vol.saLongitudinal };
+}
+
 // Método de áreas promedio. Cada fila trae: dist (con sobreancho en los extremos),
 // extra (volumen adicional por sobreancho de parqueaderos) y vol.
 function calcVolumen(vol, proyecto, tabla) {
-  const sa = parseFloat(vol.sobreAncho) || 0;
+  const S = sobreanchoVolumen(vol, proyecto);
+  const saLados = r3(S.izq + S.der);               // se suma al ancho de la vía
+  const sa = S.longitudinal ? r3(saLados / 2) : 0; // se suma al inicio y fin (si se pidió)
   const { anchoIzq, anchoDer, anchoParqDer, anchoParqIzq } = anchosProyecto(proyecto);
   const anchoVia = r3(anchoIzq + anchoDer);
   if (!vol.fuenteSup || !vol.fuenteInf || !tabla) return null;
@@ -1959,11 +2016,11 @@ function calcVolumen(vol, proyecto, tabla) {
     const pts = [dParqDer, dDer, dEje, dIzq, dParqIzq].filter(v => v !== null);
     if (!pts.length) return null;
     const p = prom(pts);
-    // ANCHO: vía + 2·SA + parqueaderos donde existen
-    const ancho = r3(anchoVia + 2 * sa + (dParqDer !== null ? anchoParqDer : 0) + (dParqIzq !== null ? anchoParqIzq : 0));
+    // ANCHO: vía + sobreancho izq + sobreancho der + parqueaderos donde existen
+    const ancho = r3(anchoVia + saLados + (dParqDer !== null ? anchoParqDer : 0) + (dParqIzq !== null ? anchoParqIzq : 0));
     const area = r3(Math.max(0, p * ancho));
     const ptsVia = [dDer, dEje, dIzq].filter(v => v !== null);
-    const areaVia = r3(Math.max(0, (ptsVia.length ? prom(ptsVia) : p) * (anchoVia + 2 * sa)));
+    const areaVia = r3(Math.max(0, (ptsVia.length ? prom(ptsVia) : p) * (anchoVia + saLados)));
     return { abs: pSup.abs, absFormato: pSup.absFormato, dParqDer, dDer, dEje, dIzq, dParqIzq, prom: p, ancho, area,
       areaParqOnly: r3(Math.max(0, area - areaVia)), tieneParqDer: dParqDer !== null, tieneParqIzq: dParqIzq !== null };
   }).filter(Boolean);
@@ -1996,7 +2053,7 @@ function calcVolumen(vol, proyecto, tabla) {
     volTotal = r3(volTotal + v);
     return { ...f, vol: v, dist, extra };
   });
-  return { filas: filasVol, volTotal, sa, anchoVia };
+  return { filas: filasVol, volTotal, sa, saIzq: S.izq, saDer: S.der, saOrigen: S.origen, longitudinal: S.longitudinal, anchoVia };
 }
 
 // Excel no acepta \ / ? * [ ] : en el nombre de la hoja (máx. 31 caracteres)
@@ -2148,7 +2205,7 @@ function construirHojaVia(proyecto, tabla, sheetName) {
       const sec5Row = pushRow([`5.${vi + 1}. VOLÚMENES: ${vol.nombre || "Volumen"}`]);
       merges.push({ s: { r: sec5Row, c: 0 }, e: { r: sec5Row, c: 8 } });
       boldRows.add(sec5Row);
-      pushRow(["Fuente Superior:", etiquetaSuperficie(vol.fuenteSup, proyecto, tabla), "", "Fuente Inferior:", etiquetaSuperficie(vol.fuenteInf, proyecto, tabla), "", "Sobre ancho c/lado (m):", parseFloat(vol.sobreAncho) || 0]);
+      pushRow(["Fuente Superior:", etiquetaSuperficie(vol.fuenteSup, proyecto, tabla), "", "Fuente Inferior:", etiquetaSuperficie(vol.fuenteInf, proyecto, tabla), "", "Sobreancho izq (m):", resultado.saIzq, "Sobreancho der (m):", resultado.saDer]);
 
       const vHdr = pushRow(["ABSCISA", "ÁREA m²", "DIST (m)", "VOL (m³)", "VOL ACUM (m³)"]);
       headerRows.add(vHdr);
@@ -3692,7 +3749,8 @@ function TabVolumenes({ proyecto, tabla, onChange }) {
   };
 
   var renderVol = function(vol, idx) {
-    var sa = parseFloat(vol.sobreAncho) || 0;
+    var S = sobreanchoVolumen(vol, proyecto);
+    var sa = r3(S.izq + S.der);
     var resultado = (vol.fuenteSup && vol.fuenteInf) ? calcularVol(vol) : null;
     var hasPD = resultado && resultado.filas.some(function(f){return f.tieneParqDer;});
     var hasPI = resultado && resultado.filas.some(function(f){return f.tieneParqIzq;});
@@ -3731,18 +3789,23 @@ function TabVolumenes({ proyecto, tabla, onChange }) {
           React.createElement("div",{style:{fontSize:11,color:C.muted,marginTop:3}},"Vacío = su propio nombre. Mismo nombre = se suman.")
         ),
         React.createElement("div",null,
-          React.createElement(Label,null,"Sobre ancho c/lado (m)"),
-          React.createElement(Input,{value:vol.sobreAncho,placeholder:"ej. 0.50",
-            onChange:function(e){updVol(idx,{sobreAncho:e.target.value});}}),
-          sa>0 && React.createElement("div",{style:{fontSize:11,color:C.warn,marginTop:3}},
-            "Ancho vía efectivo: "+(anchoIzq+anchoDer+2*sa).toFixed(2)+"m  (SA: +"+sa.toFixed(2)+" c/lado)"
-          )
+          React.createElement(Label,null,"Sobreancho izq / der (m)"),
+          React.createElement("div",{style:{display:"flex",gap:6}},
+            React.createElement(Input,{value:vol.saIzq!=null?vol.saIzq:"",placeholder:S.auto?S.auto.izq.toFixed(2):"izq",inputMode:"decimal",
+              onChange:function(e){updVol(idx,{saIzq:e.target.value,sobreAncho:""});}}),
+            React.createElement(Input,{value:vol.saDer!=null?vol.saDer:"",placeholder:S.auto?S.auto.der.toFixed(2):"der",inputMode:"decimal",
+              onChange:function(e){updVol(idx,{saDer:e.target.value,sobreAncho:""});}})),
+          React.createElement("div",{style:{fontSize:11,color:C.warn,marginTop:3}},
+            "Ancho de cálculo: "+(anchoIzq+anchoDer).toFixed(2)+" + "+S.izq.toFixed(2)+" + "+S.der.toFixed(2)+" = "+(anchoIzq+anchoDer+S.izq+S.der).toFixed(2)+" m ("+S.origen+")"),
+          React.createElement("label",{style:{display:"flex",gap:6,alignItems:"center",fontSize:11,color:C.muted,marginTop:4,cursor:"pointer"}},
+            React.createElement("input",{type:"checkbox",checked:S.longitudinal,onChange:function(e){updVol(idx,{saLongitudinal:e.target.checked});}}),
+            "Sumar también al inicio y al final de la vía")
         )
       ),
       resultado
         ? React.createElement("div",null,
             React.createElement("div",{style:{background:"#1A1A2E",borderRadius:8,padding:"10px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}},
-              React.createElement("span",{style:{color:"#D4AF37",fontWeight:700,fontSize:13}},vol.nombre+(sa>0?" (incl. SA "+sa+"m)":"")),
+              React.createElement("span",{style:{color:"#D4AF37",fontWeight:700,fontSize:13}},vol.nombre+(sa>0?" (con sobreancho izq "+S.izq.toFixed(2)+" + der "+S.der.toFixed(2)+" m)":"")),
               React.createElement("span",{style:{color:"#D4AF37",fontWeight:900,fontSize:20}},resultado.volTotal.toFixed(3)+" m³")
             ),
             React.createElement("div",{style:{overflowX:"auto"}},
@@ -3784,7 +3847,7 @@ function TabVolumenes({ proyecto, tabla, onChange }) {
                     React.createElement("td",{
                       colSpan:[1,hasPD?1:0,3,hasPI?1:0,3,1].reduce(function(a,b){return a+b;},0)+1,
                       style:{padding:"6px 10px",color:"#D4AF37",fontWeight:800,textAlign:"right",border:"none"}
-                    },"VOLUMEN TOTAL"+(sa>0?" (incl. SA "+sa+"m)":"")),
+                    },"VOLUMEN TOTAL"+(sa>0?" (con sobreancho)":"")),
                     React.createElement("td",{style:{padding:"6px 10px",color:"#D4AF37",fontWeight:900,fontSize:15,border:"none"}},
                       resultado.volTotal.toFixed(3)+" m³")
                   )
@@ -4105,9 +4168,9 @@ function App() {
     setMemoria(prev => [snap, ...prev].slice(0, 20));
   };
   const areasCalc = calcAreas(proy, tabla);
-  const areaVia = () => areasCalc.via;
+  const areaVia = () => areasCalc.viaPlano;
   const areasParqueaderos = () => areasCalc.parqs.map(x => ({ nombre: x.nombre, area: x.area }));
-  const areaPlanta = () => areasCalc.total;
+  const areaPlanta = () => areasCalc.totalPlano;
   const TABS = [{
     id: "eje",
     label: "\uD83D\uDCD0 Eje / Tramos"
@@ -4365,13 +4428,34 @@ function App() {
       color: C.muted,
       marginBottom: 12
     }
-  }, "Orden: primero la capa más superficial (ej. Asfalto o Concreto), luego Base, Sub-base, Roca muerta, etc. Si un parqueadero tiene otra estructura, se define en 🅿 Parqueaderos."), proy.capas.map((c, i) => /*#__PURE__*/React.createElement("div", {
+  }, "Orden: primero la capa más superficial (ej. Asfalto o Concreto), luego Base, Sub-base, Roca muerta, etc. Si un parqueadero tiene otra estructura, se define en 🅿 Parqueaderos."), (() => {
+    // ── Sobreancho general (no cambia las cotas; solo el ancho de trabajo) ──
+    const sg = proy.sobreancho || {};
+    const g = sobreanchoGeneral(proy);
+    const A = anchosProyecto(proy);
+    const plano = r3(A.anchoIzq + A.anchoDer);
+    const setSG = (k, v) => updSinRecalcular({ sobreancho: { ...sg, [k]: v } });
+    return React.createElement("div", { style: { background: "#FFF9E6", border: `1px solid ${C.warn}`, borderRadius: 8, padding: 12, marginBottom: 16 } },
+      React.createElement("div", { style: { fontWeight: 800, color: C.warn, marginBottom: 4 } }, "↔ Sobreancho general (excavación y conformación)"),
+      React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 10 } },
+        "Las cotas se calculan con el ancho del plano. El sobreancho solo agranda el ancho de trabajo de la excavación, el área de conformación y las capas que lo lleven."),
+      React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, alignItems: "flex-end" } },
+        React.createElement("div", null, React.createElement(Label, null, "Sobreancho izquierdo (m)"),
+          React.createElement(Input, { value: sg.izq || "", placeholder: "ej. 0.50", inputMode: "decimal", onChange: e => setSG("izq", e.target.value) })),
+        React.createElement("div", null, React.createElement(Label, null, "Sobreancho derecho (m)"),
+          React.createElement(Input, { value: sg.der || "", placeholder: "ej. 0.40", inputMode: "decimal", onChange: e => setSG("der", e.target.value) })),
+        React.createElement("div", { style: { fontSize: 13, fontFamily: "monospace", paddingBottom: 6 } },
+          "Ancho de trabajo: ", plano.toFixed(3), " + ", g.izq.toFixed(3), " + ", g.der.toFixed(3), " = ",
+          React.createElement("strong", null, r3(plano + g.izq + g.der).toFixed(3), " m"))));
+  })(), proy.capas.map((c, i) => /*#__PURE__*/React.createElement("div", {
     key: c.id,
     style: {
       display: "grid",
-      gridTemplateColumns: "1fr 1fr auto",
+      gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
       gap: 8,
-      marginBottom: 8,
+      marginBottom: 10,
+      paddingBottom: 10,
+      borderBottom: `1px dashed ${C.border}`,
       alignItems: "flex-end"
     }
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Material / Capa ", i + 1, i === 0 && " (= Rasante)"), /*#__PURE__*/React.createElement(Input, {
@@ -4400,13 +4484,27 @@ function App() {
       });
     },
     placeholder: "ej. 0.050"
-  })), /*#__PURE__*/React.createElement(Btn, {
+  })), (() => {
+    const setC = cambios => { const cs = [...proy.capas]; cs[i] = { ...cs[i], ...cambios }; updSinRecalcular({ capas: cs }); };
+    const g = sobreanchoGeneral(proy);
+    const modo = c.sobreancho === "general" || c.sobreancho === "propio" ? c.sobreancho : "no";
+    return React.createElement(React.Fragment, null,
+      React.createElement("div", null, React.createElement(Label, null, "Sobreancho"),
+        React.createElement(Sel, { value: modo, onChange: e => setC({ sobreancho: e.target.value }) },
+          React.createElement("option", { value: "no" }, "Sin sobreancho"),
+          React.createElement("option", { value: "general" }, `General (${g.izq.toFixed(2)} | ${g.der.toFixed(2)})`),
+          React.createElement("option", { value: "propio" }, "Propio"))),
+      modo === "propio" && React.createElement("div", null, React.createElement(Label, null, "Izq (m)"),
+        React.createElement(Input, { value: c.saIzq || "", placeholder: "0.50", inputMode: "decimal", onChange: e => setC({ saIzq: e.target.value }) })),
+      modo === "propio" && React.createElement("div", null, React.createElement(Label, null, "Der (m)"),
+        React.createElement(Input, { value: c.saDer || "", placeholder: "0.40", inputMode: "decimal", onChange: e => setC({ saDer: e.target.value }) })));
+  })(), /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "flex-end" } }, /*#__PURE__*/React.createElement(Btn, {
     small: true,
     color: C.danger,
     onClick: () => upd({
       capas: proy.capas.filter((_, j) => j !== i)
     })
-  }, "✕"))), /*#__PURE__*/React.createElement(Btn, {
+  }, "✕")))), /*#__PURE__*/React.createElement(Btn, {
     color: C.success,
     onClick: () => upd({
       capas: [...proy.capas, capaVacia()]
