@@ -1108,6 +1108,120 @@ function useLocalObras() {
   return [obras, setObras];
 }
 // =============================================================================
+// ─── CANTIDADES DE LA VÍA ─────────────────────────────────────────────────────
+// Áreas en planta: vía (largo × ancho de laterales) y cada parqueadero ((fin − inicio) × (ancho + sobreancho))
+function calcAreas(proy, tabla) {
+  const { anchoIzq, anchoDer } = anchosProyecto(proy);
+  const largo = tabla && tabla.length > 1 ? r3(tabla[tabla.length - 1].abs - tabla[0].abs) : 0;
+  const ancho = r3(anchoIzq + anchoDer);
+  const via = r3(largo * ancho);
+  const parqs = (proy.parqueaderos || []).map(p => {
+    const pi = parseFloat(p.absInicio), pf = parseFloat(p.absFin);
+    const a = (parseFloat(p.ancho) || 0) + (parseFloat(p.sobreAncho) || 0);
+    const largoP = !isNaN(pi) && !isNaN(pf) ? r3(Math.abs(pf - pi)) : 0;
+    return { p, nombre: p.nombre || "Parqueadero", largo: largoP, ancho: r3(a), area: r3(largoP * a) };
+  });
+  return { largo, ancho, via, parqs, total: r3(via + parqs.reduce((s, x) => s + x.area, 0)) };
+}
+// Cantidades de una vía. Ningún nombre es fijo: las capas, volúmenes e ítems se llaman
+// como el usuario los escriba, y los que tienen el mismo nombre (y unidad) se suman.
+//   · Área conformada (calculada o escrita a mano)
+//   · Por cada capa de la estructura: área × espesor (se puede excluir)
+//   · Cada volumen de la pestaña Volúmenes suma a la cantidad que se elija
+//   · Ítems por área agregados por el usuario (ej. un geotextil = área conformada)
+function calcCantidades(proy, tabla) {
+  const cfg = proy.cantidades || {};
+  const areas = calcAreas(proy, tabla);
+  const manual = parseFloat(cfg.areaManual);
+  const usaManual = !isNaN(manual) && manual > 0;
+  const areaConf = usaManual ? r3(manual) : areas.total;
+  const excluidas = (cfg.capasExcluidas || []).map(claveCapa);
+  const items = [];
+  const add = (nombre, unidad, valor, parte, extra) => {
+    const clave = claveCapa(nombre) + "|" + unidad;
+    let it = items.find(x => x.clave === clave);
+    if (!it) { it = { clave, nombre: String(nombre).trim(), unidad, valor: 0, partes: [], ...extra }; items.push(it); }
+    it.valor = r3(it.valor + valor);
+    it.partes.push(parte);
+    return it;
+  };
+  add("Área conformada", "m²", areaConf, usaManual ? "escrita a mano" : "calculada (vía + parqueaderos)", { esArea: true });
+  const capasVia = capasDefinidas(proy.capas);
+  const capas = []; // para la lista de casillas
+  const usarCapa = (c, area, quien) => {
+    const esp = parseFloat(c.espesor) || 0;
+    const k = claveCapa(c.nombre);
+    if (!capas.some(x => x.clave === k)) capas.push({ clave: k, nombre: c.nombre.trim(), incluida: !excluidas.includes(k) });
+    if (excluidas.includes(k) || area <= 0) return;
+    add(c.nombre, "m³", area * esp, `${quien}${area.toFixed(3)} m² × ${esp.toFixed(3)} m`);
+  };
+  if (usaManual) {
+    capasVia.forEach(c => usarCapa(c, areaConf, ""));
+  } else {
+    capasVia.forEach(c => usarCapa(c, areas.via, "vía "));
+    areas.parqs.forEach(pq => {
+      const estr = pq.p.estructura === "propia" ? capasDefinidas(pq.p.capas) : capasVia;
+      estr.forEach(c => usarCapa(c, pq.area, pq.nombre + " "));
+    });
+  }
+  (proy.volumenes || []).forEach(v => {
+    const r = calcVolumen(v, proy, tabla);
+    if (!r) return;
+    const destino = (v.concepto || "").trim() || v.nombre || "Volumen";
+    add(destino, "m³", r.volTotal, `volumen "${v.nombre || "Volumen"}" ${r.volTotal.toFixed(3)} m³`);
+  });
+  (cfg.extras || []).forEach(x => { if (x.nombre && x.nombre.trim()) add(x.nombre, "m²", areaConf, "= área conformada"); });
+  return { areas, areaConf, usaManual, capas, items };
+}
+
+function TabCantidades({ proyecto, tabla, onChange }) {
+  if (!tabla || !tabla.length) return React.createElement("div", { style: { color: C.muted, textAlign: "center", padding: 40, fontSize: 13 } },
+    "Presiona ⚡ CALCULAR para ver las cantidades de esta vía.");
+  const cfg = proyecto.cantidades || {};
+  const setCfg = cambios => onChange({ cantidades: { ...cfg, ...cambios } });
+  const q = calcCantidades(proyecto, tabla);
+  const A = q.areas;
+  const fila = (txt, val, fuerte) => React.createElement("div", { style: { display: "flex", justifyContent: "space-between", gap: 12, padding: "6px 0", borderBottom: `1px solid ${C.border}`, fontWeight: fuerte ? 800 : 400, flexWrap: "wrap" } },
+    React.createElement("span", null, txt), React.createElement("span", { style: { fontFamily: "monospace" } }, val));
+  return React.createElement("div", null,
+    React.createElement(Card, { title: "Área conformada" },
+      fila(`Vía: ${A.largo.toFixed(3)} m × ${A.ancho.toFixed(3)} m`, A.via.toFixed(3) + " m²"),
+      A.parqs.map((x, i) => React.createElement(React.Fragment, { key: i }, fila(`${x.nombre}: ${x.largo.toFixed(3)} m × ${x.ancho.toFixed(3)} m`, x.area.toFixed(3) + " m²"))),
+      fila("Total calculado", A.total.toFixed(3) + " m²", true),
+      React.createElement("div", { style: { marginTop: 12, maxWidth: 360 } },
+        React.createElement(Label, null, "Área conformada escrita (opcional)"),
+        React.createElement(Input, { value: cfg.areaManual || "", placeholder: A.total.toFixed(3), inputMode: "decimal",
+          onChange: e => setCfg({ areaManual: e.target.value }) }),
+        React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 4 } },
+          q.usaManual ? "Se usa el área escrita para todas las cantidades por área." : "Déjalo vacío para usar el área calculada. Escríbela si el plano trae el área por tramos de ancho distinto."))),
+    q.capas.length > 0 && React.createElement(Card, { title: "Capas de la estructura (área × espesor)" },
+      React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 8 } }, "Desmarca las capas que no se reportan como cantidad."),
+      q.capas.map(c => React.createElement("label", { key: c.clave, style: { display: "flex", alignItems: "center", gap: 10, padding: "6px 0", fontSize: 14, cursor: "pointer" } },
+        React.createElement("input", { type: "checkbox", checked: c.incluida, style: { width: 20, height: 20 },
+          onChange: e => {
+            const ex = (cfg.capasExcluidas || []).filter(k => claveCapa(k) !== c.clave);
+            setCfg({ capasExcluidas: e.target.checked ? ex : ex.concat([c.nombre]) });
+          } }), c.nombre))),
+    React.createElement(Card, { title: "🧮 Cantidades de " + (proyecto.nombre || "la vía"), accent: C.success },
+      React.createElement("div", { style: { overflowX: "auto" } },
+        React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } },
+          React.createElement("thead", null, React.createElement("tr", null,
+            ["Cantidad", "Unidad", "Valor", "Cómo se calcula"].map(h => React.createElement("th", { key: h, style: { ...thS, background: C.success, color: "#fff", textAlign: h === "Valor" ? "right" : "left" } }, h)))),
+          React.createElement("tbody", null, q.items.map((it, i) => React.createElement("tr", { key: it.clave, style: { background: i % 2 ? C.row2 : C.row1 } },
+            React.createElement("td", { style: { ...tdS, textAlign: "left", fontWeight: 700 } }, it.nombre),
+            React.createElement("td", { style: { ...tdS, textAlign: "left" } }, it.unidad),
+            React.createElement("td", { style: { ...tdS, textAlign: "right", fontFamily: "monospace", fontWeight: 800, color: C.accent } }, it.valor.toFixed(3)),
+            React.createElement("td", { style: { ...tdS, textAlign: "left", whiteSpace: "normal", color: C.muted, fontSize: 12 } }, it.partes.join(" + "))))))),
+      React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 8 } },
+        "Las cantidades con el mismo nombre se suman. Para sumar un volumen a una capa (ej. un relleno a la base), en Volúmenes escribe el nombre de esa capa en \"Suma a la cantidad\".")),
+    React.createElement(Card, { title: "Ítems por área (m²)" },
+      React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 8 } }, "Cantidades que son igual al área conformada, por ejemplo un geotextil."),
+      (cfg.extras || []).map((x, i) => React.createElement("div", { key: x.id, style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 6 } },
+        React.createElement("span", { style: { flex: 1, fontWeight: 700 } }, x.nombre),
+        React.createElement(Btn, { small: true, color: C.danger, onClick: () => setCfg({ extras: cfg.extras.filter((_, j) => j !== i) }) }, "✕"))),
+      React.createElement(FormNombre, { placeholder: "Nombre del ítem (ej. Geotextil)", boton: "+ Agregar", onCrear: n => setCfg({ extras: (cfg.extras || []).concat([{ id: Math.random(), nombre: n }]) }) })));
+}
+
 // ─── PANTALLAS: OBRAS → VÍAS ──────────────────────────────────────────────────
 // Resumen rápido de una vía para las tarjetas (longitud, PI, si está completa)
 function resumenVia(v) {
@@ -1898,6 +2012,16 @@ function exportarExcel(proyecto, tabla) {
       resumenData.push({ nombre: vol.nombre || "Volumen", totalRef: ref(colVol, totalRow), sheetName, totalVal: resultado.volTotal });
       blank();
     });
+
+    // ── 7. CANTIDADES DE LA VÍA ─────────────────────────────────
+    {
+      const q = calcCantidades(proyecto, tabla);
+      const r7 = pushRow(["CANTIDADES DE LA VÍA"]);
+      boldRows.add(r7);
+      headerRows.add(pushRow(["CANTIDAD", "UNIDAD", "VALOR", "CÓMO SE CALCULA"]));
+      q.items.forEach(it => pushRow([it.nombre, it.unidad, it.valor, it.partes.join(" + ")]));
+      blank();
+    }
 
     // ── 6. RESUMEN ──────────────────────────────────────────────
     if (resumenData.length > 0) {
@@ -3322,6 +3446,12 @@ function TabVolumenes({ proyecto, tabla, onChange }) {
           renderSel(vol.fuenteInf,function(e){updVol(idx,{fuenteInf:e.target.value});})
         ),
         React.createElement("div",null,
+          React.createElement(Label,null,"Suma a la cantidad"),
+          React.createElement(Input,{value:vol.concepto||"",placeholder:vol.nombre||"Volumen",list:"tv-conceptos",
+            onChange:function(e){updVol(idx,{concepto:e.target.value});}}),
+          React.createElement("div",{style:{fontSize:11,color:C.muted,marginTop:3}},"Vacío = su propio nombre. Mismo nombre = se suman.")
+        ),
+        React.createElement("div",null,
           React.createElement(Label,null,"Sobre ancho c/lado (m)"),
           React.createElement(Input,{value:vol.sobreAncho,placeholder:"ej. 0.50",
             onChange:function(e){updVol(idx,{sobreAncho:e.target.value});}}),
@@ -3388,8 +3518,11 @@ function TabVolumenes({ proyecto, tabla, onChange }) {
           )
     );
   };
+  var conceptos = capasDefinidas(proyecto.capas).map(function(c){ return c.nombre; })
+    .concat(vols.map(function(v){ return (v.concepto || "").trim(); }).filter(Boolean));
   return React.createElement("div",null,
-    React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}},
+    React.createElement("datalist",{id:"tv-conceptos"}, conceptos.filter(function(c,i){ return conceptos.indexOf(c) === i; }).map(function(c){ return React.createElement("option",{key:c,value:c}); })),
+    React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,gap:10,flexWrap:"wrap"}},
       React.createElement("div",{style:{fontSize:12,color:C.muted,lineHeight:1.5}},
         "Método: Áreas Promedio. Compara dos superficies (nivelación de campo vs. cota de diseño). Puedes tener varios volúmenes: excav. tierra, excav. roca, etc."
       ),
@@ -3677,28 +3810,10 @@ function App() {
     };
     setMemoria(prev => [snap, ...prev].slice(0, 20));
   };
-  const areaVia = () => {
-    if (!tabla || tabla.length < 2) return 0;
-    const aIzq = parseFloat(proy.lateralIzq?.ancho) || 0;
-    const aDer = parseFloat(proy.lateralDer?.ancho) || 0;
-    const ancho = aIzq + aDer;
-    let area = 0;
-    for (let i = 1; i < tabla.length; i++) area += (tabla[i].abs - tabla[i - 1].abs) * ancho;
-    return r3(area);
-  };
-  const areasParqueaderos = () => {
-    return (proy.parqueaderos || []).map(p => {
-      const pi = parseFloat(p.absInicio),
-        pf = parseFloat(p.absFin);
-      const a = (parseFloat(p.ancho) || 0) + (parseFloat(p.sobreAncho) || 0);
-      const area = !isNaN(pi) && !isNaN(pf) && a > 0 ? r3((pf - pi) * a) : 0;
-      return {
-        nombre: p.nombre,
-        area
-      };
-    });
-  };
-  const areaPlanta = () => r3(areaVia() + areasParqueaderos().reduce((s, p) => s + p.area, 0));
+  const areasCalc = calcAreas(proy, tabla);
+  const areaVia = () => areasCalc.via;
+  const areasParqueaderos = () => areasCalc.parqs.map(x => ({ nombre: x.nombre, area: x.area }));
+  const areaPlanta = () => areasCalc.total;
   const TABS = [{
     id: "eje",
     label: "\uD83D\uDCD0 Eje / Tramos"
@@ -3723,6 +3838,9 @@ function App() {
   }, {
     id: "vol",
     label: "\uD83D\uDCE6 Vol\u00FAmenes"
+  }, {
+    id: "cant",
+    label: "\uD83E\uDDEE Cantidades"
   }, {
     id: "verif",
     label: "\uD83D\uDD22 Verificador"
@@ -4330,6 +4448,10 @@ function App() {
     tabla: tabla,
     onChange: proyActualizado => updSinRecalcular(proyActualizado)
   }), tab === "vol" && /*#__PURE__*/React.createElement(TabVolumenes, {
+    proyecto: proy,
+    tabla: tabla,
+    onChange: function(cambios) { updSinRecalcular(cambios); }
+  }), tab === "cant" && React.createElement(TabCantidades, {
     proyecto: proy,
     tabla: tabla,
     onChange: function(cambios) { updSinRecalcular(cambios); }
