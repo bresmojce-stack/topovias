@@ -2213,7 +2213,7 @@ function getSerie(fuenteId, proyecto, tabla) {
     const nivId = fuenteId.replace("nivel__", "");
     const niv = (proyecto.nivelaciones || []).find(n => String(n.id) === String(nivId));
     if (!niv) return [];
-    return calcCotasNivelacion(niv, tabla).map(c => ({ abs: c.abs, absFormato: c.absFormato, parqDer: c.cotaParqDer, der: c.cotaDer, eje: c.cotaEje, izq: c.cotaIzq, parqIzq: c.cotaParqIzq }));
+    return calcCotasNivelacion(niv, tabla).map(c => ({ abs: c.abs, sub: c.sub, absFormato: c.absFormato, parqDer: c.cotaParqDer, der: c.cotaDer, eje: c.cotaEje, izq: c.cotaIzq, parqIzq: c.cotaParqIzq }));
   }
   const nn = v => v != null ? v : null;
   if (fuenteId === "tabla__rasante") {
@@ -2317,8 +2317,10 @@ function calcVolumen(vol, proyecto, tabla) {
   const serSup = getSerie(vol.fuenteSup, proyecto, tabla), serInf = getSerie(vol.fuenteInf, proyecto, tabla);
   if (!serSup.length || !serInf.length) return null;
   const prom = arr => arr.length ? r3(arr.reduce((s, v) => s + v, 0) / arr.length) : null;
-  const filas = serSup.map(pSup => {
-    const pInf = serInf.reduce((best, p) => best === null || Math.abs(p.abs - pSup.abs) < Math.abs(best.abs - pSup.abs) ? p : best, null);
+  const marcadas = serSup.map(pSup => {
+    const igual = serInf.filter(p => Math.abs(p.abs - pSup.abs) < 0.0005);
+    const pInf = igual.find(p => (p.sub || 0) === (pSup.sub || 0)) || igual[igual.length - 1] ||
+      serInf.reduce((best, p) => best === null || Math.abs(p.abs - pSup.abs) < Math.abs(best.abs - pSup.abs) ? p : best, null);
     if (!pInf || Math.abs(pInf.abs - pSup.abs) > 1.0) return null;
     const diff = k => pSup[k] !== null && pInf[k] !== null ? r3(pSup[k] - pInf[k]) : null;
     const dParqDer = diff("parqDer"), dDer = diff("der"), dEje = diff("eje"), dIzq = diff("izq"), dParqIzq = diff("parqIzq");
@@ -2339,9 +2341,16 @@ function calcVolumen(vol, proyecto, tabla) {
     const ptsVia = [dDer, dEje, dIzq].filter(v => v !== null);
     const areaVia = r3(Math.max(0, (ptsVia.length ? prom(ptsVia) : p) * (anchoVia + saLados)));
     return { abs: pSup.abs, absFormato: pSup.absFormato, dParqDer, dDer, dEje, dIzq, dParqIzq, prom: p, ancho, area,
-      areaParqOnly: r3(Math.max(0, area - areaVia)), tieneParqDer: dParqDer !== null, tieneParqIzq: dParqIzq !== null };
-  }).filter(Boolean);
+      areaParqOnly: r3(Math.max(0, area - areaVia)), tieneParqDer: dParqDer !== null, tieneParqIzq: dParqIzq !== null, sub: pSup.sub || 0 };
+  });
+  // Solo se calcula volumen entre secciones consecutivas que tienen datos: si en medio hay
+  // una sección sin nivelar, el tramo se corta (no se inventa terreno donde no se midió).
+  const filas = [];
+  marcadas.forEach((f, i) => { if (f) filas.push({ ...f, inicioTramo: i === 0 || !marcadas[i - 1] }); });
   if (!filas.length) return null;
+  // tramos con datos (para mostrar de dónde a dónde se calculó)
+  const tramosTN = [];
+  filas.forEach(f => { if (f.inicioTramo) tramosTN.push({ desde: f.abs, hasta: f.abs }); else tramosTN[tramosTN.length - 1].hasta = f.abs; });
   const n = filas.length;
   let priD = -1, ultD = -1, priI = -1, ultI = -1;
   filas.forEach((f, i) => {
@@ -2350,7 +2359,7 @@ function calcVolumen(vol, proyecto, tabla) {
   });
   let volTotal = 0;
   const filasVol = filas.map((f, i) => {
-    if (i === 0) return { ...f, vol: 0, dist: 0, extra: 0 };
+    if (i === 0 || f.inicioTramo) return { ...f, vol: 0, volExacto: 0, dist: 0, extra: 0 };
     let dist = r3(Math.abs(f.abs - filas[i - 1].abs));
     // SA en longitud: primer y último segmento de la vía
     if (i === 1) dist = r3(dist + sa);
@@ -2372,7 +2381,8 @@ function calcVolumen(vol, proyecto, tabla) {
     return { ...f, vol: v, volExacto: vExacto, dist, extra };
   });
   volTotal = r3(volTotal);
-  return { filas: filasVol, volTotal, sa, saIzq: S.izq, saDer: S.der, saOrigen: S.origen, longitudinal: S.longitudinal, anchoVia };
+  return { filas: filasVol, volTotal, sa, saIzq: S.izq, saDer: S.der, saOrigen: S.origen, longitudinal: S.longitudinal, anchoVia,
+    tramosTN, largoTN: r3(tramosTN.reduce((s, t) => s + (t.hasta - t.desde), 0)) };
 }
 
 // Excel no acepta \ / ? * [ ] : en el nombre de la hoja (máx. 31 caracteres)
@@ -3976,27 +3986,38 @@ function resolverAI(lecturas, estaciones, idx) {
 // Cada lectura guarda su abscisa (abs), así que si la tabla cambia (se agrega
 // un tramo o una abscisa intermedia) las lecturas siguen en su abscisa y no se corren.
 // Nivelaciones antiguas (sin abs guardada) se alinean por posición, como antes.
-const lecturaEnBlanco = abs => ({ abs, estacionId: null, parqDer: "", der: "", eje: "", izq: "", parqIzq: "" });
+// Una abscisa puede tener lecturas extra (sub = 1, 2…) cuando hay un cambio brusco de nivel:
+// la primera cierra el tramo anterior y la última abre el siguiente.
+const lecturaEnBlanco = (abs, sub) => ({ abs, sub: sub || 0, estacionId: null, parqDer: "", der: "", eje: "", izq: "", parqIzq: "" });
+const CAMPOS_LECTURA = ["parqDer", "der", "eje", "izq", "parqIzq"];
+const hoyISO = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+const fechaCorta = iso => iso ? iso.slice(8, 10) + "/" + iso.slice(5, 7) + "/" + iso.slice(0, 4) : "";
 function alinearLecturas(niv, tabla) {
   const lecs = (niv && niv.lecturas) || [];
   const conAbs = lecs.some(l => l && typeof l.abs === "number");
-  return tabla.map((row, i) => {
-    const lec = conAbs ? lecs.find(l => l && typeof l.abs === "number" && Math.abs(l.abs - row.abs) < 0.0005) : lecs[i];
-    return lec ? { ...lec, abs: row.abs } : lecturaEnBlanco(row.abs);
+  const out = [];
+  tabla.forEach((row, i) => {
+    const deEsta = conAbs ? lecs.filter(l => l && typeof l.abs === "number" && Math.abs(l.abs - row.abs) < 0.0005) : (lecs[i] ? [lecs[i]] : []);
+    const principal = deEsta.find(l => !l.sub) || null;
+    out.push({ ...(principal || lecturaEnBlanco(row.abs)), abs: row.abs, sub: 0, row });
+    deEsta.filter(l => l.sub > 0).sort((a, b) => a.sub - b.sub).forEach(l => out.push({ ...l, abs: row.abs, row }));
   });
+  return out;
 }
 
 // Devuelve array de cotas completo para una nivelación, mapeado sobre tabla
 function calcCotasNivelacion(niv, tabla) {
   if (!tabla || !tabla.length) return [];
   const lecturas = alinearLecturas(niv, tabla);
-  return tabla.map((row, i) => {
-    const lec = lecturas[i];
+  return lecturas.map((lec, i) => {
     const ai = resolverAI(lecturas, niv.estaciones || [], i);
     const calc = v => { const n = parseFloat(v); return ai !== null && !isNaN(n) ? r3(ai - n) : null; };
     return {
-      abs: row.abs,
-      absFormato: row.absFormato,
+      abs: lec.abs,
+      absFormato: lec.row.absFormato + (lec.sub ? " (" + (lec.sub + 1) + ")" : ""),
+      sub: lec.sub || 0,
+      fecha: lec.fecha || "",
+      estacionId: lec.estacionId,
       ai,
       cotaParqDer: calc(lec.parqDer),
       cotaDer:     calc(lec.der),
@@ -4007,203 +4028,270 @@ function calcCotasNivelacion(niv, tabla) {
   });
 }
 
-function TabNivelaciones({ proyecto, tabla, onChange }) {
+// Avance de una nivelación: puntos que se deben leer (los que existen en el diseño) y leídos
+const puntosDiseno = r => ({ parqDer: r.parqDerCota, der: r.cotaLatDer, eje: r.cotaEje, izq: r.cotaLatIzq, parqIzq: r.parqIzqCota });
+const hayLectura = v => String(v == null ? "" : v).trim() !== "" && !isNaN(parseFloat(v));
+function avanceNivelacion(niv, tabla) {
+  const lecs = alinearLecturas(niv, tabla);
+  let total = 0, leidos = 0, ultima = null, siguiente = null;
+  lecs.forEach((l, i) => {
+    const d = puntosDiseno(l.row);
+    let hay = 0;
+    CAMPOS_LECTURA.forEach(k => {
+      if (d[k] === null || d[k] === undefined) return;
+      if (!l.sub) total++;
+      if (hayLectura(l[k])) { hay++; if (!l.sub) leidos++; }
+    });
+    if (hay) ultima = { i, abs: l.abs, sub: l.sub, fecha: l.fecha || "" };
+  });
+  // dónde sigue: la primera abscisa con puntos pendientes después de la última leída
+  lecs.forEach((l, i) => {
+    if (siguiente || l.sub || (ultima && i <= ultima.i)) return;
+    const d = puntosDiseno(l.row);
+    if (CAMPOS_LECTURA.some(k => d[k] !== null && d[k] !== undefined && !hayLectura(l[k]))) siguiente = { i, abs: l.abs };
+  });
+  return { total, leidos, pct: total ? Math.round(leidos / total * 100) : 0, ultima, siguiente };
+}
+
+// Cartera de campo en Excel: estaciones (AI = BM + V+) y por abscisa fecha, estación, AI,
+// y para cada punto la lectura y la cota (fórmula = AI − lectura). Gris = no aplica.
+async function exportarCartera(proyecto, tabla, niv) {
+  if (typeof window.ExcelJS === "undefined") { alert("El módulo de exportación no está disponible."); return null; }
+  try {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet(nombreHoja("Cartera " + (niv.nombre || "")), { views: [{ showGridLines: false }] });
+    const f10 = { name: "Arial", size: 10 }, gris = { type: "pattern", pattern: "solid", fgColor: { argb: XL.total } };
+    const enc = cel => { cel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: XL.encabezado } }; cel.font = { ...f10, bold: true }; cel.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; cel.border = bordesFinos; };
+    const titulo = (r, txt) => { const c = ws.getCell(r, 1); c.value = txt; c.font = { name: "Arial", size: 11, bold: true, color: { argb: XL.azul } }; };
+    ws.columns = [{ width: 11 }, { width: 11 }, { width: 9 }, { width: 10 }].concat(Array.from({ length: 10 }, () => ({ width: 9 })));
+    const t = ws.getCell("A1"); t.value = "CARTERA DE CAMPO - " + (proyecto.nombre || "VÍA").toUpperCase(); t.font = { name: "Arial", size: 14, bold: true, color: { argb: XL.azul } };
+    ws.getCell("A2").value = "Nivelación:"; ws.getCell("C2").value = niv.nombre || "Nivelación";
+    ws.getCell("A3").value = "Exportada:"; ws.getCell("C3").value = fechaCorta(hoyISO());
+    ["A2", "A3"].forEach(c => ws.getCell(c).font = { ...f10, bold: true, color: { argb: XL.gris } });
+    // Estaciones
+    let r = 5;
+    titulo(r, "ESTACIONES"); r++;
+    ["ESTACIÓN", "FECHA", "COTA BM", "VISTA +", "A.I."].forEach((h, k) => { const c = ws.getCell(r, k + 1); c.value = h; enc(c); }); r++;
+    const aiRef = {}, aiVal = {};
+    (niv.estaciones || []).forEach(e => {
+      const bm = parseFloat(e.cotaBM), vm = parseFloat(e.vistaMas);
+      [e.nombre || "", fechaCorta(e.fecha || ""), isNaN(bm) ? "" : bm, isNaN(vm) ? "" : vm].forEach((v, k) => {
+        const c = ws.getCell(r, k + 1); c.value = v; c.font = f10; c.border = bordesFinos; c.alignment = { horizontal: k < 2 ? "center" : "right" }; if (typeof v === "number") c.numFmt = XL.numero; });
+      const c = ws.getCell(r, 5); c.border = bordesFinos; c.numFmt = XL.numero; c.font = { ...f10, bold: true };
+      if (!isNaN(bm) && !isNaN(vm)) { c.value = { formula: `C${r}+D${r}`, result: r3(bm + vm) }; aiRef[e.id] = `$E$${r}`; aiVal[e.id] = r3(bm + vm); }
+      r++;
+    });
+    r++;
+    // Lecturas y cotas
+    const PUNTOS = [["parqDer", "PARQ DER"], ["der", "LAT DER"], ["eje", "EJE"], ["izq", "LAT IZQ"], ["parqIzq", "PARQ IZQ"]];
+    titulo(r, "LECTURAS Y COTAS (COTA = A.I. − LECTURA)"); r++;
+    const h1 = r, h2 = r + 1;
+    ["ABSCISA", "FECHA", "EST.", "A.I."].forEach((h, k) => { const c = ws.getCell(h1, k + 1); c.value = h; enc(c); enc(ws.getCell(h2, k + 1)); ws.mergeCells(h1, k + 1, h2, k + 1); });
+    PUNTOS.forEach(([, nom], j) => {
+      const col = 5 + j * 2;
+      const c = ws.getCell(h1, col); c.value = nom; enc(c); enc(ws.getCell(h1, col + 1)); ws.mergeCells(h1, col, h1, col + 1);
+      ["LECT.", "COTA"].forEach((h, k) => enc(Object.assign(ws.getCell(h2, col + k), { value: h })));
+    });
+    r = h2 + 1;
+    const lecs = alinearLecturas(niv, tabla);
+    let est = null;
+    lecs.forEach(l => {
+      if (l.estacionId) est = (niv.estaciones || []).find(e => e.id === l.estacionId) || est;
+      const fila = ws.getRow(r);
+      const celda = (k, v, extra) => { const c = fila.getCell(k); if (v !== undefined) c.value = v; c.font = f10; c.border = bordesFinos; Object.assign(c, extra || {}); return c; };
+      celda(1, l.abs, { numFmt: XL.abscisa, font: { ...f10, bold: true } });
+      if (l.sub) fila.getCell(1).note = "Lectura " + (l.sub + 1) + " en la misma abscisa";
+      celda(2, fechaCorta(l.fecha || ""), { alignment: { horizontal: "center" } });
+      celda(3, est ? est.nombre : "", { alignment: { horizontal: "center" } });
+      const ref = est && aiRef[est.id];
+      celda(4, ref ? { formula: ref, result: aiVal[est.id] } : "", { numFmt: XL.numero });
+      const d = puntosDiseno(l.row);
+      PUNTOS.forEach(([campo], j) => {
+        const col = 5 + j * 2;
+        const cl = celda(col), cc = celda(col + 1, undefined, { font: { ...f10, bold: true } });
+        if (d[campo] === null || d[campo] === undefined) { cl.fill = gris; cc.fill = gris; return; }
+        if (hayLectura(l[campo])) {
+          const n = parseFloat(l[campo]);
+          cl.value = n; cl.numFmt = XL.numero;
+          if (ref) { cc.value = { formula: `D${r}-${colLetra(col - 1)}${r}`, result: r3(aiVal[est.id] - n) }; cc.numFmt = XL.numero; }
+        }
+      });
+      r++;
+    });
+    ws.views = [{ showGridLines: false, state: "frozen", xSplit: 1, ySplit: h2 }];
+    ws.pageSetup = { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: h1 + ":" + h2,
+      margins: { left: 0.3, right: 0.3, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } };
+    return { blob: await libroABlob(wb), nombre: nombreArchivoSeguro("TopoVias - Cartera " + (proyecto.nombre || "") + " - " + (niv.nombre || "")) + ".xlsx" };
+  } catch (e) {
+    alert("Error al exportar la cartera: " + e.message);
+    console.error(e);
+    return null;
+  }
+}
+
+function TabNivelaciones({ proyecto, tabla, onChange, onArchivo }) {
   const nivelaciones = proyecto.nivelaciones || [];
   const updProyecto = arr => onChange({ ...proyecto, nivelaciones: arr });
+  const estacionNueva = n => ({ id: Math.random(), nombre: "Est. " + n, cotaBM: "", vistaMas: "", fecha: hoyISO() });
   const addNivel = () => updProyecto([...nivelaciones, {
-    id: Math.random(), nombre: "Nivelación",
-    estaciones: [{ id: Math.random(), nombre: "Est. 1", cotaBM: "", vistaMas: "" }],
-    lecturas: []
+    id: Math.random(), nombre: nivelaciones.length ? "Nivelación " + (nivelaciones.length + 1) : "Terreno natural",
+    estaciones: [estacionNueva(1)], lecturas: [], creada: hoyISO()
   }]);
-  const delNivel = id => updProyecto(nivelaciones.filter(n => n.id !== id));
+  const delNivel = id => { if (confirm("¿Eliminar esta nivelación y todas sus lecturas?")) updProyecto(nivelaciones.filter(n => n.id !== id)); };
   const updNivel = (id, cambios) => updProyecto(nivelaciones.map(n => n.id === id ? { ...n, ...cambios } : n));
+  const COLORES_EST = ["#2980B9", "#27AE60", "#8E44AD", "#E67E22", "#C0392B", "#16A085"];
 
-  const COLORES_EST = ["#2980B9","#27AE60","#8E44AD","#E67E22","#C0392B","#16A085"];
+  if (!tabla || !tabla.length) return React.createElement("div", { style: { color: C.muted, textAlign: "center", padding: 40, fontSize: 13 } },
+    "Primero presiona ⚡ CALCULAR para generar la Tabla. Las abscisas se copian de ahí.");
+  if (nivelaciones.length === 0) return React.createElement("div", null,
+    React.createElement("div", { style: { color: C.muted, textAlign: "center", padding: 30, fontSize: 13 } },
+      "No hay nivelaciones. Crea la del terreno natural: la app arma la cartera con las abscisas y los puntos de la vía."),
+    React.createElement(Btn, { color: C.accent, onClick: addNivel }, "+ Nueva Nivelación"));
 
-  if (!tabla || !tabla.length) return /*#__PURE__*/React.createElement("div", { style: { color: C.muted, textAlign: "center", padding: 40, fontSize: 13 } },
-    "Primero presiona \u26A1 CALCULAR para generar la Tabla. Las abscisas se copian de ah\u00ed."
-  );
-
-  if (nivelaciones.length === 0) return /*#__PURE__*/React.createElement("div", null,
-    /*#__PURE__*/React.createElement("div", { style: { color: C.muted, textAlign: "center", padding: 30, fontSize: 13 } }, "No hay nivelaciones. Agrega una para comenzar."),
-    /*#__PURE__*/React.createElement(Btn, { color: C.accent, onClick: addNivel }, "+ Nueva Nivelaci\u00f3n")
-  );
-
-  return /*#__PURE__*/React.createElement("div", null,
-    /*#__PURE__*/React.createElement("div", { style: { marginBottom: 16 } },
-      /*#__PURE__*/React.createElement(Btn, { color: C.accent, onClick: addNivel }, "+ Nueva Nivelaci\u00f3n")
-    ),
+  return React.createElement("div", null,
+    React.createElement("div", { style: { marginBottom: 16 } }, React.createElement(Btn, { color: C.accent, onClick: addNivel }, "+ Nueva Nivelación")),
     nivelaciones.map(niv => {
+      const estaciones = niv.estaciones || [];
       const estColorMap = {};
-      niv.estaciones.forEach((e, i) => { estColorMap[e.id] = COLORES_EST[i % COLORES_EST.length]; });
-
-      // Sincronizar lecturas con tabla (rellenar si faltan filas)
+      estaciones.forEach((e, i) => { estColorMap[e.id] = COLORES_EST[i % COLORES_EST.length]; });
       const lecturas = alinearLecturas(niv, tabla);
-      // Se conservan las lecturas de abscisas que ya no están en la tabla (por si se vuelven a agregar)
-      const updLecturas = arr => {
-        const huerfanas = (niv.lecturas || []).filter(l => l && typeof l.abs === "number" && !arr.some(a => Math.abs(a.abs - l.abs) < 0.0005));
-        updNivel(niv.id, { lecturas: arr.concat(huerfanas) });
+      const limpiar = l => { const { row, ...resto } = l; return resto; };
+      // guarda las lecturas visibles y conserva las de abscisas que ya no están en la tabla
+      const guardar = arr => {
+        const visibles = arr.map(limpiar);
+        const huerfanas = (niv.lecturas || []).filter(l => l && typeof l.abs === "number" && !visibles.some(a => Math.abs(a.abs - l.abs) < 0.0005));
+        updNivel(niv.id, { lecturas: visibles.concat(huerfanas) });
       };
-      const updFila = (i, campo, val) => { const arr = [...lecturas]; arr[i] = { ...arr[i], [campo]: val }; updLecturas(arr); };
-      const setEstacion = (i, estId) => { const arr = [...lecturas]; arr[i] = { ...arr[i], estacionId: estId }; updLecturas(arr); };
-
+      // la fecha se pone sola al escribir una lectura
+      const updFila = (i, campo, val) => { const arr = [...lecturas]; arr[i] = { ...arr[i], [campo]: val, fecha: String(val).trim() ? hoyISO() : arr[i].fecha }; guardar(arr); };
+      const setEstacion = (i, estId) => { const arr = [...lecturas]; arr[i] = { ...arr[i], estacionId: estId }; guardar(arr); };
+      const agregarLectura = i => {
+        const l = lecturas[i];
+        const mismas = lecturas.map((x, j) => ({ x, j })).filter(o => Math.abs(o.x.abs - l.abs) < 0.0005);
+        const ultimaPos = mismas[mismas.length - 1].j;
+        const arr = [...lecturas];
+        arr.splice(ultimaPos + 1, 0, { ...lecturaEnBlanco(l.abs, Math.max(...mismas.map(o => o.x.sub || 0)) + 1), row: l.row });
+        guardar(arr);
+      };
+      const quitarLectura = i => { if (confirm("¿Quitar esta lectura extra?")) guardar(lecturas.filter((_, j) => j !== i)); };
       const cotas = calcCotasNivelacion(niv, tabla);
-      const hayCotas = cotas.some(c => c.cotaEje !== null);
-
-      return /*#__PURE__*/React.createElement("div", {
-        key: niv.id,
-        style: { border: "2px solid " + C.accent, borderRadius: 12, padding: 18, marginBottom: 24, background: "#fff" }
-      },
-        /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 } },
-          /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, flex: 1 } },
-            /*#__PURE__*/React.createElement("span", { style: { fontWeight: 900, color: C.accent, fontSize: 18 } }, "\uD83D\uDCCF"),
-            /*#__PURE__*/React.createElement(Input, {
-              value: niv.nombre, onChange: e => updNivel(niv.id, { nombre: e.target.value }),
-              placeholder: "Nombre (ej. Nivelaci\u00f3n Terreno Natural)", style: { maxWidth: 380, fontWeight: 700, fontSize: 14 }
-            })
-          ),
-          /*#__PURE__*/React.createElement(Btn, { small: true, color: C.danger, onClick: () => delNivel(niv.id) }, "Eliminar")
-        ),
-
-        // Estaciones BM
-        /*#__PURE__*/React.createElement("div", { style: { background: C.bg, borderRadius: 8, padding: 12, marginBottom: 14 } },
-          /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: C.warn, marginBottom: 6 } }, "Estaciones — Cota BM + Vista\u207A \u2192 AI"),
-          /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 8 } },
-            "Marca en la tabla de lecturas el inicio de cada bloque. La AI de esa estaci\u00f3n aplica hacia abajo hasta el pr\u00f3ximo marcador."
-          ),
-          niv.estaciones.map((est, i) => {
-            const cotaBM = parseFloat(est.cotaBM);
-            const vMas = parseFloat(est.vistaMas);
-            const ai = !isNaN(cotaBM) && !isNaN(vMas) ? r3(cotaBM + vMas) : null;
-            const color = estColorMap[est.id] || C.accent;
-            return /*#__PURE__*/React.createElement("div", {
-              key: est.id,
-              style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 8, marginBottom: 8, alignItems: "flex-end", padding: "6px 8px", borderLeft: "4px solid " + color, background: "#fff", borderRadius: 4 }
-            },
-              /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Nombre"),
-                /*#__PURE__*/React.createElement(Input, { value: est.nombre, onChange: e => { const a=[...niv.estaciones]; a[i]={...a[i],nombre:e.target.value}; updNivel(niv.id,{estaciones:a}); }, placeholder: "Est. 1" })),
-              /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Cota BM (m)"),
-                /*#__PURE__*/React.createElement(Input, { value: est.cotaBM, onChange: e => { const a=[...niv.estaciones]; a[i]={...a[i],cotaBM:e.target.value}; updNivel(niv.id,{estaciones:a}); }, placeholder: "ej. 965.000" })),
-              /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Vista\u207A (m)"),
-                /*#__PURE__*/React.createElement(Input, { value: est.vistaMas, onChange: e => { const a=[...niv.estaciones]; a[i]={...a[i],vistaMas:e.target.value}; updNivel(niv.id,{estaciones:a}); }, placeholder: "ej. 1.520" })),
-              /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "AI (auto)"),
-                /*#__PURE__*/React.createElement(Input, { value: ai !== null ? ai.toFixed(3) : "", disabled: true,
-                  style: { background: "#EAFAF1", fontWeight: 800, color: C.success, border: "1px solid " + C.success } })),
-              niv.estaciones.length > 1 && /*#__PURE__*/React.createElement(Btn, {
-                small: true, color: C.danger,
-                onClick: () => updNivel(niv.id, { estaciones: niv.estaciones.filter((_,j)=>j!==i) })
-              }, "\u2715")
-            );
+      const hayCotas = cotas.some(c => c.cotaEje !== null || c.cotaDer !== null || c.cotaIzq !== null);
+      const av = avanceNivelacion(niv, tabla);
+      const idTabla = "tv-lect-" + String(niv.id).replace(/\W/g, "");
+      const irADondeQuede = () => {
+        const i = av.siguiente ? av.siguiente.i : av.ultima ? av.ultima.i : 0;
+        const fila = document.querySelector(`#${idTabla} tr[data-i="${i}"]`);
+        if (!fila) return;
+        fila.scrollIntoView({ behavior: "smooth", block: "center" });
+        const inp = fila.querySelector("input:not([disabled])");
+        if (inp) setTimeout(() => inp.focus({ preventScroll: true }), 450);
+      };
+      const stickyAbs = { position: "sticky", left: 0, zIndex: 2 };
+      return React.createElement("div", { key: niv.id, style: { border: "2px solid " + C.accent, borderRadius: 12, padding: "clamp(10px, 2.5vw, 18px)", marginBottom: 24, background: "#fff" } },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" } },
+          React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, flex: "1 1 220px" } },
+            React.createElement("span", { style: { fontWeight: 900, color: C.accent, fontSize: 18 } }, "📏"),
+            React.createElement(Input, { value: niv.nombre, onChange: e => updNivel(niv.id, { nombre: e.target.value }), placeholder: "Nombre (ej. Terreno natural)", style: { fontWeight: 700, fontSize: 14 } })),
+          React.createElement("div", { style: { display: "flex", gap: 6 } },
+            React.createElement(Btn, { small: true, color: C.success, onClick: () => onArchivo(() => exportarCartera(proyecto, tabla, niv)) }, "📋 Cartera en Excel"),
+            React.createElement(Btn, { small: true, color: C.danger, onClick: () => delNivel(niv.id) }, "Eliminar"))),
+        // ── Avance ──
+        React.createElement("div", { style: { background: "#F4F8FB", border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px", marginBottom: 14 } },
+          React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 } },
+            React.createElement("div", { style: { fontWeight: 800, color: C.accent } }, `Avance: ${av.leidos} de ${av.total} puntos (${av.pct} %)`),
+            av.total > av.leidos && React.createElement(Btn, { small: true, color: C.accent, onClick: irADondeQuede }, "↓ Ir a donde quedé")),
+          React.createElement("div", { style: { height: 8, background: "#E3E8EE", borderRadius: 4, overflow: "hidden" } },
+            React.createElement("div", { style: { width: av.pct + "%", height: "100%", background: av.pct === 100 ? C.success : C.accent2 } })),
+          React.createElement("div", { style: { fontSize: 12, color: C.muted, marginTop: 6 } },
+            av.ultima ? `Última lectura: ${formatoAbscisa(av.ultima.abs)}${av.ultima.fecha ? " el " + fechaCorta(av.ultima.fecha) : ""}` : "Aún no hay lecturas.",
+            av.siguiente ? ` · Sigue: ${formatoAbscisa(av.siguiente.abs)}` : av.total && av.leidos === av.total ? " · ✓ Nivelación completa" : "")),
+        // ── Estaciones ──
+        React.createElement("div", { style: { background: C.bg, borderRadius: 8, padding: 12, marginBottom: 14 } },
+          React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: C.warn, marginBottom: 6 } }, "Estaciones — Cota BM + Vista⁺ → AI"),
+          React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 8 } },
+            "Agrega una estación cada vez que cambies de posición (o de día). En la tabla marca la abscisa donde empieza; hacia abajo aplica su AI hasta el próximo marcador."),
+          estaciones.map((est, i) => {
+            const bm = parseFloat(est.cotaBM), vm = parseFloat(est.vistaMas);
+            const ai = !isNaN(bm) && !isNaN(vm) ? r3(bm + vm) : null;
+            const setE = cambios => { const a = [...estaciones]; a[i] = { ...a[i], ...cambios }; updNivel(niv.id, { estaciones: a }); };
+            return React.createElement("div", { key: est.id, style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 8, marginBottom: 8, alignItems: "flex-end", padding: "6px 8px", borderLeft: "4px solid " + (estColorMap[est.id] || C.accent), background: "#fff", borderRadius: 4 } },
+              React.createElement("div", null, React.createElement(Label, null, "Nombre", est.fecha ? " · " + fechaCorta(est.fecha) : ""),
+                React.createElement(Input, { value: est.nombre, onChange: e => setE({ nombre: e.target.value }), placeholder: "Est. 1" })),
+              React.createElement("div", null, React.createElement(Label, null, "Cota BM (m)"),
+                React.createElement(Input, { value: est.cotaBM, inputMode: "decimal", onChange: e => setE({ cotaBM: e.target.value }), placeholder: "ej. 965.000" })),
+              React.createElement("div", null, React.createElement(Label, null, "Vista⁺ (m)"),
+                React.createElement(Input, { value: est.vistaMas, inputMode: "decimal", onChange: e => setE({ vistaMas: e.target.value }), placeholder: "ej. 1.520" })),
+              React.createElement("div", null, React.createElement(Label, null, "AI (auto)"),
+                React.createElement(Input, { value: ai !== null ? ai.toFixed(3) : "", disabled: true, style: { background: "#EAFAF1", fontWeight: 800, color: C.success, border: "1px solid " + C.success } })),
+              estaciones.length > 1 && React.createElement(Btn, { small: true, color: C.danger, onClick: () => updNivel(niv.id, { estaciones: estaciones.filter((_, j) => j !== i) }) }, "✕"));
           }),
-          /*#__PURE__*/React.createElement(Btn, {
-            small: true, color: C.success,
-            onClick: () => updNivel(niv.id, {
-              estaciones: [...niv.estaciones, { id: Math.random(), nombre: "Est. "+(niv.estaciones.length+1), cotaBM: "", vistaMas: "" }]
-            })
-          }, "+ Agregar estaci\u00f3n")
-        ),
-
-        // Tabla de lecturas
-        /*#__PURE__*/React.createElement("div", { style: { marginBottom: 16 } },
-          /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: C.accent, marginBottom: 4 } }, "Lecturas de campo \u2014 ", niv.nombre),
-          /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 8 } },
-            "En la columna \uD83D\uDCCC selecciona la estaci\u00f3n que inicia en esa fila. Hacia abajo sigue siendo esa AI hasta que marques otra."
-          ),
-          /*#__PURE__*/React.createElement("div", { style: { overflowX: "auto" } },
-            /*#__PURE__*/React.createElement("table", { style: { borderCollapse: "collapse", fontSize: 12, width: "100%" } },
-              /*#__PURE__*/React.createElement("thead", null,
-                /*#__PURE__*/React.createElement("tr", { style: { background: C.accent, color: "#fff" } },
-                  ["ABCS", "\uD83D\uDCCC Est.", "PARQ DER", "LAT DER", "EJE", "LAT IZQ", "PARQ IZQ"].map(h =>
-                    /*#__PURE__*/React.createElement("th", { key: h, style: { ...thS, padding: "6px 8px", fontSize: 10, whiteSpace: "nowrap" } }, h)
-                  )
-                )
-              ),
-              /*#__PURE__*/React.createElement("tbody", null,
-                tabla.map((row, i) => {
-                  const lec = lecturas[i];
-                  const estActiva = lec.estacionId ? niv.estaciones.find(e => e.id === lec.estacionId) : null;
-                  const colorBloque = (() => { for (let j=i;j>=0;j--) { if(lecturas[j]?.estacionId) return estColorMap[lecturas[j].estacionId]||C.accent; } return "#ccc"; })();
-                  const aiEfectivo = resolverAI(lecturas, niv.estaciones, i);
-                  const inp = { width: 62, padding: "2px 4px", border: "1px solid "+C.border, borderRadius: 4, fontSize: 11, fontFamily: "monospace", textAlign: "center" };
-                  return /*#__PURE__*/React.createElement("tr", { key: i, style: { background: estActiva ? "#EBF5FF" : i%2===0?"#fff":"#F8FAFC", borderLeft: "3px solid "+colorBloque } },
-                    /*#__PURE__*/React.createElement("td", { style: { ...tdS, fontFamily:"monospace", fontWeight:700, background:RASANTE_BG, color:RASANTE_TEXT, whiteSpace:"nowrap" } }, row.absFormato),
-                    /*#__PURE__*/React.createElement("td", { style: { ...tdS, whiteSpace:"nowrap", minWidth:120 } },
+          React.createElement(Btn, { small: true, color: C.success, onClick: () => updNivel(niv.id, { estaciones: [...estaciones, estacionNueva(estaciones.length + 1)] }) }, "+ Agregar estación")),
+        // ── Lecturas ──
+        React.createElement("div", { style: { marginBottom: 16 } },
+          React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: C.accent, marginBottom: 4 } }, "Lecturas de campo — ", niv.nombre),
+          React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 8 } },
+            "Verde = punto que se debe leer; gris = no aplica. La fecha se pone sola. Con ＋ agregas otra lectura en la misma abscisa (cambio brusco de nivel)."),
+          React.createElement("div", { style: { overflow: "auto", maxHeight: "70vh", border: `1px solid ${C.border}`, borderRadius: 6 } },
+            React.createElement("table", { id: idTabla, style: { borderCollapse: "separate", borderSpacing: 0, fontSize: 12, width: "100%" } },
+              React.createElement("thead", null, React.createElement("tr", null,
+                ["ABSCISA", "📌 Est.", "Fecha", "PARQ DER", "LAT DER", "EJE", "LAT IZQ", "PARQ IZQ"].map((h, k) =>
+                  React.createElement("th", { key: h, style: { ...thS, padding: "6px 8px", fontSize: 10, background: C.accent, color: "#fff", position: "sticky", top: 0, zIndex: k === 0 ? 4 : 3, ...(k === 0 ? { left: 0 } : {}) } }, h)))),
+              React.createElement("tbody", null,
+                lecturas.map((lec, i) => {
+                  const estActiva = lec.estacionId ? estaciones.find(e => e.id === lec.estacionId) : null;
+                  const colorBloque = (() => { for (let j = i; j >= 0; j--) { if (lecturas[j] && lecturas[j].estacionId) return estColorMap[lecturas[j].estacionId] || C.accent; } return "#ccc"; })();
+                  const aiEfectivo = resolverAI(lecturas, estaciones, i);
+                  const d = puntosDiseno(lec.row);
+                  const pendiente = CAMPOS_LECTURA.some(k => d[k] !== null && d[k] !== undefined && !hayLectura(lec[k]));
+                  const esSiguiente = av.siguiente && av.siguiente.i === i;
+                  const inp = { width: 64, padding: "3px 4px", borderRadius: 4, fontSize: 12, fontFamily: "monospace", textAlign: "center" };
+                  return React.createElement("tr", { key: lec.abs + "-" + (lec.sub || 0), "data-i": i, style: { background: esSiguiente ? "#FFF6D6" : estActiva ? "#EBF5FF" : i % 2 === 0 ? "#fff" : "#F8FAFC" } },
+                    // abscisa fija a la izquierda: es la guía, siempre visible
+                    React.createElement("td", { style: { ...tdS, ...stickyAbs, fontFamily: "monospace", fontWeight: 700, background: RASANTE_BG, color: RASANTE_TEXT, whiteSpace: "nowrap", borderLeft: "4px solid " + colorBloque } },
+                      formatoAbscisa(lec.abs), lec.sub ? " (" + (lec.sub + 1) + ")" : "",
+                      !pendiente && React.createElement("span", { style: { color: "#7FB77E", marginLeft: 4 } }, "✓"),
+                      lec.sub
+                        ? React.createElement("button", { onClick: () => quitarLectura(i), title: "Quitar lectura extra", style: { marginLeft: 6, border: "none", background: "none", color: "#FF8A80", cursor: "pointer", fontWeight: 900 } }, "✕")
+                        : React.createElement("button", { onClick: () => agregarLectura(i), title: "Otra lectura en esta abscisa", style: { marginLeft: 6, border: "1px solid #D4AF3788", borderRadius: 4, background: "none", color: RASANTE_TEXT, cursor: "pointer", fontWeight: 900, padding: "0 5px" } }, "＋")),
+                    React.createElement("td", { style: { ...tdS, whiteSpace: "nowrap", minWidth: 110 } },
                       estActiva
-                        ? /*#__PURE__*/React.createElement("span", { style: { display:"flex", alignItems:"center", gap:4 } },
-                            /*#__PURE__*/React.createElement("span", { style: { background:estColorMap[estActiva.id], color:"#fff", borderRadius:4, padding:"1px 6px", fontSize:10, fontWeight:700 } }, estActiva.nombre),
-                            /*#__PURE__*/React.createElement("button", { onClick:()=>setEstacion(i,null), style:{border:"none",background:"none",cursor:"pointer",color:C.danger,fontWeight:700,fontSize:11} }, "\u2715")
-                          )
-                        : /*#__PURE__*/React.createElement("span", { style:{display:"flex",alignItems:"center",gap:4} },
-                            aiEfectivo !== null && /*#__PURE__*/React.createElement("span", { style:{width:8,height:8,borderRadius:"50%",background:colorBloque,display:"inline-block"} }),
-                            /*#__PURE__*/React.createElement("select", {
-                              value:"",
-                              onChange: e => { if(e.target.value) setEstacion(i, parseFloat(e.target.value)); },
-                              style:{fontSize:10,padding:"1px 2px",border:"1px solid "+(aiEfectivo!==null?C.border:C.danger),borderRadius:4,color:aiEfectivo!==null?C.muted:C.danger}
-                            },
-                              /*#__PURE__*/React.createElement("option",{value:""},aiEfectivo!==null?"\u2193 hereda":"Sin est."),
-                              niv.estaciones.map(e=>/*#__PURE__*/React.createElement("option",{key:e.id,value:e.id},e.nombre))
-                            )
-                          )
-                    ),
-                    ...(function() {
-                      var CAMPO_ROW = {parqDer: row.parqDerCota, der: row.cotaLatDer, eje: row.cotaEje, izq: row.cotaLatIzq, parqIzq: row.parqIzqCota};
-                      return ["parqDer","der","eje","izq","parqIzq"].map(function(campo) {
-                        var tieneData = CAMPO_ROW[campo] !== null && CAMPO_ROW[campo] !== undefined;
-                        var celStyle = Object.assign({}, tdS, {padding:"3px 4px", background: tieneData ? "#EAFAF1" : "#F0F0F0"});
-                        var inpStyle = Object.assign({}, inp, tieneData
-                          ? {border:"2px solid #27AE60", background:"#EAFAF1", color:"#155724", fontWeight:700}
-                          : {border:"1px solid #ddd", background:"#EBEBEB", color:"#bbb", cursor:"not-allowed"});
-                        return /*#__PURE__*/React.createElement("td",{key:campo,style:celStyle},
-                          /*#__PURE__*/React.createElement("input",{
-                            value: tieneData ? (lec[campo]||"") : "",
-                            readOnly: !tieneData,
-                            disabled: !tieneData,
-                            onChange: tieneData ? function(e){updFila(i,campo,e.target.value);} : undefined,
-                            style: inpStyle,
-                            title: tieneData ? "Ingrese lectura de campo" : "Sin datos de tabla en este punto"
-                          })
-                        );
-                      });
-                    })()
-                  );
-                })
-              )
-            )
-          )
-        ),
-
-        // Tabla de cotas
-        hayCotas && /*#__PURE__*/React.createElement("div",null,
-          /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:13,color:C.success,marginBottom:6}}, "Cotas \u2014 ", niv.nombre, " (AI \u2212 Lectura)"),
-          /*#__PURE__*/React.createElement("div",{style:{overflowX:"auto"}},
-            /*#__PURE__*/React.createElement("table",{style:{borderCollapse:"collapse",fontSize:12,width:"100%"}},
-              /*#__PURE__*/React.createElement("thead",null,
-                /*#__PURE__*/React.createElement("tr",{style:{background:C.success,color:"#fff"}},
-                  ["ABCS","AI","COTA PARQ DER","COTA LAT DER","COTA EJE","COTA LAT IZQ","COTA PARQ IZQ"].map(h=>
-                    /*#__PURE__*/React.createElement("th",{key:h,style:{...thS,fontSize:10}},h)
-                  )
-                )
-              ),
-              /*#__PURE__*/React.createElement("tbody",null,
-                cotas.map((c,i)=>{
-                  const fmt = v => v!==null?v.toFixed(3):"\u2014";
-                  return /*#__PURE__*/React.createElement("tr",{key:i,style:{background:i%2===0?"#fff":"#F0FBF0"}},
-                    /*#__PURE__*/React.createElement("td",{style:{...tdS,fontFamily:"monospace",fontWeight:700,background:RASANTE_BG,color:RASANTE_TEXT}},c.absFormato),
-                    /*#__PURE__*/React.createElement("td",{style:{...tdS,fontFamily:"monospace",color:C.success,fontWeight:700}},c.ai!==null?c.ai.toFixed(3):"\u2014"),
-                    /*#__PURE__*/React.createElement("td",{style:{...tdS,fontFamily:"monospace",color:C.parq}},fmt(c.cotaParqDer)),
-                    /*#__PURE__*/React.createElement("td",{style:{...tdS,fontFamily:"monospace",color:C.accent2}},fmt(c.cotaDer)),
-                    /*#__PURE__*/React.createElement("td",{style:{...tdS,fontFamily:"monospace",color:C.warn,fontWeight:800}},fmt(c.cotaEje)),
-                    /*#__PURE__*/React.createElement("td",{style:{...tdS,fontFamily:"monospace",color:C.accent2}},fmt(c.cotaIzq)),
-                    /*#__PURE__*/React.createElement("td",{style:{...tdS,fontFamily:"monospace",color:C.parq}},fmt(c.cotaParqIzq))
-                  );
-                })
-              )
-            )
-          )
-        )
-      );
-    })
-  );
+                        ? React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 4 } },
+                            React.createElement("span", { style: { background: estColorMap[estActiva.id], color: "#fff", borderRadius: 4, padding: "1px 6px", fontSize: 10, fontWeight: 700 } }, estActiva.nombre),
+                            React.createElement("button", { onClick: () => setEstacion(i, null), style: { border: "none", background: "none", cursor: "pointer", color: C.danger, fontWeight: 700, fontSize: 11 } }, "✕"))
+                        : React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 4 } },
+                            aiEfectivo !== null && React.createElement("span", { style: { width: 8, height: 8, borderRadius: "50%", background: colorBloque, display: "inline-block" } }),
+                            React.createElement("select", { value: "", onChange: e => { if (e.target.value) setEstacion(i, parseFloat(e.target.value)); },
+                              style: { fontSize: 11, padding: "1px 2px", border: "1px solid " + (aiEfectivo !== null ? C.border : C.danger), borderRadius: 4, color: aiEfectivo !== null ? C.muted : C.danger } },
+                              React.createElement("option", { value: "" }, aiEfectivo !== null ? "↓ hereda" : "Sin est."),
+                              estaciones.map(e => React.createElement("option", { key: e.id, value: e.id }, e.nombre))))),
+                    React.createElement("td", { style: { ...tdS, fontSize: 11, color: C.muted, whiteSpace: "nowrap" } }, fechaCorta(lec.fecha)),
+                    CAMPOS_LECTURA.map(campo => {
+                      const aplica = d[campo] !== null && d[campo] !== undefined;
+                      return React.createElement("td", { key: campo, style: { ...tdS, padding: "3px 4px", background: aplica ? "#EAFAF1" : "#F0F0F0" } },
+                        React.createElement("input", { value: aplica ? (lec[campo] || "") : "", readOnly: !aplica, disabled: !aplica, inputMode: "decimal",
+                          onChange: aplica ? e => updFila(i, campo, e.target.value) : undefined,
+                          style: { ...inp, ...(aplica ? { border: "2px solid #27AE60", background: "#fff", color: "#155724", fontWeight: 700 } : { border: "1px solid #ddd", background: "#EBEBEB", color: "#bbb", cursor: "not-allowed" }) },
+                          title: aplica ? "Lectura de campo" : "No aplica en este punto" }));
+                    }));
+                }))))),
+        // ── Cotas ──
+        hayCotas && React.createElement("div", null,
+          React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: C.success, marginBottom: 6 } }, "Cotas — ", niv.nombre, " (AI − Lectura)"),
+          React.createElement("div", { style: { overflow: "auto", maxHeight: "60vh", border: `1px solid ${C.border}`, borderRadius: 6 } },
+            React.createElement("table", { style: { borderCollapse: "separate", borderSpacing: 0, fontSize: 12, width: "100%" } },
+              React.createElement("thead", null, React.createElement("tr", null,
+                ["ABSCISA", "AI", "COTA PARQ DER", "COTA LAT DER", "COTA EJE", "COTA LAT IZQ", "COTA PARQ IZQ"].map((h, k) =>
+                  React.createElement("th", { key: h, style: { ...thS, fontSize: 10, background: C.success, color: "#fff", position: "sticky", top: 0, zIndex: k === 0 ? 4 : 3, ...(k === 0 ? { left: 0 } : {}) } }, h)))),
+              React.createElement("tbody", null,
+                cotas.map((c, i) => {
+                  const fmt = v => v !== null ? v.toFixed(3) : "—";
+                  return React.createElement("tr", { key: i, style: { background: i % 2 === 0 ? "#fff" : "#F0FBF0" } },
+                    React.createElement("td", { style: { ...tdS, ...stickyAbs, fontFamily: "monospace", fontWeight: 700, background: RASANTE_BG, color: RASANTE_TEXT } }, c.absFormato),
+                    React.createElement("td", { style: { ...tdS, fontFamily: "monospace", color: C.success, fontWeight: 700 } }, c.ai !== null ? c.ai.toFixed(3) : "—"),
+                    [c.cotaParqDer, c.cotaDer, c.cotaEje, c.cotaIzq, c.cotaParqIzq].map((v, k) =>
+                      React.createElement("td", { key: k, style: { ...tdS, fontFamily: "monospace", fontWeight: k === 2 ? 800 : 400 } }, fmt(v))));
+                }))))));
+    }));
 }
 
 // ─── TAB VOLÚMENES ────────────────────────────────────────────────────────────
@@ -4229,6 +4317,19 @@ function TabVolumenes({ proyecto, tabla, onChange }) {
   var opcionesTabla = todasOpciones.filter(function(o){ return o.tipo === "tabla"; });
   var calcularVol = function(vol) { return calcVolumen(vol, proyecto, tabla); };
 
+  // Superficie SUPERIOR = terreno natural: una nivelación. Solo si se decide a propósito,
+  // una capa de diseño puede hacer de terreno natural (queda advertido).
+  var renderSup = function(value, onCh) {
+    return React.createElement(Sel,{value:value,onChange:onCh},
+      React.createElement("option",{value:""},"— Seleccionar terreno natural —"),
+      opcionesNivel.length>0 && React.createElement("optgroup",{label:"Terreno natural (nivelaciones)"},
+        opcionesNivel.map(function(o){return React.createElement("option",{key:o.id,value:o.id},o.label);})
+      ),
+      opcionesTabla.length>0 && React.createElement("optgroup",{label:"Usar una capa como terreno natural"},
+        opcionesTabla.map(function(o){return React.createElement("option",{key:o.id,value:o.id},o.label.replace("Tabla › ","Capa: "));})
+      )
+    );
+  };
   var renderSel = function(value, onCh) {
     return React.createElement(Sel,{value:value,onChange:onCh},
       React.createElement("option",{value:""},"— Seleccionar —"),
@@ -4268,11 +4369,15 @@ function TabVolumenes({ proyecto, tabla, onChange }) {
       ),
       React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:12,marginBottom:12}},
         React.createElement("div",null,
-          React.createElement(Label,null,"Superficie SUPERIOR (nivelación campo)"),
-          renderSel(vol.fuenteSup,function(e){updVol(idx,{fuenteSup:e.target.value});})
+          React.createElement(Label,null,"Superficie SUPERIOR (terreno natural)"),
+          renderSup(vol.fuenteSup,function(e){updVol(idx,{fuenteSup:e.target.value});}),
+          vol.fuenteSup && vol.fuenteSup.indexOf("tabla__")===0 && React.createElement("div",{style:{fontSize:11,color:C.danger,fontWeight:700,marginTop:3}},
+            "⚠ Estás usando la capa "+vol.fuenteSup.replace("tabla__","")+" como terreno natural."),
+          !opcionesNivel.length && React.createElement("div",{style:{fontSize:11,color:C.danger,marginTop:3}},
+            "No hay nivelación del terreno natural. Créala en 📏 Nivelaciones.")
         ),
         React.createElement("div",null,
-          React.createElement(Label,null,"Superficie INFERIOR (cota diseño)"),
+          React.createElement(Label,null,"Superficie INFERIOR (diseño o nivelación)"),
           renderSel(vol.fuenteInf,function(e){updVol(idx,{fuenteInf:e.target.value});})
         ),
         React.createElement("div",null,
@@ -4301,6 +4406,10 @@ function TabVolumenes({ proyecto, tabla, onChange }) {
               React.createElement("span",{style:{color:"#D4AF37",fontWeight:700,fontSize:13}},vol.nombre+(sa>0?" (con sobreancho izq "+S.izq.toFixed(2)+" + der "+S.der.toFixed(2)+" m)":"")),
               React.createElement("span",{style:{color:"#D4AF37",fontWeight:900,fontSize:20}},resultado.volTotal.toFixed(3)+" m³")
             ),
+            React.createElement("div",{style:{fontSize:12,color:C.muted,marginBottom:8}},
+              "Calculado solo donde hay terreno natural: ",
+              resultado.tramosTN.map(function(t){ return formatoAbscisa(t.desde)+" a "+formatoAbscisa(t.hasta); }).join(", "),
+              " ("+resultado.largoTN.toFixed(3)+" m de "+r3(tabla[tabla.length-1].abs-tabla[0].abs).toFixed(3)+" m de la vía)."),
             React.createElement("div",{style:{overflowX:"auto"}},
               React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",fontSize:11}},
                 React.createElement("thead",null,
@@ -4349,7 +4458,9 @@ function TabVolumenes({ proyecto, tabla, onChange }) {
             )
           )
         : React.createElement("div",{style:{color:C.muted,fontSize:12,padding:16,textAlign:"center",background:C.bg,borderRadius:8}},
-            !tabla?"Presiona ⚡ CALCULAR primero.":"Selecciona las dos superficies para calcular."
+            !tabla?"Presiona ⚡ CALCULAR primero."
+              :!(vol.fuenteSup&&vol.fuenteInf)?"Selecciona el terreno natural y la superficie inferior."
+              :"Sin volumen: aún no hay lecturas del terreno natural en los puntos de la vía."
           )
     );
   };
@@ -5289,7 +5400,8 @@ function App() {
   })), tab === "nivel" && /*#__PURE__*/React.createElement(TabNivelaciones, {
     proyecto: proy,
     tabla: tabla,
-    onChange: proyActualizado => updSinRecalcular(proyActualizado)
+    onChange: proyActualizado => updSinRecalcular(proyActualizado),
+    onArchivo: fn => preparar("Preparando la cartera…", fn)
   }), tab === "vol" && /*#__PURE__*/React.createElement(TabVolumenes, {
     proyecto: proy,
     tabla: tabla,
