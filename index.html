@@ -2454,8 +2454,13 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
       filaTit[i * ANCHO_BLOQUE] = bq.titulo;
       ["ABCS", "PARQ DER", "LAT DER", "EJE", "LAT IZQ", "PARQ IZQ"].forEach((h, j) => { filaHdr[i * ANCHO_BLOQUE + j] = h; });
     });
+    // Pendiente del eje por abscisa: a la derecha de los bloques, para no cortar la lectura de las cotas
+    const colPend = bloques.length * ANCHO_BLOQUE;
+    filaTit[colPend] = "PENDIENTE DEL EJE";
+    filaHdr[colPend] = "ABCS"; filaHdr[colPend + 1] = "PEND (%)";
     const rTit = pushRow(Array.from(filaTit, v => v == null ? "" : v));
     bloques.forEach((_, i) => merges.push({ s: { r: rTit, c: i * ANCHO_BLOQUE }, e: { r: rTit, c: i * ANCHO_BLOQUE + 5 } }));
+    merges.push({ s: { r: rTit, c: colPend }, e: { r: rTit, c: colPend + 1 } });
     boldRows.add(rTit);
     headerRows.add(pushRow(Array.from(filaHdr, v => v == null ? "" : v)));
     tabla.forEach(trow => {
@@ -2464,12 +2469,10 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
         fila[i * ANCHO_BLOQUE] = ABS(trow.abs);
         bq.get(trow).forEach((v, j) => { fila[i * ANCHO_BLOQUE + 1 + j] = v != null ? v : ""; });
       });
+      fila[colPend] = ABS(trow.abs);
+      fila[colPend + 1] = trow.pendiente != null ? trow.pendiente : "";
       pushRow(Array.from(fila, v => v == null ? "" : v));
     });
-    blank();
-    // Pendientes del eje por abscisa
-    headerRows.add(pushRow(["ABCS", "PEND EJE (%)"]));
-    tabla.forEach(trow => pushRow([ABS(trow.abs), trow.pendiente != null ? trow.pendiente : ""]));
     blank();
 
     // ── 4. NIVELACIONES DE CAMPO ────────────────────────────────
@@ -2566,8 +2569,15 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
       const q = calcCantidades(proyecto, tabla);
       const r7 = pushRow(["6. CANTIDADES DE LA VÍA"]);
       boldRows.add(r7);
-      headerRows.add(pushRow(["CANTIDAD", "UNIDAD", "VALOR", "CÓMO SE CALCULA"]));
-      q.items.forEach(it => { const r = pushRow([it.nombre, it.unidad, it.valor, it.partes.join(" + ")]); cantRefs[it.clave] = ref(2, r); });
+      // "Cómo se calcula" ocupa varias columnas (D a F, dentro del ancho de la hoja) para que el texto se lea completo
+      const hC = pushRow(["CANTIDAD", "UNIDAD", "VALOR", "CÓMO SE CALCULA"]);
+      headerRows.add(hC);
+      merges.push({ s: { r: hC, c: 3 }, e: { r: hC, c: 5 } });
+      q.items.forEach(it => {
+        const r = pushRow([it.nombre, it.unidad, it.valor, it.partes.join(" + ")]);
+        merges.push({ s: { r, c: 3 }, e: { r, c: 5 } });
+        cantRefs[it.clave] = ref(2, r);
+      });
       cantQ = q;
       blank();
     }
@@ -2615,7 +2625,7 @@ function escribirHojaExcel(wb, nombre, desc, opciones) {
   const filas = desc.wsData;
   let maxCol = 0;
   filas.forEach(f => { if (f.length > maxCol) maxCol = f.length; });
-  ws.columns = Array.from({ length: Math.max(maxCol, 8) }, (_, c) => ({ width: c === 0 ? 17 : c === 1 ? 22 : 13 }));
+  ws.columns = Array.from({ length: Math.max(maxCol, 8) }, (_, c) => ({ width: c === 0 ? 16 : c === 1 ? 19 : 13 })); // A–G caben en una hoja vertical
   const esVacia = f => !f || f.every(v => v === "" || v == null);
   let columnasTabla = null; // columnas de la tabla en curso (las del encabezado)
   filas.forEach((f, r) => {
@@ -2652,6 +2662,8 @@ function escribirHojaExcel(wb, nombre, desc, opciones) {
       columnasTabla.forEach(c => {
         const cel = fila.getCell(c + 1);
         cel.border = bordesFinos;
+        // texto largo dentro de una tabla: baja de línea en vez de salirse de la celda
+        cel.alignment = { vertical: "middle", wrapText: typeof cel.value === "string" && cel.value.length > 24 };
         if (esTotal) {
           cel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: XL.total } };
           cel.font = { name: "Arial", size: 10, bold: true, color: { argb: XL.textoTotal } };
@@ -2660,7 +2672,20 @@ function escribirHojaExcel(wb, nombre, desc, opciones) {
       });
     }
   });
-  (desc.merges || []).forEach(m => { try { ws.mergeCells(m.s.r + 1, m.s.c + 1, m.e.r + 1, m.e.c + 1); } catch (e) {} });
+  (desc.merges || []).forEach(m => {
+    const maestra = ws.getCell(m.s.r + 1, m.s.c + 1);
+    if (maestra.border && m.e.c > m.s.c) {
+      for (let c = m.s.c; c <= m.e.c; c++) { const k = ws.getCell(m.s.r + 1, c + 1); k.border = maestra.border; if (maestra.fill) k.fill = maestra.fill; }
+      // texto largo en una celda combinada: alto de la fila según cuántas líneas ocupa
+      if (typeof maestra.value === "string") {
+        let ancho = 0; for (let c = m.s.c; c <= m.e.c; c++) ancho += ws.getColumn(c + 1).width || 13;
+        const lineas = Math.ceil(maestra.value.length * 1.05 / ancho);
+        if (lineas > 1) ws.getRow(m.s.r + 1).height = 14 * lineas + 2;
+        maestra.alignment = { wrapText: true, vertical: "middle", horizontal: maestra.alignment && maestra.alignment.horizontal };
+      }
+    }
+    try { ws.mergeCells(m.s.r + 1, m.s.c + 1, m.e.r + 1, m.e.c + 1); } catch (e) {}
+  });
   // Gráficos arriba, uno debajo del otro, del ancho de una hoja (justa medida)
   if (op.graficos && op.graficos.length) {
     const t = ws.getCell(1, 1);
@@ -2674,7 +2699,7 @@ function escribirHojaExcel(wb, nombre, desc, opciones) {
       y += alto / 20 + 0.6;
     });
   }
-  ws.pageSetup = { paperSize: 9, orientation: "portrait", margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } };
+  ws.pageSetup = { paperSize: 9, orientation: "portrait", margins: { left: 0.3, right: 0.3, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } };
   return ws;
 }
 // Filas que ocupan los gráficos arriba de la hoja (altura de fila por defecto: 20 px)
