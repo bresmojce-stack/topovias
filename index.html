@@ -2369,7 +2369,7 @@ function calcVolumen(vol, proyecto, tabla) {
     const vExacto = (filas[i - 1].area + f.area) / 2 * dist + extra;
     const v = r3(vExacto);
     volTotal += vExacto;   // el total se suma exacto, como la SUMA del Excel
-    return { ...f, vol: v, dist, extra };
+    return { ...f, vol: v, volExacto: vExacto, dist, extra };
   });
   volTotal = r3(volTotal);
   return { filas: filasVol, volTotal, sa, saIzq: S.izq, saDer: S.der, saOrigen: S.origen, longitudinal: S.longitudinal, anchoVia };
@@ -2587,7 +2587,7 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
         const prevAcumRef = ref(colAcum, dataStartRow + fi - 1);
         const volFormula  = `(${prevAreaRef}+${currAreaRef})/2*${distRef}` + (f.extra ? `+${f.extra}` : "");
         const acumFormula = `${prevAcumRef}+${ref(colVol, dataStartRow + fi)}`;
-        const acumVal = r3(filas.slice(1, fi + 1).reduce((s, ff) => s + (ff.vol || 0), 0));
+        const acumVal = r3(filas.slice(1, fi + 1).reduce((s, ff) => s + (ff.volExacto || 0), 0)); // exacto, igual que la fórmula
         pushRow([ABS(f.abs), f.area, f.dist, { f: volFormula, v: f.vol }, { f: acumFormula, v: acumVal }]);
       });
 
