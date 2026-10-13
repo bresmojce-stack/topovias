@@ -1410,6 +1410,18 @@ function nivelesEtiquetas(xs, minDist) {
   const niv = []; xs.forEach((x, i) => { niv.push(i > 0 && x - xs[i - 1] < minDist && niv[i - 1] === 0 ? 1 : 0); }); return niv;
 }
 
+// Abscisas a rotular: la de inicio, la de fin y cada "paso" metros entre ellas. Se quita una
+// redonda que quede muy pegada al inicio o al fin (menos de minPx en el dibujo) para que no se monte.
+function marcasAbscisa(absMin, absMax, paso, X, minPx) {
+  const m = [{ x: absMin, extremo: true }];
+  for (let x = Math.ceil(absMin / paso - 1e-9) * paso; x <= absMax + 1e-9; x += paso) {
+    if (Math.abs(X(x) - X(absMin)) < minPx || Math.abs(X(absMax) - X(x)) < minPx) continue;
+    m.push({ x, extremo: false });
+  }
+  if (absMax > absMin + 1e-9) m.push({ x: absMax, extremo: true });
+  return m;
+}
+
 function svgPerfil(d) {
   // PB incluye la franja de abajo con la cota de la rasante cada 10 m (texto vertical)
   const W = 1100, PL = 64, PR = 26, PB = 44 + 62;
@@ -1429,24 +1441,27 @@ function svgPerfil(d) {
   // rejilla de cotas
   for (let k = 0; k <= 4; k++) { const y = yMin + (yMax - yMin) * k / 4;
     o.push(`<line x1="${PL}" x2="${W - PR}" y1="${Y(y).toFixed(1)}" y2="${Y(y).toFixed(1)}" stroke="${GC.rejilla}"/>`, svgT(PL - 6, Y(y) + 4, y.toFixed(2), `text-anchor="end" font-size="11" fill="${GC.gris}"`)); }
-  // abscisado cada 10 m
-  for (let x = Math.ceil(d.absMin / 10 - 1e-9) * 10; x <= d.absMax + 1e-9; x += 10) {
+  // abscisado: inicio, cada 10 m (20, 40… si la vía es muy larga) y fin. La franja de cotas usa las mismas.
+  let paso = 10; while ((X(paso) - X(0)) < 66) paso *= 2;
+  const marcas = marcasAbscisa(d.absMin, d.absMax, paso, X, 62);
+  marcas.forEach(({ x, extremo }) => {
     o.push(`<line x1="${X(x).toFixed(1)}" x2="${X(x).toFixed(1)}" y1="${PT}" y2="${H - PB}" stroke="#F1F3F5"/>`,
       `<line x1="${X(x).toFixed(1)}" x2="${X(x).toFixed(1)}" y1="${H - PB}" y2="${H - PB + 5}" stroke="${GC.texto}"/>`,
-      svgT(X(x), H - PB + 18, formatoAbscisa(x), `text-anchor="middle" font-size="11" fill="${GC.texto}"`)); }
-  // franja: cota de la rasante cada 10 m (cada 20 o más si la vía es muy larga, para que no se monte)
+      svgT(Math.min(Math.max(X(x), 34), W - 34), H - PB + 18, formatoAbscisa(x), `text-anchor="middle" font-size="11" fill="${GC.texto}"${extremo ? ' font-weight="bold"' : ""}`)); });
+  // franja: cota de la rasante en las mismas abscisas del eje
   {
     const yF = H - PB + 27;
-    let paso = 10; while ((X(paso) - X(0)) < 14) paso *= 2;
     o.push(`<rect x="${PL}" y="${yF}" width="${W - PL - PR}" height="${H - yF - 3}" fill="#FBF4F3" stroke="#E8CFCB"/>`,
       svgT(PL - 6, yF + 20, "Cota", `text-anchor="end" font-size="10" font-weight="bold" fill="${GC.rasante}"`),
       svgT(PL - 6, yF + 33, "rasante", `text-anchor="end" font-size="10" font-weight="bold" fill="${GC.rasante}"`));
-    for (let x = Math.ceil(d.absMin / paso - 1e-9) * paso; x <= d.absMax + 1e-9; x += paso) {
-      const c = interp(d.filas, x, r => r.cotaEje);
-      if (c === null || isNaN(c)) continue;
+    marcas.forEach(({ x, extremo }) => {
+      // en el inicio y el fin, la cota exacta de la tabla
+      const fila = extremo ? d.filas[x === d.absMin ? 0 : d.filas.length - 1] : null;
+      const c = fila ? fila.cotaEje : interp(d.filas, x, r => r.cotaEje);
+      if (c === null || isNaN(c)) return;
       const xx = Math.min(Math.max(X(x) + 4, PL + 12), W - PR - 3), yy = ((yF + H - 3) / 2).toFixed(1);
-      o.push(`<text x="${xx.toFixed(1)}" y="${yy}" transform="rotate(-90 ${xx.toFixed(1)} ${yy})" text-anchor="middle" font-size="11" fill="${GC.rasante}">${c.toFixed(3)}</text>`);
-    }
+      o.push(`<text x="${xx.toFixed(1)}" y="${yy}" transform="rotate(-90 ${xx.toFixed(1)} ${yy})" text-anchor="middle" font-size="11" fill="${GC.rasante}"${extremo ? ' font-weight="bold"' : ""}>${c.toFixed(3)}</text>`);
+    });
   }
   // corte / relleno entre terreno natural y fondo de excavación
   if (d.tn.length > 1) {
@@ -1544,10 +1559,10 @@ function svgPlanta(d) {
   o.push(`<line x1="${x0}" x2="${x1}" y1="${eY.toFixed(1)}" y2="${eY.toFixed(1)}" stroke="${GC.rasante}" stroke-width="2" stroke-dasharray="10,5"/>`,
     svgT(8, eY + 4, "EJE", `font-size="11" font-weight="bold" fill="${GC.rasante}"`),
     svgT(8, yIzq + 4, "IZQ " + A.anchoIzq.toFixed(2), `font-size="10" fill="${GC.borde}"`), svgT(8, yDer + 4, "DER " + A.anchoDer.toFixed(2), `font-size="10" fill="${GC.borde}"`));
-  for (let x = Math.ceil(d.absMin / 10 - 1e-9) * 10; x <= d.absMax + 1e-9; x += 10)
+  marcasAbscisa(d.absMin, d.absMax, 10, X, 62).forEach(({ x, extremo }) =>
     o.push(`<line x1="${X(x).toFixed(1)}" x2="${X(x).toFixed(1)}" y1="${(eY - 6).toFixed(1)}" y2="${(eY + 6).toFixed(1)}" stroke="${GC.rasante}" stroke-width="1.5"/>`,
       `<line x1="${X(x).toFixed(1)}" x2="${X(x).toFixed(1)}" y1="${(H - 36).toFixed(1)}" y2="${(H - 30).toFixed(1)}" stroke="${GC.texto}"/>`,
-      svgT(X(x), H - 16, formatoAbscisa(x), `text-anchor="middle" font-size="11" fill="${GC.texto}"`));
+      svgT(Math.min(Math.max(X(x), 34), W - 34), H - 16, formatoAbscisa(x), `text-anchor="middle" font-size="11" fill="${GC.texto}"${extremo ? ' font-weight="bold"' : ""}`)));
   // agua a lo largo (por tramo) y bombeo hacia los bordes
   for (let i = 1; i < d.PI.length; i++) {
     const P = d.PI[i - 1], Q = d.PI[i];
