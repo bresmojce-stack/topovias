@@ -1631,6 +1631,7 @@ function exportarExcel(proyecto, tabla) {
     const headerRows = new Set();
 
     const pushRow = (cells) => { wsData.push(cells); return row++; };
+    const filasConNumeroDeOrden = new Set(); // filas cuya 1ª columna es N° (1, 2, 3…), sin decimales
     const blank = () => pushRow([""]);
 
     // ── 1. ENCABEZADO ───────────────────────────────────────────
@@ -1641,10 +1642,9 @@ function exportarExcel(proyecto, tabla) {
     const fechaHoy = new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
     pushRow(["VÍA:", proyecto.nombre || "", "", "FECHA:", fechaHoy]);
     const anchos = anchosProyecto(proyecto);
-    const anchoTotal = (anchos.anchoIzq + anchos.anchoDer).toFixed(2);
-    pushRow(["ANCHO VÍA:", anchoTotal + " m", "", "ELABORADO:", ""]);
+    pushRow(["ANCHO VÍA (m):", r3(anchos.anchoIzq + anchos.anchoDer), "", "ELABORADO:", ""]);
     // Abscisas inicial y final tomadas de la tabla (incluye distancias calculadas, no solo las digitadas)
-    pushRow(["ABS INICIO:", tabla[0].absFormato, "", "ABS FIN:", tabla[tabla.length - 1].absFormato]);
+    pushRow(["ABS INICIO (m):", tabla[0].abs, "", "ABS FIN (m):", tabla[tabla.length - 1].abs]);
     blank();
 
     // ── 2. ESTRUCTURA DE LA VÍA ─────────────────────────────────
@@ -1656,8 +1656,8 @@ function exportarExcel(proyecto, tabla) {
     headerRows.add(capHdrRow);
 
     const listarCapas = cs => {
-      cs.forEach((capa, i) => pushRow([i + 1, capa.nombre || "", (parseFloat(capa.espesor) || 0).toFixed(3)]));
-      pushRow(["", "TOTAL ESTRUCTURA", espesorTotal(cs).toFixed(3)]);
+      cs.forEach((capa, i) => filasConNumeroDeOrden.add(pushRow([i + 1, capa.nombre || "", parseFloat(capa.espesor) || 0])));
+      pushRow(["", "TOTAL ESTRUCTURA", espesorTotal(cs)]);
       boldRows.add(row - 1);
       blank();
     };
@@ -1671,24 +1671,36 @@ function exportarExcel(proyecto, tabla) {
     });
 
     // ── 3. CÁLCULO DE COTAS (DISEÑO) ────────────────────────────
-    const sec3Row = pushRow(["3. CÁLCULO DE COTAS - RASANTE DE DISEÑO"]);
+    const sec3Row = pushRow(["3. COTAS DE DISEÑO POR CAPA"]);
     merges.push({ s: { r: sec3Row, c: 0 }, e: { r: sec3Row, c: 6 } });
     boldRows.add(sec3Row);
-
-    const cHdr = pushRow(["ABSCISA", "PEND (%)", "COTA EJE", "LAT DER", "LAT IZQ", "PARQ DER", "PARQ IZQ"]);
-    headerRows.add(cHdr);
-
-    tabla.forEach(trow => {
-      pushRow([
-        trow.absFormato || "",
-        trow.pendiente != null ? trow.pendiente : "",
-        trow.cotaEje != null ? trow.cotaEje : "",
-        trow.cotaLatDer != null ? trow.cotaLatDer : "",
-        trow.cotaLatIzq != null ? trow.cotaLatIzq : "",
-        trow.parqDerCota != null ? trow.parqDerCota : "",
-        trow.parqIzqCota != null ? trow.parqIzqCota : ""
-      ]);
+    // Un bloque por superficie (rasante, cada capa, excavación), uno al lado del otro:
+    // abcs | parq der | lat der | eje | lat izq | parq izq   (igual que la hoja de obra)
+    const capasVis = (tabla[0].capas || []).filter(c => !c.esOculta);
+    const bloques = [{ titulo: "COTAS RASANTE", get: r => [r.parqDerCota, r.cotaLatDer, r.cotaEje, r.cotaLatIzq, r.parqIzqCota] }]
+      .concat(capasVis.map(c => ({ titulo: "COTAS " + c.nombre.toUpperCase(), get: r => { const k = (r.capas || []).find(x => x.nombre === c.nombre) || {}; return [k.parqDer, k.der, k.eje, k.izq, k.parqIzq]; } })));
+    const ANCHO_BLOQUE = 7; // 6 columnas + 1 de separación
+    const filaTit = [], filaHdr = [];
+    bloques.forEach((bq, i) => {
+      filaTit[i * ANCHO_BLOQUE] = bq.titulo;
+      ["ABCS", "PARQ DER", "LAT DER", "EJE", "LAT IZQ", "PARQ IZQ"].forEach((h, j) => { filaHdr[i * ANCHO_BLOQUE + j] = h; });
     });
+    const rTit = pushRow(Array.from(filaTit, v => v == null ? "" : v));
+    bloques.forEach((_, i) => merges.push({ s: { r: rTit, c: i * ANCHO_BLOQUE }, e: { r: rTit, c: i * ANCHO_BLOQUE + 5 } }));
+    boldRows.add(rTit);
+    headerRows.add(pushRow(Array.from(filaHdr, v => v == null ? "" : v)));
+    tabla.forEach(trow => {
+      const fila = [];
+      bloques.forEach((bq, i) => {
+        fila[i * ANCHO_BLOQUE] = trow.abs;
+        bq.get(trow).forEach((v, j) => { fila[i * ANCHO_BLOQUE + 1 + j] = v != null ? v : ""; });
+      });
+      pushRow(Array.from(fila, v => v == null ? "" : v));
+    });
+    blank();
+    // Pendientes del eje por abscisa
+    headerRows.add(pushRow(["ABCS", "PEND EJE (%)"]));
+    tabla.forEach(trow => pushRow([trow.abs, trow.pendiente != null ? trow.pendiente : ""]));
     blank();
 
     // ── 4. NIVELACIONES DE CAMPO ────────────────────────────────
@@ -1703,7 +1715,7 @@ function exportarExcel(proyecto, tabla) {
         const estaciones = niv.estaciones || [];
         estaciones.forEach(est => {
           const cBM = parseFloat(est.cotaBM), vM = parseFloat(est.vistaMas);
-          pushRow(["  BM:", est.nombre || "", "Cota BM:", isNaN(cBM) ? "" : cBM, "Vista +:", isNaN(vM) ? "" : vM, "A.I.:", !isNaN(cBM) && !isNaN(vM) ? r3(cBM + vM).toFixed(3) : ""]);
+          pushRow(["  BM:", est.nombre || "", "Cota BM:", isNaN(cBM) ? "" : cBM, "Vista +:", isNaN(vM) ? "" : vM, "A.I.:", !isNaN(cBM) && !isNaN(vM) ? r3(cBM + vM) : ""]);
         });
 
         const nHdr = pushRow(["ABSCISA", "A.I.", "PARQ DER", "LAT DER", "EJE", "LAT IZQ", "PARQ IZQ", "COTA EJE (calc)"]);
@@ -1713,7 +1725,7 @@ function exportarExcel(proyecto, tabla) {
         const cotas = calcCotasNivelacion(niv, tabla);
         cotas.forEach(cn => {
           pushRow([
-            cn.absFormato || "",
+            cn.abs,
             cn.ai != null ? cn.ai : "",
             cn.cotaParqDer != null ? cn.cotaParqDer : "",
             cn.cotaDer != null ? cn.cotaDer : "",
@@ -1739,7 +1751,7 @@ function exportarExcel(proyecto, tabla) {
       const sec5Row = pushRow([`5.${vi + 1}. VOLÚMENES: ${vol.nombre || "Volumen"}`]);
       merges.push({ s: { r: sec5Row, c: 0 }, e: { r: sec5Row, c: 8 } });
       boldRows.add(sec5Row);
-      pushRow(["Fuente Superior:", etiquetaSuperficie(vol.fuenteSup, proyecto, tabla), "", "Fuente Inferior:", etiquetaSuperficie(vol.fuenteInf, proyecto, tabla), "", "Sobre ancho c/lado:", (parseFloat(vol.sobreAncho) || 0).toFixed(2) + " m"]);
+      pushRow(["Fuente Superior:", etiquetaSuperficie(vol.fuenteSup, proyecto, tabla), "", "Fuente Inferior:", etiquetaSuperficie(vol.fuenteInf, proyecto, tabla), "", "Sobre ancho c/lado (m):", parseFloat(vol.sobreAncho) || 0]);
 
       const vHdr = pushRow(["ABSCISA", "ÁREA m²", "DIST (m)", "VOL (m³)", "VOL ACUM (m³)"]);
       headerRows.add(vHdr);
@@ -1755,7 +1767,7 @@ function exportarExcel(proyecto, tabla) {
       // por sobreancho de parqueaderos se suma como constante, así el total coincide con la app.
       filas.forEach((f, fi) => {
         if (fi === 0) {
-          pushRow([f.absFormato || "", f.area, "", { v: 0 }, { v: 0 }]);
+          pushRow([f.abs, f.area, "", 0, 0]);
           return;
         }
         const prevAreaRef = ref(colArea, dataStartRow + fi - 1);
@@ -1765,7 +1777,7 @@ function exportarExcel(proyecto, tabla) {
         const volFormula  = `(${prevAreaRef}+${currAreaRef})/2*${distRef}` + (f.extra ? `+${f.extra}` : "");
         const acumFormula = `${prevAcumRef}+${ref(colVol, dataStartRow + fi)}`;
         const acumVal = r3(filas.slice(1, fi + 1).reduce((s, ff) => s + (ff.vol || 0), 0));
-        pushRow([f.absFormato || "", f.area, f.dist, { f: volFormula, v: f.vol }, { f: acumFormula, v: acumVal }]);
+        pushRow([f.abs, f.area, f.dist, { f: volFormula, v: f.vol }, { f: acumFormula, v: acumVal }]);
       });
 
       const totalRow = row;
@@ -1789,7 +1801,7 @@ function exportarExcel(proyecto, tabla) {
 
       resumenData.forEach((rd, i) => {
         const formula = `'${sheetName.replace(/'/g, "''")}'!${rd.totalRef}`;
-        pushRow([i + 1, rd.nombre, { f: formula, v: rd.totalVal }]);
+        filasConNumeroDeOrden.add(pushRow([i + 1, rd.nombre, { f: formula, v: rd.totalVal }]));
       });
       const sumStart = ref(2, row - resumenData.length);
       const sumEnd   = ref(2, row - 1);
@@ -1811,28 +1823,85 @@ function exportarExcel(proyecto, tabla) {
       });
     });
 
+    // Todos los números con 3 decimales. Se guardan como número (no texto), así el
+    // separador decimal lo pone el equipo según su idioma (coma o punto) y se puede operar.
+    let maxCol = 0;
+    Object.keys(ws).forEach(addr => {
+      if (addr[0] === "!") return;
+      const cell = ws[addr];
+      const { r, c } = XLSX.utils.decode_cell(addr);
+      if (c > maxCol) maxCol = c;
+      if (cell.t !== "n") return;
+      if (c === 0 && filasConNumeroDeOrden.has(r)) return;
+      cell.z = "0.000";
+    });
+
     ws["!merges"] = merges;
-    ws["!cols"] = [
-      { wch: 20 }, { wch: 22 }, { wch: 14 }, { wch: 14 },
-      { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 16 }
-    ];
+    ws["!cols"] = Array.from({ length: maxCol + 1 }, (_, c) => ({ wch: c === 0 ? 16 : c === 1 ? 20 : 12 }));
 
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
 
     const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-    const blob = new Blob([wbout], { type: "application/octet-stream" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Memoria_${(proyecto.nombre || "via").replace(/[^a-zA-Z0-9_\- ]/g, "")}.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return {
+      blob: new Blob([wbout], { type: MIME_XLSX }),
+      nombre: nombreArchivoSeguro("TopoVias - " + (proyecto.nombre || "Via")) + ".xlsx"
+    };
   } catch (e) {
     alert("Error al exportar: " + e.message);
     console.error(e);
+    return null;
   }
+}
+
+// ─── GUARDAR / COMPARTIR ARCHIVOS ─────────────────────────────────────────────
+const MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+// Sin tildes ni símbolos: con letras como "í" algunos Chrome ignoran el nombre y guardan "download"
+const nombreArchivoSeguro = n => String(n).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ñ/g, "n").replace(/Ñ/g, "N")
+  .replace(/[^A-Za-z0-9 ._()-]+/g, "-").replace(/\s+/g, " ").trim() || "TopoVias";
+// Descarga el archivo al dispositivo (en el celular queda en "Descargas")
+function guardarArchivo(arch) {
+  const url = URL.createObjectURL(arch.blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = arch.nombre;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+// Abre el menú de compartir del sistema (WhatsApp, correo, Drive…), si el equipo lo permite
+function puedeCompartirArchivos() {
+  try {
+    return !!(navigator.canShare && navigator.canShare({ files: [new File([""], "x.xlsx", { type: MIME_XLSX })] }));
+  } catch (e) { return false; }
+}
+async function compartirArchivo(arch) {
+  const file = new File([arch.blob], arch.nombre, { type: MIME_XLSX });
+  try {
+    await navigator.share({ files: [file], title: arch.nombre });
+  } catch (e) {
+    if (e && e.name === "AbortError") return; // el usuario cerró el menú
+    alert("No se pudo compartir en este equipo. Usa \"Guardar en el dispositivo\" y compártelo desde Descargas.");
+  }
+}
+function VentanaArchivo({ archivo, onClose }) {
+  const compartir = puedeCompartirArchivos();
+  return React.createElement("div", {
+    onClick: onClose,
+    style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }
+  }, React.createElement("div", {
+    onClick: e => e.stopPropagation(),
+    role: "dialog",
+    style: { background: "#fff", borderRadius: 12, padding: 20, width: "100%", maxWidth: 420, boxShadow: "0 10px 30px rgba(0,0,0,0.25)" }
+  },
+    React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: C.accent, marginBottom: 4 } }, "📊 Excel listo"),
+    React.createElement("div", { style: { fontSize: 13, color: C.muted, marginBottom: 16, wordBreak: "break-word" } }, archivo.nombre),
+    React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } },
+      React.createElement(Btn, { color: C.accent, style: { padding: "12px 16px", fontSize: 15 }, onClick: () => guardarArchivo(archivo) }, "💾 Guardar en el dispositivo"),
+      compartir && React.createElement(Btn, { color: C.success, style: { padding: "12px 16px", fontSize: 15 }, onClick: () => compartirArchivo(archivo) }, "📤 Compartir (WhatsApp, correo, Drive…)"),
+      React.createElement("button", { onClick: onClose, style: { padding: 10, border: "none", background: "none", color: C.muted, fontSize: 14, cursor: "pointer" } }, "Cerrar")),
+    !compartir && React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 8 } },
+      "Para compartirlo, guárdalo y envíalo desde la carpeta Descargas.")));
 }
 
 // ─── VERIFICADOR ──────────────────────────────────────────────────────────────
@@ -3351,6 +3420,7 @@ function App() {
   const [tab, setTab] = React.useState("eje");
   const [capaLectura, setCapaLectura] = React.useState("__rasante__");
   const [memoria, setMemoria] = React.useState([]);
+  const [archivo, setArchivo] = React.useState(null); // Excel generado, listo para guardar o compartir
   // Guardar proyecto activo
   React.useEffect(function() {
     try { localStorage.setItem(TV_KEY + '_activo', JSON.stringify(activoId)); } catch(e) {}
@@ -3501,7 +3571,7 @@ function App() {
   }, "Eliminar")), /*#__PURE__*/React.createElement("div", {
     className: "tv-acciones"
   }, /*#__PURE__*/React.createElement(Btn, {
-    onClick: () => exportarExcel(proy, tabla),
+    onClick: () => { const a = exportarExcel(proy, tabla); if (a) setArchivo(a); },
     color: "#154360",
     style: { fontWeight: 700, fontSize: 13, border: "1px solid rgba(255,255,255,0.4)" }
   }, "📊", /*#__PURE__*/React.createElement("span", { className: "tv-txt" }, " Exportar")), /*#__PURE__*/React.createElement(Btn, {
@@ -3511,7 +3581,7 @@ function App() {
       fontWeight: 800,
       fontSize: 14
     }
-  }, "⚡ CALCULAR"))), /*#__PURE__*/React.createElement("nav", {
+  }, "⚡ CALCULAR"))), archivo && React.createElement(VentanaArchivo, { archivo: archivo, onClose: () => setArchivo(null) }), /*#__PURE__*/React.createElement("nav", {
     className: "tv-tabs"
   }, TABS.map(t => /*#__PURE__*/React.createElement("button", {
     key: t.id,
