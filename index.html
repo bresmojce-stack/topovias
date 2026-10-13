@@ -517,6 +517,16 @@ function formatoAbscisa(abs) {
   return `${abs < 0 && mm > 0 ? "-" : ""}${km}+${m.toFixed(3).padStart(7, "0")}`;
 }
 
+// Capas con nombre y espesor (las incompletas se ignoran)
+const capasDefinidas = cs => (cs || []).filter(c => c.nombre && c.nombre.trim() && c.espesor);
+const claveCapa = n => String(n || "").trim().toLowerCase();
+const espesorTotal = cs => r3(cs.reduce((s, x) => s + (parseFloat(x.espesor) || 0), 0));
+// Suma de espesores de las capas que están encima de "nombre"; null si esa capa no existe en la estructura
+function espesorAntesDe(cs, nombre) {
+  const i = cs.findIndex(c => claveCapa(c.nombre) === claveCapa(nombre));
+  return i < 0 ? null : espesorTotal(cs.slice(0, i));
+}
+
 // ─── GENERADOR DE TABLA ───────────────────────────────────────────────────────
 function generarTabla(proyecto) {
   const {
@@ -534,6 +544,16 @@ function generarTabla(proyecto) {
   const extras = (intermedias || []).map(i => i.valor).filter(Boolean);
   const abscisas = generarAbscisas(absInicio, tramosR, extras, parqueaderos);
   const pisSet = getPIAbscisas(absInicio, tramosR);
+  // ─ ESTRUCTURAS: la de la vía y, si un parqueadero tiene estructura propia, la suya.
+  //   Las columnas de capas son la unión de nombres (primero las de la vía).
+  const capasVia = capasDefinidas(capas);
+  const estructuraDe = p => p && p.estructura === "propia" ? capasDefinidas(p.capas) : capasVia;
+  const columnasCapas = [];
+  [capasVia].concat((parqueaderos || []).filter(p => p.estructura === "propia").map(p => capasDefinidas(p.capas))).forEach(estr => {
+    estr.forEach(c => {
+      if (!columnasCapas.some(x => claveCapa(x.nombre) === claveCapa(c.nombre))) columnasCapas.push({ nombre: c.nombre.trim(), espesor: parseFloat(c.espesor) || 0 });
+    });
+  });
   const tabla = [];
   for (const abs of abscisas) {
     const esPI = pisSet.has(abs);
@@ -567,6 +587,8 @@ function generarTabla(proyecto) {
     // ─ PARQUEADEROS: nacen del LATERAL, no del eje ─
     let parqDerCota = null;
     let parqIzqCota = null;
+    let parqDerP = null;
+    let parqIzqP = null;
     let esParq = false;
     (parqueaderos || []).forEach(p => {
       const pi = parseFloat(p.absInicio);
@@ -596,41 +618,44 @@ function generarTabla(proyecto) {
           if (pR2.length && pR2[0].completo) cotaParq = calcCotaEnAbscisa(pR2, pi, abs);
         }
       }
-      if (p.lado === "derecho") parqDerCota = cotaParq;
-      if (p.lado === "izquierdo") parqIzqCota = cotaParq;
+      if (p.lado === "derecho") { parqDerCota = cotaParq; parqDerP = p; }
+      if (p.lado === "izquierdo") { parqIzqCota = cotaParq; parqIzqP = p; }
     });
 
     // ─ CAPAS: la Rasante = cota de la PRIMERA capa (ej. Asfalto). Cada capa
     //   siguiente resta la suma de espesores de las capas ANTERIORES (no la propia).
     //   Cota_capa_n = Rasante − Σ espesores de capas 1..n-1
-    const capasDef = (capas || []).filter(c => c.nombre && c.espesor);
-    const capasCalc = capasDef.map((c, idx, arr) => {
-      const eAcumAnteriores = r3(arr.slice(0, idx).reduce((s, x) => s + (parseFloat(x.espesor) || 0), 0));
+    //   Los parqueaderos usan su propia estructura si la tienen; una capa que no
+    //   existe en una estructura queda vacía en esa columna.
+    const estrDer = estructuraDe(parqDerP), estrIzq = estructuraDe(parqIzqP);
+    const menos = (cota, e) => cota !== null && e !== null ? r3(cota - e) : null;
+    const capasCalc = columnasCapas.map(col => {
+      const eVia = espesorAntesDe(capasVia, col.nombre);
       return {
-        nombre: c.nombre,
-        espesor: parseFloat(c.espesor) || 0,
-        esOculta: idx === 0,
-        // la primera capa = Rasante (misma cota), se oculta de tabla/Excel pero su espesor sigue contando para las demas
-        eje: cotaEje !== null ? r3(cotaEje - eAcumAnteriores) : null,
-        der: cotaLatDer !== null ? r3(cotaLatDer - eAcumAnteriores) : null,
-        izq: cotaLatIzq !== null ? r3(cotaLatIzq - eAcumAnteriores) : null,
-        parqDer: parqDerCota !== null ? r3(parqDerCota - eAcumAnteriores) : null,
-        parqIzq: parqIzqCota !== null ? r3(parqIzqCota - eAcumAnteriores) : null
+        nombre: col.nombre,
+        espesor: col.espesor,
+        // la primera capa de la vía = Rasante (misma cota), se oculta de tabla/Excel pero su espesor sigue contando para las demas
+        esOculta: capasVia.length > 0 && claveCapa(capasVia[0].nombre) === claveCapa(col.nombre),
+        eje: menos(cotaEje, eVia),
+        der: menos(cotaLatDer, eVia),
+        izq: menos(cotaLatIzq, eVia),
+        parqDer: menos(parqDerCota, espesorAntesDe(estrDer, col.nombre)),
+        parqIzq: menos(parqIzqCota, espesorAntesDe(estrIzq, col.nombre))
       };
     });
 
-    // ─ EXCAVACIÓN: automática, siempre al final = Rasante − suma de TODOS los espesores
-    if (capasDef.length > 0) {
-      const eTotal = r3(capasDef.reduce((s, x) => s + (parseFloat(x.espesor) || 0), 0));
+    // ─ EXCAVACIÓN: automática, siempre al final = Rasante − suma de TODOS los espesores (de cada estructura)
+    if (columnasCapas.length > 0) {
+      const eVia = capasVia.length ? espesorTotal(capasVia) : null;
       capasCalc.push({
         nombre: "Excavación",
-        espesor: eTotal,
+        espesor: eVia || 0,
         esExcavacion: true,
-        eje: cotaEje !== null ? r3(cotaEje - eTotal) : null,
-        der: cotaLatDer !== null ? r3(cotaLatDer - eTotal) : null,
-        izq: cotaLatIzq !== null ? r3(cotaLatIzq - eTotal) : null,
-        parqDer: parqDerCota !== null ? r3(parqDerCota - eTotal) : null,
-        parqIzq: parqIzqCota !== null ? r3(parqIzqCota - eTotal) : null
+        eje: menos(cotaEje, eVia),
+        der: menos(cotaLatDer, eVia),
+        izq: menos(cotaLatIzq, eVia),
+        parqDer: menos(parqDerCota, estrDer.length ? espesorTotal(estrDer) : null),
+        parqIzq: menos(parqIzqCota, estrIzq.length ? espesorTotal(estrIzq) : null)
       });
     }
     tabla.push({
@@ -931,7 +956,10 @@ const parqVacio = () => ({
   sobreAncho: "0",
   diferencia: "0.05",
   tramos: [tramoVacio()],
-  coords: []
+  coords: [],
+  estructura: "via",
+  // "via" = misma estructura de la vía, "propia" = usa sus capas
+  capas: [capaVacia()]
 });
 const bmVacio = () => ({
   id: Math.random(),
@@ -1579,16 +1607,20 @@ function exportarExcel(proyecto, tabla) {
     const capHdrRow = pushRow(["N°", "CAPA / MATERIAL", "ESPESOR (m)"]);
     headerRows.add(capHdrRow);
 
-    const capas = (proyecto.capas || []).filter(c => c.nombre && c.espesor);
-    let espesorTotal = 0;
-    capas.forEach((capa, i) => {
-      const esp = parseFloat(capa.espesor) || 0;
-      espesorTotal += esp;
-      pushRow([i + 1, capa.nombre || "", esp.toFixed(3)]);
+    const listarCapas = cs => {
+      cs.forEach((capa, i) => pushRow([i + 1, capa.nombre || "", (parseFloat(capa.espesor) || 0).toFixed(3)]));
+      pushRow(["", "TOTAL ESTRUCTURA", espesorTotal(cs).toFixed(3)]);
+      boldRows.add(row - 1);
+      blank();
+    };
+    listarCapas(capasDefinidas(proyecto.capas));
+    // Parqueaderos con estructura propia
+    (proyecto.parqueaderos || []).filter(pq => pq.estructura === "propia" && capasDefinidas(pq.capas).length).forEach(pq => {
+      const r0 = pushRow([`ESTRUCTURA PARQUEADERO: ${(pq.nombre || "Parqueadero").toUpperCase()} (${pq.lado === "izquierdo" ? "IZQ" : "DER"})`]);
+      boldRows.add(r0);
+      headerRows.add(pushRow(["N°", "CAPA / MATERIAL", "ESPESOR (m)"]));
+      listarCapas(capasDefinidas(pq.capas));
     });
-    pushRow(["", "TOTAL ESTRUCTURA", r3(espesorTotal).toFixed(3)]);
-    boldRows.add(row - 1);
-    blank();
 
     // ── 3. CÁLCULO DE COTAS (DISEÑO) ────────────────────────────
     const sec3Row = pushRow(["3. CÁLCULO DE COTAS - RASANTE DE DISEÑO"]);
@@ -1978,8 +2010,44 @@ function EditorLateral({
 }
 
 // ─── EDITOR PARQUEADERO (nace del LATERAL) ───────────────────────────────────
+// Estructura del parqueadero: igual a la vía o propia (sus capas y espesores)
+function EstructuraParq({ p, capasVia, onChange }) {
+  const propia = p.estructura === "propia";
+  const capas = p.capas && p.capas.length ? p.capas : [capaVacia()];
+  const viaDef = capasDefinidas(capasVia);
+  const setCapas = cs => onChange({ ...p, capas: cs });
+  const def = capasDefinidas(capas);
+  return React.createElement("div", { style: { background: "#fff", border: `1px solid ${C.border}`, borderRadius: 8, padding: 12, marginTop: 10 } },
+    React.createElement("div", { style: { display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap", marginBottom: propia ? 10 : 0 } },
+      React.createElement("div", { style: { flex: "1 1 220px" } },
+        React.createElement(Label, null, "Estructura del parqueadero"),
+        React.createElement(Sel, { value: propia ? "propia" : "via", onChange: e => onChange({ ...p, estructura: e.target.value, capas }) },
+          React.createElement("option", { value: "via" }, "Igual a la vía"),
+          React.createElement("option", { value: "propia" }, "Propia (otros materiales o espesores)"))),
+      !propia && React.createElement("div", { style: { flex: "2 1 260px", fontSize: 12, color: C.muted, paddingBottom: 6 } },
+        viaDef.length ? "Usa: " + viaDef.map(c => c.nombre + " " + c.espesor + " m").join(" · ") : "Define las capas en 🏗 Estructura."),
+      propia && viaDef.length > 0 && React.createElement(Btn, { small: true, color: C.accent2,
+        onClick: () => setCapas(viaDef.map(c => ({ nombre: c.nombre, espesor: c.espesor, id: Math.random() }))) }, "Copiar capas de la vía")),
+    propia && React.createElement("div", null,
+      React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 8 } },
+        "Primero la capa de arriba (= rasante del parqueadero). Usa los mismos nombres de la vía para las capas que se repiten, así quedan en la misma columna de la tabla."),
+      capas.map((c, i) => React.createElement("div", { key: c.id, style: { display: "grid", gridTemplateColumns: "1fr 110px auto", gap: 8, marginBottom: 6, alignItems: "flex-end" } },
+        React.createElement("div", null, React.createElement(Label, null, "Capa ", i + 1, i === 0 && " (= Rasante)"),
+          React.createElement(Input, { value: c.nombre, placeholder: "Concreto, Base, Sub-base…",
+            onChange: e => { const cs = [...capas]; cs[i] = { ...cs[i], nombre: e.target.value }; setCapas(cs); } })),
+        React.createElement("div", null, React.createElement(Label, null, "Espesor (m)"),
+          React.createElement(Input, { value: c.espesor, placeholder: "ej. 0.150", inputMode: "decimal",
+            onChange: e => { const cs = [...capas]; cs[i] = { ...cs[i], espesor: e.target.value }; setCapas(cs); } })),
+        React.createElement(Btn, { small: true, color: C.danger, onClick: () => setCapas(capas.filter((_, j) => j !== i)) }, "✕"))),
+      React.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 4 } },
+        React.createElement(Btn, { small: true, color: C.success, onClick: () => setCapas([...capas, capaVacia()]) }, "+ Agregar capa"),
+        def.length > 0 && React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: C.danger } },
+          "Excavación parqueadero: ", espesorTotal(def).toFixed(3), " m"))));
+}
+
 function EditorParq({
   p,
+  capasVia,
   onChange,
   onDelete
 }) {
@@ -2141,7 +2209,7 @@ function EditorParq({
     small: true,
     color: C.success,
     onClick: () => upd("tramos", [...p.tramos, tramoVacio()])
-  }, "+ Tramo PI")), p.modo === "independiente" && React.createElement(CalcCoordenadas, { label: "PARQUEADERO", prefijo: "Tramo", nTramos: p.tramos.length, puntos: p.coords || [], onChange: function(v) { upd("coords", v); }, onAplicar: function(ds) { upd("tramos", aplicarDistancias(p.tramos, ds)); }}));
+  }, "+ Tramo PI")), React.createElement(EstructuraParq, { p: p, capasVia: capasVia, onChange: onChange }), p.modo === "independiente" && React.createElement(CalcCoordenadas, { label: "PARQUEADERO", prefijo: "Tramo", nTramos: p.tramos.length, puntos: p.coords || [], onChange: function(v) { upd("coords", v); }, onAplicar: function(ds) { upd("tramos", aplicarDistancias(p.tramos, ds)); }}));
 }
 
 // ─── PERFIL DEL EJE (linea de cotas vs abscisa, con PI marcados) ─────────────
@@ -3614,7 +3682,7 @@ function App() {
       color: C.muted,
       marginBottom: 12
     }
-  }, "Orden: primero la capa más superficial (ej. Asfalto o Concreto), luego Base, Sub-base, Roca muerta, etc."), proy.capas.map((c, i) => /*#__PURE__*/React.createElement("div", {
+  }, "Orden: primero la capa más superficial (ej. Asfalto o Concreto), luego Base, Sub-base, Roca muerta, etc. Si un parqueadero tiene otra estructura, se define en 🅿 Parqueaderos."), proy.capas.map((c, i) => /*#__PURE__*/React.createElement("div", {
     key: c.id,
     style: {
       display: "grid",
@@ -3730,6 +3798,7 @@ function App() {
   }, "Sin parqueaderos. Haz clic en \"+ Agregar Parqueadero\"."), proy.parqueaderos.map((p, i) => /*#__PURE__*/React.createElement(EditorParq, {
     key: p.id,
     p: p,
+    capasVia: proy.capas,
     onChange: np => {
       const ps = [...proy.parqueaderos];
       ps[i] = np;
