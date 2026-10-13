@@ -881,7 +881,7 @@ function CamposTramo({
       gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
       gap: 8
     }
-  }, campo("cotaInicio", "Cota inicio (m)", "ej. 965.390"), campo("cotaFin", "Cota fin (m)", "ej. 964.840"), campo("pendiente", "Pendiente (%)", "ej. -1.820"), campo("distancia", "Distancia (m)", "ej. 27.5")), r.inconsistente && /*#__PURE__*/React.createElement("div", {
+  }, campo("cotaInicio", "Cota inicio (m)", "ej. 965.390"), campo("cotaFin", "Cota fin (m)", "ej. 964.840"), campo("distancia", "Distancia (m)", "ej. 27.5"), campo("pendiente", "Pendiente (%)", "ej. -1.820")), r.inconsistente && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 6,
       fontSize: 12,
@@ -1829,14 +1829,14 @@ function Verificador() {
     value: cf,
     onChange: e => setCf(e.target.value),
     placeholder: "964.890"
-  })), (modo === "1" || modo === "3") && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Pendiente (%)"), /*#__PURE__*/React.createElement(Input, {
-    value: pend,
-    onChange: e => setPend(e.target.value),
-    placeholder: "-1.820"
   })), (modo === "1" || modo === "2") && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Distancia (m)"), /*#__PURE__*/React.createElement(Input, {
     value: dist,
     onChange: e => setDist(e.target.value),
     placeholder: "27.5"
+  })), (modo === "1" || modo === "3") && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Pendiente (%)"), /*#__PURE__*/React.createElement(Input, {
+    value: pend,
+    onChange: e => setPend(e.target.value),
+    placeholder: "-1.820"
   }))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -3323,11 +3323,11 @@ function App() {
     id: "eje",
     label: "\uD83D\uDCD0 Eje / Tramos"
   }, {
-    id: "laterales",
-    label: "\u2194 Laterales"
-  }, {
     id: "estructura",
     label: "\uD83C\uDFD7 Estructura"
+  }, {
+    id: "laterales",
+    label: "\u2194 Laterales"
   }, {
     id: "parq",
     label: "\uD83C\uDD7F Parqueaderos"
