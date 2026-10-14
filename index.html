@@ -41,7 +41,7 @@
   .tv-tabs button { flex: 0 0 auto; padding: 11px 14px; border: none; background: none; font-size: 13px; cursor: pointer; white-space: nowrap; }
 
   /* ── Contenido a pantalla completa ── */
-  .tv-main { width: 100%; padding: 20px max(28px, env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom)) max(28px, env(safe-area-inset-left)); }
+  .tv-main { width: 100%; padding: 20px max(28px, env(safe-area-inset-right)) calc(84px + env(safe-area-inset-bottom)) max(28px, env(safe-area-inset-left)); }
   /* Gráficas: en pantallas angostas se pueden deslizar en vez de quedar diminutas */
   .tv-grafica { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .tv-grafica > svg { min-width: 720px; }
@@ -1204,6 +1204,36 @@ function guardarObras(obras) {
 }
 const obraNueva = nombre => ({ id: Date.now() + Math.random(), nombre: nombre || "Nueva obra", creada: new Date().toISOString() });
 
+// ─── DESHACER / REHACER ───────────────────────────────────────────────────────
+// Antes de cada cambio se guarda una foto de las obras y vías (los datos no se copian:
+// cada cambio crea objetos nuevos, así que la foto solo guarda referencias).
+// Lo que se escribe seguido en menos de 0.8 s cuenta como un solo paso. Vale mientras la app esté abierta.
+const HIST = { atras: [], adelante: [], ultimo: 0, actual: { proyectos: [], obras: [] }, crudo: {}, oyentes: [] };
+const HIST_MAX = 80, HIST_JUNTAR_MS = 800;
+function histAvisar(tipo) { HIST.oyentes.slice().forEach(f => { try { f(tipo); } catch (_) {} }); }
+function histAntesDeCambio(foto) {
+  const ahora = Date.now();
+  if (ahora - HIST.ultimo > HIST_JUNTAR_MS || !HIST.atras.length) {
+    HIST.atras.push(foto);
+    if (HIST.atras.length > HIST_MAX) HIST.atras.shift();
+  }
+  HIST.ultimo = ahora;
+  HIST.adelante = [];
+  setTimeout(() => histAvisar("cambio"), 0);
+}
+function histMover(desde, hacia, tipo) {
+  if (!desde.length) return false;
+  const destino = desde.pop();
+  hacia.push({ proyectos: HIST.actual.proyectos, obras: HIST.actual.obras });
+  HIST.ultimo = 0;   // el siguiente cambio empieza un paso nuevo
+  HIST.crudo.obras(destino.obras);
+  HIST.crudo.proyectos(destino.proyectos);
+  histAvisar(tipo);
+  return true;
+}
+const deshacer = () => histMover(HIST.atras, HIST.adelante, "deshacer");
+const rehacer = () => histMover(HIST.adelante, HIST.atras, "rehacer");
+
 function useLocalProyectos() {
   const [proyectos, _setProyectos] = React.useState(function() {
     var lista = [];
@@ -1221,10 +1251,16 @@ function useLocalProyectos() {
     }
     return lista;
   });
+  HIST.actual.proyectos = proyectos;
+  HIST.crudo.proyectos = function(v) { HIST.actual.proyectos = v; guardarDato(TV_KEY, v); _setProyectos(v); };
   var setProyectos = React.useCallback(function(updater) {
     _setProyectos(function(prev) {
       var next = typeof updater === 'function' ? updater(prev) : updater;
-      guardarDato(TV_KEY, next);
+      if (next !== prev) {
+        histAntesDeCambio({ proyectos: prev, obras: HIST.actual.obras });
+        HIST.actual.proyectos = next;
+        guardarDato(TV_KEY, next);
+      }
       return next;
     });
   }, []);
@@ -1232,10 +1268,16 @@ function useLocalProyectos() {
 }
 function useLocalObras() {
   const [obras, _setObras] = React.useState(function() { return leerObras() || []; });
+  HIST.actual.obras = obras;
+  HIST.crudo.obras = function(v) { HIST.actual.obras = v; guardarObras(v); _setObras(v); };
   var setObras = React.useCallback(function(updater) {
     _setObras(function(prev) {
       var next = typeof updater === 'function' ? updater(prev) : updater;
-      guardarObras(next);
+      if (next !== prev) {
+        histAntesDeCambio({ proyectos: HIST.actual.proyectos, obras: prev });
+        HIST.actual.obras = next;
+        guardarObras(next);
+      }
       return next;
     });
   }, []);
@@ -4827,6 +4869,44 @@ function App() {
     setGenerando(texto);
     try { const a = await fn(); if (a) setArchivo(a); } finally { setGenerando(""); }
   };
+  // ── Deshacer / rehacer ──
+  const [, setVerHist] = React.useState(0);
+  const activoRef = React.useRef(activoId);
+  activoRef.current = activoId;
+  React.useEffect(() => {
+    const oyente = tipo => {
+      setVerHist(v => v + 1);
+      if (tipo !== "deshacer" && tipo !== "rehacer") return;
+      // la tabla se vuelve a calcular con los datos restaurados
+      const p = HIST.actual.proyectos.find(x => x.id === activoRef.current);
+      const t = p ? generarTabla(p) : [];
+      setTabla(t.length ? t : null);
+    };
+    HIST.oyentes.push(oyente);
+    // Ctrl+Z / Ctrl+Y (fuera de los campos de texto, que tienen su propio deshacer)
+    const tecla = e => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const el = document.activeElement;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+      const k = e.key.toLowerCase();
+      if (k === "z" && !e.shiftKey) { if (deshacer()) e.preventDefault(); }
+      else if (k === "y" || (k === "z" && e.shiftKey)) { if (rehacer()) e.preventDefault(); }
+    };
+    window.addEventListener("keydown", tecla);
+    return () => { HIST.oyentes = HIST.oyentes.filter(f => f !== oyente); window.removeEventListener("keydown", tecla); };
+  }, []);
+  const botonHist = (txt, titulo, fn, activo) => React.createElement("button", {
+    onClick: fn, disabled: !activo, title: titulo, "aria-label": titulo,
+    style: { border: "none", background: activo ? C.accent : "#B0BEC5", color: "#fff", fontWeight: 800, fontSize: 14,
+      padding: "10px 14px", cursor: activo ? "pointer" : "default", minWidth: 44, minHeight: 44 }
+  }, txt);
+  const barraDeshacer = (HIST.atras.length > 0 || HIST.adelante.length > 0) && React.createElement("div", {
+    className: "tv-deshacer",
+    style: { position: "fixed", right: 14, bottom: "calc(14px + env(safe-area-inset-bottom, 0px))", zIndex: 90, display: "flex",
+      borderRadius: 24, overflow: "hidden", boxShadow: "0 4px 14px rgba(0,0,0,0.25)", gap: 1, background: "#fff" }
+  },
+    botonHist("↶ Deshacer", "Deshacer el último cambio (Ctrl+Z)", deshacer, HIST.atras.length > 0),
+    botonHist("↷", "Rehacer (Ctrl+Y)", rehacer, HIST.adelante.length > 0));
   const avisoGenerando = generando && React.createElement("div", {
     style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 120, display: "flex", alignItems: "center", justifyContent: "center" }
   }, React.createElement("div", { style: { background: "#fff", borderRadius: 10, padding: "16px 22px", fontWeight: 700, color: C.accent, boxShadow: "0 8px 24px rgba(0,0,0,0.2)" } }, "⏳ ", generando));
@@ -4870,7 +4950,7 @@ function App() {
   const eliminarObra = id => {
     const o = obras.find(x => x.id === id);
     const n = viasDeObra(id).length;
-    if (!confirm(`¿Eliminar la obra "${o ? o.nombre : ""}"${n ? ` y sus ${n} vía(s)` : ""}? Esta acción no se puede deshacer.`)) return;
+    if (!confirm(`¿Eliminar la obra "${o ? o.nombre : ""}"${n ? ` y sus ${n} vía(s)` : ""}? Puedes recuperarla con ↶ Deshacer mientras la app esté abierta.`)) return;
     setProyectos(prev => prev.filter(p => p.obraId !== id));
     setObras(prev => prev.filter(x => x.id !== id));
     setNav({ vista: "obras", obraId: null });
@@ -4911,7 +4991,7 @@ function App() {
   };
   const eliminarVia = id => {
     const v = proyectos.find(p => p.id === id);
-    if (!v || !confirm(`¿Eliminar la vía "${v.nombre}"? Esta acción no se puede deshacer.`)) return;
+    if (!v || !confirm(`¿Eliminar la vía "${v.nombre}"? Puedes recuperarla con ↶ Deshacer mientras la app esté abierta.`)) return;
     setProyectos(prev => prev.filter(p => p.id !== id));
     if (activoId === id) { setActivoId(null); setTabla(null); setNav({ vista: "obra", obraId: v.obraId }); }
   };
@@ -4919,7 +4999,8 @@ function App() {
 
   // ── Pantallas de obras ──
   if (nav.vista !== "via" || !proy) {
-    const obraVista = nav.vista === "obra" ? obras.find(o => o.id === nav.obraId) : null;
+    // (si se deshizo la creación de la vía abierta, se vuelve a su obra)
+    const obraVista = nav.vista === "obra" || nav.vista === "via" ? obras.find(o => o.id === nav.obraId) : null;
     return React.createElement("div", { style: { fontFamily: "'Segoe UI',system-ui,sans-serif", color: C.text, minHeight: "100vh" } },
       React.createElement("header", { className: "tv-header" },
         React.createElement("div", { className: "tv-brand" }, "📏 TopoVías",
@@ -4943,7 +5024,7 @@ function App() {
               onArchivo: setArchivo,
               onRestaurar: restaurarCopia
             })),
-      archivo && React.createElement(VentanaArchivo, { archivo: archivo, onClose: () => setArchivo(null) }), avisoGenerando);
+      archivo && React.createElement(VentanaArchivo, { archivo: archivo, onClose: () => setArchivo(null) }), avisoGenerando, barraDeshacer);
   }
 
   const tramosIncompletos = resolverTodos(proy.tramos).map((r, i) => r.completo ? null : i + 1).filter(Boolean);
@@ -5056,7 +5137,7 @@ function App() {
       fontWeight: 800,
       fontSize: 14
     }
-  }, "⚡ CALCULAR"))), archivo && React.createElement(VentanaArchivo, { archivo: archivo, onClose: () => setArchivo(null) }), avisoGenerando, /*#__PURE__*/React.createElement("nav", {
+  }, "⚡ CALCULAR"))), archivo && React.createElement(VentanaArchivo, { archivo: archivo, onClose: () => setArchivo(null) }), avisoGenerando, barraDeshacer, /*#__PURE__*/React.createElement("nav", {
     className: "tv-tabs"
   }, TABS.map(t => /*#__PURE__*/React.createElement("button", {
     key: t.id,
