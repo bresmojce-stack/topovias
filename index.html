@@ -1922,7 +1922,7 @@ function PanelDatos({ obras, proyectos, onRestaurar, onArchivo }) {
       instalable && !appInstalada() && React.createElement(Btn, { color: C.success, onClick: instalar }, "📲 Instalar app"),
       React.createElement(Btn, { color: C.accent, onClick: () => onArchivo(crearCopiaSeguridad(obras, proyectos)) }, "💾 Copia de seguridad"),
       React.createElement(Btn, { color: C.accent2, onClick: () => inputRef.current && inputRef.current.click() }, "📂 Restaurar copia"),
-      React.createElement("input", { ref: inputRef, type: "file", accept: ".json,application/json", style: { display: "none" }, onChange: restaurar })),
+      React.createElement("input", { ref: inputRef, type: "file", accept: ".json,.txt,application/json,text/plain", style: { display: "none" }, onChange: restaurar })),
     React.createElement(CopiasAutomaticas, { onRestaurar }),
     !appInstalada() && !instalable && React.createElement("div", { style: { fontSize: 12, color: C.muted, marginTop: 10, lineHeight: 1.5 } },
       esIOS()
@@ -3400,12 +3400,18 @@ function guardarArchivo(arch) {
 // Abre el menú de compartir del sistema (WhatsApp, correo, Drive…), si el equipo lo permite
 function puedeCompartirArchivos(arch) {
   try {
-    const tipo = (arch && arch.mime) || MIME_XLSX, nombre = (arch && arch.nombre) || "x.xlsx";
-    return !!(navigator.canShare && navigator.canShare({ files: [new File([""], nombre, { type: tipo })] }));
+    const f = archivoParaCompartir({ blob: new Blob([""]), mime: arch && arch.mime, nombre: (arch && arch.nombre) || "x.xlsx" });
+    return !!(navigator.canShare && navigator.canShare({ files: [f] }));
   } catch (e) { return false; }
 }
+// Chrome en Android no deja compartir archivos .json: la copia de seguridad se comparte como .txt
+// (mismo contenido; "Restaurar copia" acepta los dos)
+function archivoParaCompartir(arch) {
+  if (arch.mime === "application/json") return new File([arch.blob], arch.nombre.replace(/\.json$/i, ".txt"), { type: "text/plain" });
+  return new File([arch.blob], arch.nombre, { type: arch.mime || MIME_XLSX });
+}
 async function compartirArchivo(arch) {
-  const file = new File([arch.blob], arch.nombre, { type: arch.mime || MIME_XLSX });
+  const file = archivoParaCompartir(arch);
   try {
     await navigator.share({ files: [file], title: arch.nombre });
   } catch (e) {
