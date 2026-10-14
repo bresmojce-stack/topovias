@@ -1116,6 +1116,35 @@ const TVDB = (function() {
   };
 })();
 const DATOS = { idb: false, valores: {} };
+// ─── COMA DECIMAL ─────────────────────────────────────────────────────────────
+// En Colombia muchos teclados escriben 1,5. Toda la app trabaja con punto (1.5):
+//  · al escribir, un campo cuyo contenido es un número con coma pasa a punto;
+//  · al abrir (y al restaurar una copia) se corrigen los números guardados con coma.
+const RE_NUM_COMA = /^\s*[-+]?\d*,\d*\s*$/;
+const RE_NUM_MILES = /^\s*[-+]?\d{1,3}(\.\d{3})+,\d+\s*$/;   // 1.234,56
+function numeroConPunto(t) {
+  if (typeof t !== "string") return t;
+  if (RE_NUM_MILES.test(t)) return t.replace(/\./g, "").replace(",", ".");
+  if (RE_NUM_COMA.test(t) && /\d/.test(t)) return t.replace(",", ".");
+  return t;
+}
+function corregirComas(v) {
+  if (typeof v === "string") return numeroConPunto(v);
+  if (Array.isArray(v)) return v.map(corregirComas);
+  if (v && typeof v === "object") { const o = {}; for (const k in v) o[k] = corregirComas(v[k]); return o; }
+  return v;
+}
+// Antes de que React lea el campo (fase de captura): cambia la coma por punto sin mover el cursor
+if (typeof window !== "undefined") window.addEventListener("input", function(e) {
+  const el = e.target;
+  if (!el || el.tagName !== "INPUT" || (el.type && !/^(text|search|tel|number)$/i.test(el.type))) return;
+  const nuevo = numeroConPunto(el.value);
+  if (nuevo === el.value) return;
+  const pos = el.selectionStart, dif = el.value.length - nuevo.length;
+  // con el "setter" original: así React nota el cambio aunque la coma sea la última tecla
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, nuevo);
+  try { if (pos != null) el.setSelectionRange(pos - dif, pos - dif); } catch (_) {}
+}, true);
 function leerDato(k) { return DATOS.valores[k]; }
 // Cada guardado lleva la hora (clave + "__t") en ambos lugares; al abrir se usa el más reciente.
 function guardarDato(k, v) {
@@ -1141,12 +1170,12 @@ async function precargarDatos(claves) {
         await TVDB.set(k, v);
         await TVDB.set(k + "__t", tLs || Date.now());
       }
-      DATOS.valores[k] = v;
+      DATOS.valores[k] = corregirComas(v);
     }
     DATOS.idb = true;
   } catch (e) {
     DATOS.idb = false;
-    claves.forEach(k => { try { const ls = localStorage.getItem(k); DATOS.valores[k] = ls ? JSON.parse(ls) : undefined; } catch (_) {} });
+    claves.forEach(k => { try { const ls = localStorage.getItem(k); DATOS.valores[k] = ls ? corregirComas(JSON.parse(ls)) : undefined; } catch (_) {} });
   }
   pedirEspacioReservado();
 }
@@ -1681,7 +1710,7 @@ function crearCopiaSeguridad(obras, proyectos) {
   return { blob: new Blob([JSON.stringify(datos)], { type: "application/json" }), nombre: "TopoVias - Copia " + fecha + ".json", mime: "application/json" };
 }
 function leerCopiaSeguridad(texto) {
-  const d = JSON.parse(texto);
+  const d = corregirComas(JSON.parse(texto));
   if (!d || d.app !== "TopoVias" || !Array.isArray(d.obras) || !Array.isArray(d.vias)) throw new Error("El archivo no es una copia de seguridad de TopoVías.");
   return d;
 }
