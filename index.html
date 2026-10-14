@@ -1220,7 +1220,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "21";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "22";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -3008,9 +3008,82 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
       total.partes.forEach(({ parte, r: res }, pi) => {
         const Kv = [].concat(res.filas.some(f => f.tieneParqDer) ? ["parqDer"] : [], ["der", "eje", "izq"], res.filas.some(f => f.tieneParqIzq) ? ["parqIzq"] : []);
         const n = Kv.length;
-        const cS = 1, cI = cS + n, cC = cI + n, cP = cC + n, cAn = cP + 1, cAr = cP + 2, cD = cP + 3, cV = cP + 4;
+        // Si hay volumen adicional por sobreancho a lo largo (inicio/fin de vía y parqueaderos),
+        // va en su propia columna con fórmula, nunca como número suelto dentro del volumen.
+        const hayExtra = res.filas.some(f => f.extra);
+        const cS = 1, cI = cS + n, cC = cI + n, cP = cC + n, cAn = cP + 1, cAr = cP + 2, cD = cP + 3,
+          cE = hayExtra ? cP + 4 : -1, cV = hayExtra ? cP + 5 : cP + 4;
         colVolUlt = cV;
         if (varias) boldRows.add(pushRow([`${String.fromCharCode(97 + pi)}) ${parte.nombre}`]));
+        // ── parámetros del bloque: de dónde salen el ancho y el sobreancho a lo largo ──
+        // Cada celda apunta a la tabla de arriba cuando el valor coincide; si no, va el número escrito.
+        const SV = sobreanchoVolumen(parte, proyecto);
+        const igual = (a, b) => Math.abs((a || 0) - (b || 0)) < 0.0005;
+        const kCapa = SV.capa ? claveCapa(SV.capa) : null;
+        const celdaSA = (lado, val) => {
+          if (lado === "izq" && kCapa && R.saI[kCapa] && igual(sobreanchoCapa(proyecto, SV.capa).izq, val)) return F(R.saI[kCapa], val);
+          if (lado === "der" && kCapa && R.saD[kCapa] && igual(sobreanchoCapa(proyecto, SV.capa).der, val)) return F(R.saD[kCapa], val);
+          const g = sobreanchoGeneral(proyecto);
+          if (lado === "izq" && igual(g.izq, val) && !SV.escritoIzq) return F(R.SI, val);
+          if (lado === "der" && igual(g.der, val) && !SV.escritoDer) return F(R.SD, val);
+          return val;
+        };
+        const rPar = pushRow([]);
+        wsData[rPar][0] = "PARÁMETROS";
+        wsData[rPar][1] = "ANCHO VÍA (m)"; wsData[rPar][2] = F(R.A, res.anchoVia);
+        wsData[rPar][3] = "SA IZQ (m)"; wsData[rPar][4] = celdaSA("izq", res.saIzq);
+        wsData[rPar][5] = "SA DER (m)"; wsData[rPar][6] = celdaSA("der", res.saDer);
+        wsData[rPar][7] = "SA A LO LARGO (m)";
+        wsData[rPar][8] = res.sa ? F(`ROUND((${ref(4, rPar)}+${ref(6, rPar)})/2,3)`, res.sa) : 0;
+        boldRows.add(rPar);
+        const pAV = abs$(2, rPar), pSI = abs$(4, rPar), pSD = abs$(6, rPar), pSA = abs$(8, rPar);
+        // ancho de una sección como fórmula: vía + a cada lado (parqueadero + su sobreancho, o sobreancho de la vía)
+        const formulaAncho = f => {
+          const lado = (nombreLado, tiene, saVia, pSaVia, escrito) => {
+            if (!tiene) return { f: pSaVia, v: saVia };
+            const pq = parqEn(proyecto, nombreLado, f.abs), P = pq && R.parq[pq.id];
+            if (!P) return null;
+            const anchoP = parseFloat(pq.ancho) || 0;
+            if (escrito) return { f: `${P.A}+${pSaVia}`, v: anchoP + saVia };
+            const saP = SV.capa ? sobreanchoCapaParq(proyecto, pq, SV.capa) : 0;
+            if (!saP) return { f: P.A, v: anchoP };
+            if (igual(saP, sobreanchoParq(pq))) return { f: `${P.A}+${P.EXT}`, v: anchoP + saP };
+            const kp = claveCapa(SV.capa);
+            if (P.sa[kp] && igual(saP, sobreanchoCapaParq(proyecto, pq, SV.capa))) return { f: `${P.A}+${P.sa[kp]}`, v: anchoP + saP };
+            return null;
+          };
+          const iz = lado("izquierdo", f.tieneParqIzq, res.saIzq, pSI, SV.escritoIzq);
+          const de = lado("derecho", f.tieneParqDer, res.saDer, pSD, SV.escritoDer);
+          if (!iz || !de || !igual(r3(res.anchoVia + iz.v + de.v), f.ancho)) return f.ancho;
+          return F(`${pAV}+${iz.f}+${de.f}`, f.ancho);
+        };
+        // área solo del parqueadero en una fila (área total − área de la vía), igual que calcVolumen
+        const pos = v => parte.conSigno ? v : Math.max(0, v);
+        const filaR = {};   // índice de fila en res.filas → fila de la hoja
+        const areaParqFormula = (fi) => {
+          const f = res.filas[fi], r = filaR[fi];
+          const via = ["der", "eje", "izq"].filter(k => Kv.includes(k) && f[{ der: "dDer", eje: "dEje", izq: "dIzq" }[k]] !== null);
+          const promVia = via.length ? `ROUND(AVERAGE(${via.map(k => ref(cC + Kv.indexOf(k), r)).join(",")}),3)` : ref(cP, r);
+          const areaVia = parte.conSigno ? `ROUND(${promVia}*(${pAV}+${pSI}+${pSD}),3)` : `ROUND(MAX(0,${promVia}*(${pAV}+${pSI}+${pSD})),3)`;
+          return parte.conSigno ? `ROUND(${ref(cAr, r)}-${areaVia},3)` : `ROUND(MAX(0,${ref(cAr, r)}-${areaVia}),3)`;
+        };
+        // Repite la lógica de calcVolumen para saber qué filas aportan al volumen adicional
+        let priD = -1, ultD = -1, priI = -1, ultI = -1;
+        res.filas.forEach((f, i) => {
+          if (f.tieneParqDer) { if (priD === -1) priD = i; ultD = i; }
+          if (f.tieneParqIzq) { if (priI === -1) priI = i; ultI = i; }
+        });
+        const fuentesExtra = i => {
+          const s = [];
+          if (!res.sa) return s;
+          if (i === priD) s.push(i);
+          if (i === ultD && ultD !== priD) s.push(i);
+          if (priD === 0 && i === 1) s.push(0);
+          if (i === priI) s.push(i);
+          if (i === ultI && ultI !== priI) s.push(i);
+          if (priI === 0 && i === 1) s.push(0);
+          return s;
+        };
         const famS = famSuperficie(parte.fuenteSup), famI = famSuperficie(parte.fuenteInf);
         const rT = pushRow([]), rH = pushRow([]);
         wsData[rT][0] = "";
@@ -3021,6 +3094,7 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
         wsData[rH][0] = "ABSCISA";
         Kv.forEach((k, j) => { wsData[rH][cS + j] = NOMBRE_K[k]; wsData[rH][cI + j] = NOMBRE_K[k]; wsData[rH][cC + j] = NOMBRE_K[k]; });
         wsData[rH][cP] = "PROMEDIO"; wsData[rH][cAn] = "ANCHO (m)"; wsData[rH][cAr] = "ÁREA (m²)"; wsData[rH][cD] = "DIST (m)"; wsData[rH][cV] = "VOLUMEN (m³)";
+        if (hayExtra) wsData[rH][cE] = "EXTREMOS (m³)";
         encabezadoBloque(rH, 0, 0, PAL.gris);
         encabezadoBloque(rH, cS, cI - 1, famS); encabezadoBloque(rH, cI, cC - 1, famI); encabezadoBloque(rH, cC, cV, PAL.excavacion);
         boldRows.add(rT);
@@ -3029,6 +3103,7 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
         const r0 = row;
         res.filas.forEach((f, fi) => {
           const r = row, fila = [];
+          filaR[fi] = r;
           fila[0] = ABS(f.abs);
           const pS = valorSuperficie(serS, f.abs, f.sub), pI = valorSuperficie(serI, f.abs, f.sub);
           const dif = { parqDer: f.dParqDer, der: f.dDer, eje: f.dEje, izq: f.dIzq, parqIzq: f.dParqIzq };
@@ -3041,13 +3116,23 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
             fila[cC + j] = dif[k] == null || vs == null || vi == null ? "" : F(`${ref(cS + j, r)}-${ref(cI + j, r)}`, dif[k]);
           });
           fila[cP] = F(`ROUND(AVERAGE(${ref(cC, r)}:${ref(cC + n - 1, r)}),3)`, f.prom);
-          fila[cAn] = f.ancho;
+          fila[cAn] = formulaAncho(f);
           fila[cAr] = F(parte.conSigno ? `ROUND(${ref(cP, r)}*${ref(cAn, r)},3)` : `ROUND(MAX(0,${ref(cP, r)}*${ref(cAn, r)}),3)`, f.area);
-          if (fi === 0 || f.inicioTramo) { fila[cD] = ""; fila[cV] = ""; }
+          if (fi === 0 || f.inicioTramo) { fila[cD] = ""; fila[cV] = ""; if (hayExtra) fila[cE] = ""; }
           else {
-            const ajuste = r3(f.dist - Math.abs(f.abs - res.filas[fi - 1].abs));   // sobreancho a lo largo (si se pidió)
-            fila[cD] = F(`${ref(0, r)}-${ref(0, r - 1)}` + (ajuste ? `+${ajuste}` : ""), f.dist);
-            fila[cV] = F(`(${ref(cAr, r - 1)}+${ref(cAr, r)})/2*${ref(cD, r)}` + (f.extra ? `+${f.extra}` : ""), f.vol);
+            // sobreancho a lo largo (primer y último tramo): referencia a la celda de parámetros, no número suelto
+            const ajuste = r3(f.dist - Math.abs(f.abs - res.filas[fi - 1].abs));
+            const veces = res.sa ? Math.round(ajuste / res.sa) : 0;
+            const sumaAjuste = !ajuste ? "" : veces && igual(veces * res.sa, ajuste) ? (veces === 1 ? `+${pSA}` : `+${veces}*${pSA}`) : `+${ajuste}`;
+            fila[cD] = F(`ABS(${ref(0, r)}-${ref(0, r - 1)})` + sumaAjuste, f.dist);
+            let volF = `(${ref(cAr, r - 1)}+${ref(cAr, r)})/2*${ref(cD, r)}`;
+            if (hayExtra) {
+              const src = fuentesExtra(fi);
+              // la fila 0 todavía no tiene fila de hoja cuando i===1 la necesita: ya la tiene (se escribió antes)
+              fila[cE] = !src.length ? 0 : F(`ROUND(${src.map(j => `${areaParqFormula(j)}*${pSA}`).join("+")},3)`, f.extra);
+              volF += `+${ref(cE, r)}`;
+            }
+            fila[cV] = F(volF, f.vol);
           }
           pushRow(fila);
         });
