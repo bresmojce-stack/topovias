@@ -1219,6 +1219,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
+const TV_VERSION = "16";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -1918,6 +1919,7 @@ function PanelDatos({ obras, proyectos, onRestaurar, onArchivo }) {
     info && info.usado != null && dato("Espacio usado", mb(info.usado) + (info.cuota ? " de " + mb(info.cuota) + " disponibles" : "")),
     info && dato("Espacio reservado", info.persistente ? "Sí, el sistema no lo borrará" : "No (puede borrarse si el equipo se queda sin espacio)", info.persistente ? C.success : C.warn),
     dato("App instalada", appInstalada() ? "Sí" : "No", appInstalada() ? C.success : C.muted),
+    dato("Versión de la app", TV_VERSION),
     React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 } },
       instalable && !appInstalada() && React.createElement(Btn, { color: C.success, onClick: instalar }, "📲 Instalar app"),
       React.createElement(Btn, { color: C.accent, onClick: () => onArchivo(crearCopiaSeguridad(obras, proyectos)) }, "💾 Copia de seguridad"),
@@ -3416,7 +3418,9 @@ async function compartirArchivo(arch) {
     await navigator.share({ files: [file], title: arch.nombre });
   } catch (e) {
     if (e && e.name === "AbortError") return; // el usuario cerró el menú
-    alert("No se pudo compartir en este equipo. Usa \"Guardar en el dispositivo\" y compártelo desde Descargas.");
+    // si el equipo no deja compartir, al menos queda guardado en Descargas
+    guardarArchivo(arch);
+    alert("Este equipo no dejó compartir el archivo (" + ((e && (e.name || e.message)) || "error") + ").\n\nSe guardó en Descargas como \"" + arch.nombre + "\": desde ahí lo puedes subir a Drive o enviar por WhatsApp.");
   }
 }
 function VentanaArchivo({ archivo, onClose }) {
@@ -5525,8 +5529,30 @@ precargarDatos([TV_KEY, TV_KEY + '_obras']).then(function() {
   __topoviasRoot__.render(React.createElement(App));
 });
 // Modo sin conexión (solo cuando la app se abre desde una dirección web, no como archivo suelto)
+// Cuando llega una versión nueva con la app abierta, se avisa con un botón "Actualizar"
+// (los datos ya están guardados, recargar no pierde nada).
 if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
-  window.addEventListener("load", function() { navigator.serviceWorker.register("sw.js").catch(function(e) { console.warn("Sin modo offline:", e); }); });
+  window.addEventListener("load", function() {
+    navigator.serviceWorker.register("sw.js").then(function(reg) {
+      // al volver a la app (estaba en segundo plano) buscar si hay versión nueva
+      document.addEventListener("visibilitychange", function() { if (document.visibilityState === "visible") reg.update().catch(function() {}); });
+    }).catch(function(e) { console.warn("Sin modo offline:", e); });
+    var habiaControl = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener("controllerchange", function() {
+      if (!habiaControl) { habiaControl = true; return; }   // primera instalación: no hace falta avisar
+      if (document.getElementById("tv-nueva-version")) return;
+      var d = document.createElement("div");
+      d.id = "tv-nueva-version";
+      d.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);top:calc(10px + env(safe-area-inset-top,0px));z-index:200;background:#0F172A;color:#fff;padding:10px 12px 10px 16px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.3);display:flex;gap:12px;align-items:center;font:600 13.5px 'Plus Jakarta Sans',sans-serif;max-width:calc(100vw - 32px)";
+      d.innerHTML = "<span>Hay una versión nueva de TopoVías</span>";
+      var b = document.createElement("button");
+      b.textContent = "Actualizar";
+      b.style.cssText = "background:#0284C7;color:#fff;border:none;border-radius:8px;padding:8px 14px;font:700 13px 'Plus Jakarta Sans',sans-serif;cursor:pointer";
+      b.onclick = function() { location.reload(); };
+      d.appendChild(b);
+      document.body.appendChild(d);
+    });
+  });
 }
 </script>
 </body>

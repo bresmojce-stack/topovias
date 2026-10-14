@@ -1,10 +1,10 @@
 // TopoVías: funciona sin internet.
-// Al publicar una versión nueva, cambiar CACHE_VERSION para que los equipos la descarguen.
-const CACHE_VERSION = "topovias-v15";
+// Al publicar una versión nueva, cambiar CACHE_VERSION (y TV_VERSION en index.html).
+const CACHE_VERSION = "topovias-v16";
 const ARCHIVOS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png", "./icon-maskable.png", "./apple-touch-icon.png", "./favicon.png"];
 
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(CACHE_VERSION).then(c => c.addAll(ARCHIVOS)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE_VERSION).then(c => c.addAll(ARCHIVOS.map(a => new Request(a, { cache: "reload" })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", e => {
@@ -13,17 +13,25 @@ self.addEventListener("activate", e => {
     .then(() => self.clients.claim()));
 });
 
-// Primero lo guardado (abre al instante y sin señal); en segundo plano se trae la versión
-// más reciente para la próxima vez que se abra.
+// La app (index.html): primero la red, para tener siempre la última versión; si no hay señal
+// o tarda más de 4 s, se abre la guardada. Lo demás (íconos): primero lo guardado.
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET" || new URL(e.request.url).origin !== location.origin) return;
+  const navegar = e.request.mode === "navigate";
   e.respondWith(caches.open(CACHE_VERSION).then(async cache => {
-    const clave = e.request.mode === "navigate" ? "./index.html" : e.request;
-    const guardado = await cache.match(clave, { ignoreSearch: e.request.mode === "navigate" });
-    const red = fetch(e.request).then(r => {
+    const clave = navegar ? "./index.html" : e.request;
+    const guardado = await cache.match(clave, { ignoreSearch: navegar });
+    const red = fetch(e.request, navegar ? { cache: "no-cache" } : undefined).then(r => {
       if (r && r.ok) cache.put(clave, r.clone());
       return r;
     }).catch(() => null);
+    if (navegar && guardado) {
+      const espera = new Promise(res => setTimeout(() => res(null), 4000));
+      const r = await Promise.race([red, espera]);
+      if (r && r.ok) return r;
+      e.waitUntil(red);
+      return guardado;
+    }
     if (guardado) { e.waitUntil(red); return guardado; }
     return (await red) || new Response("Sin conexión", { status: 503 });
   }));
