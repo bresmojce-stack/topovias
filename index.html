@@ -1220,7 +1220,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "19";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "20";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -3445,6 +3445,70 @@ function VentanaArchivo({ archivo, onClose }) {
       "Para compartirlo, guárdalo y envíalo desde la carpeta Descargas.")));
 }
 
+// ─── CALCULADORA DE COORDENADAS ───────────────────────────────────────────────
+// Entre puntos seguidos: distancia horizontal = √(ΔE² + ΔN²), azimut desde el Norte
+// (sentido horario), y con cotas: desnivel, pendiente y distancia inclinada.
+const CALC_COORDS_KEY = TV_KEY + "_calcCoords";
+function gradosAGMS(g) {
+  let d = Math.floor(g), mm = Math.floor((g - d) * 60), ss = Math.round(((g - d) * 60 - mm) * 60 * 10) / 10;
+  if (ss >= 60) { ss = 0; mm++; } if (mm >= 60) { mm = 0; d++; }
+  return d + "°" + String(mm).padStart(2, "0") + "'" + ss.toFixed(1).padStart(4, "0") + '"';
+}
+function rumboDesdeAzimut(az) {
+  const q = az < 90 ? ["N", az, "E"] : az < 180 ? ["S", 180 - az, "E"] : az < 270 ? ["S", az - 180, "W"] : ["N", 360 - az, "W"];
+  return q[0] + " " + gradosAGMS(q[1]) + " " + q[2];
+}
+function tramoCoords(a, b) {
+  const n1 = parseFloat(a.norte), e1 = parseFloat(a.este), n2 = parseFloat(b.norte), e2 = parseFloat(b.este);
+  if ([n1, e1, n2, e2].some(isNaN)) return null;
+  const dN = n2 - n1, dE = e2 - e1, dh = Math.sqrt(dN * dN + dE * dE);
+  let az = Math.atan2(dE, dN) * 180 / Math.PI; if (az < 0) az += 360;
+  const z1 = parseFloat(a.cota), z2 = parseFloat(b.cota);
+  const dz = isNaN(z1) || isNaN(z2) ? null : z2 - z1;
+  return { dN, dE, dh, az, dz, pend: dz !== null && dh > 0 ? dz / dh * 100 : null, di: dz !== null ? Math.sqrt(dh * dh + dz * dz) : null };
+}
+function CalcDistanciaCoords() {
+  const vacio = () => ({ id: Math.random(), norte: "", este: "", cota: "" });
+  const [pts, setPtsR] = React.useState(() => {
+    try { const v = JSON.parse(localStorage.getItem(CALC_COORDS_KEY) || "null"); if (Array.isArray(v) && v.length >= 2) return v; } catch (_) {}
+    return [vacio(), vacio()];
+  });
+  const setPts = v => { setPtsR(v); try { localStorage.setItem(CALC_COORDS_KEY, JSON.stringify(v)); } catch (_) {} };
+  const cambiar = (i, k, v) => { const a = pts.slice(); a[i] = { ...a[i], [k]: v }; setPts(a); };
+  const tramos = pts.slice(0, -1).map((p, i) => tramoCoords(p, pts[i + 1]));
+  const validos = tramos.filter(Boolean);
+  const total = validos.reduce((s, t) => s + t.dh, 0);
+  const inp = { fontFamily: "monospace", minWidth: 90 };
+  const mono = { fontFamily: "monospace", fontSize: 12.5 };
+  const fila = (t, txt, v, color) => React.createElement("div", { style: { display: "flex", justifyContent: "space-between", gap: 10 } },
+    React.createElement("span", { style: { color: C.muted } }, txt), React.createElement("strong", { style: { color: color || C.text } }, v));
+  return React.createElement(Card, { title: "📍 Distancia entre coordenadas", accent: C.accent2 },
+    React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 10, lineHeight: 1.5 } },
+      "Escribe dos o más puntos. Entre cada par sale la distancia, el azimut y el rumbo. Si pones cotas, también el desnivel y la pendiente. La cota es opcional."),
+    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "34px repeat(3, minmax(0, 1fr)) 34px", gap: 6, marginBottom: 4, fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.5 } },
+      React.createElement("span"), React.createElement("span", null, "Norte (Y)"), React.createElement("span", null, "Este (X)"), React.createElement("span", null, "Cota"), React.createElement("span")),
+    pts.map((p, i) => React.createElement(React.Fragment, { key: p.id },
+      React.createElement("div", { className: "tv-calc-punto", style: { display: "grid", gridTemplateColumns: "34px repeat(3, minmax(0, 1fr)) 34px", gap: 6, alignItems: "center", marginBottom: 6 } },
+        React.createElement("strong", { style: { color: C.accent2, fontSize: 13 } }, "P" + (i + 1)),
+        React.createElement(Input, { style: inp, value: p.norte, placeholder: "Norte (Y)", inputMode: "decimal", onChange: e => cambiar(i, "norte", e.target.value) }),
+        React.createElement(Input, { style: inp, value: p.este, placeholder: "Este (X)", inputMode: "decimal", onChange: e => cambiar(i, "este", e.target.value) }),
+        React.createElement(Input, { style: inp, value: p.cota, placeholder: "Cota", inputMode: "decimal", onChange: e => cambiar(i, "cota", e.target.value) }),
+        pts.length > 2 ? React.createElement(Btn, { small: true, color: C.danger, onClick: () => setPts(pts.filter((_, j) => j !== i)) }, "✕") : React.createElement("span")),
+      i < pts.length - 1 && React.createElement("div", { className: "tv-calc-tramo", style: { ...mono, background: C.bg, borderRadius: 8, padding: "8px 12px", margin: "2px 0 8px 40px", display: "grid", gap: 3 } },
+        !tramos[i] ? React.createElement("span", { style: { color: C.muted } }, "P" + (i + 1) + " → P" + (i + 2) + ": faltan coordenadas")
+          : [fila(0, "P" + (i + 1) + " → P" + (i + 2) + " distancia", tramos[i].dh.toFixed(3) + " m", C.success),
+             fila(1, "ΔN / ΔE", tramos[i].dN.toFixed(3) + " / " + tramos[i].dE.toFixed(3)),
+             fila(2, "Azimut", gradosAGMS(tramos[i].az) + "  (" + tramos[i].az.toFixed(4) + "°)"),
+             fila(3, "Rumbo", rumboDesdeAzimut(tramos[i].az)),
+             tramos[i].dz !== null && fila(4, "Desnivel", (tramos[i].dz >= 0 ? "+" : "") + tramos[i].dz.toFixed(3) + " m"),
+             tramos[i].pend !== null && fila(5, "Pendiente", (tramos[i].pend >= 0 ? "+" : "") + tramos[i].pend.toFixed(3) + " %"),
+             tramos[i].di !== null && fila(6, "Distancia inclinada", tramos[i].di.toFixed(3) + " m")].filter(Boolean).map((el, k) => React.cloneElement(el, { key: k }))))),
+    React.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 6 } },
+      React.createElement(Btn, { small: true, color: C.success, onClick: () => setPts([...pts, vacio()]) }, "+ Punto"),
+      React.createElement(Btn, { small: true, color: C.muted, onClick: () => setPts([vacio(), vacio()]) }, "Limpiar"),
+      validos.length > 1 && React.createElement("span", { style: { ...mono, fontSize: 14, fontWeight: 800, color: C.accent } }, "Total: " + total.toFixed(3) + " m")));
+}
+
 // ─── VERIFICADOR ──────────────────────────────────────────────────────────────
 function Verificador() {
   const [modo, setModo] = React.useState("1");
@@ -3890,7 +3954,16 @@ function EditorParq({
     small: true,
     color: C.success,
     onClick: () => upd("tramos", [...p.tramos, tramoVacio()])
-  }, "+ Tramo PI")), React.createElement(EstructuraParq, { p: p, capasVia: capasVia, onChange: onChange }), p.modo === "independiente" && React.createElement(CalcCoordenadas, { label: "PARQUEADERO", prefijo: "Tramo", nTramos: p.tramos.length, puntos: p.coords || [], onChange: function(v) { upd("coords", v); }, onAplicar: function(ds) { upd("tramos", aplicarDistancias(p.tramos, ds)); }}));
+  }, "+ Tramo PI")), React.createElement(EstructuraParq, { p: p, capasVia: capasVia, onChange: onChange }), p.modo === "independiente" && React.createElement(CalcCoordenadas, { label: "PARQUEADERO", prefijo: "Tramo", nTramos: p.tramos.length, puntos: p.coords || [], onChange: function(v) { upd("coords", v); }, onAplicar: function(ds) { upd("tramos", aplicarDistancias(p.tramos, ds)); }}),
+  p.modo !== "independiente" && React.createElement(CalcCoordenadas, { label: "PARQUEADERO", prefijo: "Tramo", puntos: p.coords || [], onChange: function(v) { upd("coords", v); },
+    ayuda: "Escribe las coordenadas del inicio (P1) y del fin del parqueadero, siguiendo el borde si quiebra. La suma de las distancias es el largo, y se pasa a la abscisa fin = abscisa inicio + largo.",
+    textoBoton: function(total) { return "⬇ Pasar largo " + total.toFixed(3) + " m a la abscisa fin"; },
+    aplicarTotal: function(total) {
+      var ai = parseFloat(p.absInicio);
+      if (isNaN(ai)) { alert("Primero escribe la abscisa de inicio del parqueadero."); return ""; }
+      upd("absFin", String(r3(ai + total)));
+      return "✓ Abscisa fin = " + ai.toFixed(3) + " + " + total.toFixed(3) + " = " + r3(ai + total).toFixed(3);
+    } }));
 }
 
 // ─── PERFIL DEL EJE (linea de cotas vs abscisa, con PI marcados) ─────────────
@@ -4524,6 +4597,7 @@ function CalcCoordenadas(props) {
     return d === null || !isFinite(d) ? null : r3(d);
   });
   var nValidas = distancias.filter(function(d){ return d !== null; }).length;
+  var total = r3(distancias.reduce(function(a, d){ return a + (d || 0); }, 0));
   var headerColor = label === 'PARQUEADERO' ? C.parq : label ? C.accent2 : C.accent;
   var setPts = function(a) { setAviso(''); onChange(a); };
   var inpS = { width: '100%', minWidth: 80, fontFamily: 'monospace' };
@@ -4553,8 +4627,8 @@ function CalcCoordenadas(props) {
   return React.createElement(Card, { title: '📍 Distancias por coordenadas' + (label ? ' — ' + label : ''), accent: headerColor },
     React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
       React.createElement('div', { style: { fontSize: 12, color: C.muted, lineHeight: 1.5 } },
-        '¿El plano no trae las distancias? Escribe las coordenadas de cada PI en orden (P1 = inicio). ',
-        'La distancia P1→P2 va al ' + prefijo + ' 1, P2→P3 al ' + prefijo + ' 2, y así.'),
+        props.ayuda || ['¿El plano no trae las distancias? Escribe las coordenadas de cada PI en orden (P1 = inicio). ',
+        'La distancia P1→P2 va al ' + prefijo + ' 1, P2→P3 al ' + prefijo + ' 2, y así.']),
       React.createElement(Btn, { small: true, color: abierto ? C.muted : headerColor, onClick: function(){ setAbierto(!abierto); } },
         abierto ? 'Ocultar' : 'Usar coordenadas')
     ),
@@ -4570,15 +4644,17 @@ function CalcCoordenadas(props) {
       React.createElement('div', { style: { display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' } },
         React.createElement(Btn, { small: true, color: C.success,
           onClick: function() { setPts(pts.concat([{ id: Math.random(), norte: '', este: '' }])); } }, '+ Punto'),
+        nValidas > 1 && React.createElement('span', { style: { fontSize: 12.5, fontFamily: 'monospace', fontWeight: 700 } }, 'Total: ' + total.toFixed(3) + ' m'),
         nValidas > 0 && React.createElement(Btn, { color: C.warn,
           onClick: function() {
+            if (props.aplicarTotal) { var t = props.aplicarTotal(total); if (t) setAviso(t); return; }
             onAplicar(distancias);
             var nuevos = Math.max(0, distancias.length - nTramos);
             setAviso('✓ ' + nValidas + ' distancia(s) pasadas a los tramos' + (nuevos > 0 ? ' (se crearon ' + nuevos + ' tramo(s) nuevos)' : '') + '.');
-          } }, '⬇ Pasar ' + nValidas + ' distancia(s) a los tramos'),
+          } }, props.textoBoton ? props.textoBoton(total) : '⬇ Pasar ' + nValidas + ' distancia(s) a los tramos'),
         aviso && React.createElement('span', { style: { fontSize: 12, fontWeight: 700, color: C.success } }, aviso)
       ),
-      distancias.length > nTramos && nTramos > 0 && React.createElement('div', { style: { fontSize: 11, color: C.muted, marginTop: 6 } },
+      !props.aplicarTotal && distancias.length > nTramos && nTramos > 0 && React.createElement('div', { style: { fontSize: 11, color: C.muted, marginTop: 6 } },
         'Hay ' + distancias.length + ' distancias y ' + nTramos + ' tramo(s): al pasarlas se crearán los tramos que faltan.')
     )
   );
@@ -5457,7 +5533,7 @@ function App() {
     proyecto: proy,
     tabla: tabla,
     onChange: function(cambios) { updSinRecalcular(cambios); }
-  }), tab === "verif" && /*#__PURE__*/React.createElement(Verificador, null), tab === "memoria" && /*#__PURE__*/React.createElement(Card, {
+  }), tab === "verif" && React.createElement(React.Fragment, null, React.createElement(Verificador, null), React.createElement(CalcDistanciaCoords, null)), tab === "memoria" && /*#__PURE__*/React.createElement(Card, {
     title: "Memoria de Proyectos"
   }, memoria.length === 0 && /*#__PURE__*/React.createElement("div", {
     style: {
