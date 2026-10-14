@@ -1,5 +1,7 @@
 # TopoVías
 
+**App en vivo:** https://bresmojce-stack.github.io/topovias/ (se instala desde el navegador: Chrome → ⋮ → *Instalar app*).
+
 Calculadora topográfica de vías, organizada por **obras** y **vías**.
 
 - **Obras → Vías:** cada obra (como una carpeta) tiene sus vías. Cada vía tiene tramos/PI (se llenan 3 de 4 campos; distancias también por coordenadas), estructura, laterales, parqueaderos (con estructura propia si la tienen), nivelaciones, volúmenes por áreas promedio y cantidades.
