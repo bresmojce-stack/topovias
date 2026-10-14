@@ -921,9 +921,11 @@ const Card = ({
   title,
   children,
   style,
-  accent
+  accent,
+  id
 }) => /*#__PURE__*/React.createElement("div", {
   className: "tv-card",
+  id: id,
   style: {
     background: C.panel,
     border: `1px solid ${C.border}`,
@@ -1386,7 +1388,7 @@ function TabCantidades({ proyecto, tabla, onChange }) {
   return React.createElement("div", null,
     React.createElement(Card, { title: "Área de conformación" },
       React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 8 } },
-        "Ancho del plano + sobreancho general de cada lado (se define en 🏗 Estructura). Las cotas siguen con el ancho del plano."),
+        "Ancho del plano + sobreancho general de cada lado (se define en 🛣 Vía › Estructura). Las cotas siguen con el ancho del plano."),
       fila(A.saIzq || A.saDer
         ? `Vía: ${A.largo.toFixed(3)} m × (${A.ancho.toFixed(3)} + ${A.saIzq.toFixed(3)} izq + ${A.saDer.toFixed(3)} der) m`
         : `Vía: ${A.largo.toFixed(3)} m × ${A.ancho.toFixed(3)} m (sin sobreancho)`, A.via.toFixed(3) + " m²"),
@@ -2060,6 +2062,21 @@ function TablaResultado({
 }
 
 // ─── TABLA DE LECTURAS (nivelacion: BM, vista+, altura instrumental) ─────────
+// ── Pestaña Vía: eje y tramos, estructura y laterales en un solo apartado ──
+const SECCIONES_VIA = [["tv-sec-estructura", "Estructura"], ["tv-sec-eje", "Eje y tramos"], ["tv-sec-laterales", "Laterales"]];
+const irASeccion = id => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); };
+function IndiceVia() {
+  return React.createElement("div", { style: { order: 0, display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 } },
+    SECCIONES_VIA.map(([id, t], i) => React.createElement("button", { key: id, onClick: () => irASeccion(id),
+      style: { border: `1px solid ${C.border}`, background: "#fff", color: C.accent, borderRadius: 16, padding: "6px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer" } },
+      "①②③"[i] + " " + t)));
+}
+function TituloSeccionVia({ n, id, texto, orden }) {
+  return React.createElement("div", { id, style: { order: orden, scrollMarginTop: 110, display: "flex", alignItems: "center", gap: 8, margin: n > 1 ? "18px 0 10px" : "0 0 10px",
+      fontWeight: 900, fontSize: 16, color: C.accent, borderBottom: `2px solid ${C.accent}`, paddingBottom: 4 } },
+    React.createElement("span", null, "①②③"[n - 1]), texto);
+}
+
 function TablaLecturas({
   tabla,
   capasDisponibles,
@@ -2126,7 +2143,7 @@ function TablaLecturas({
     };
   };
   return /*#__PURE__*/React.createElement(Card, {
-    title: "📏 Tabla de Lecturas (Nivelación)",
+    title: "📏 Lecturas de mira para colocar las cotas en obra",
     accent: C.warn,
     style: {
       marginTop: 18
@@ -3388,7 +3405,7 @@ function EstructuraParq({ p, capasVia, onChange }) {
           React.createElement("option", { value: "via" }, "Igual a la vía"),
           React.createElement("option", { value: "propia" }, "Propia (otros materiales o espesores)"))),
       !propia && React.createElement("div", { style: { flex: "2 1 260px", fontSize: 12, color: C.muted, paddingBottom: 6 } },
-        viaDef.length ? "Usa: " + viaDef.map(c => c.nombre + " " + c.espesor + " m").join(" · ") : "Define las capas en 🏗 Estructura."),
+        viaDef.length ? "Usa: " + viaDef.map(c => c.nombre + " " + c.espesor + " m").join(" · ") : "Define las capas en 🛣 Vía › Estructura."),
       propia && viaDef.length > 0 && React.createElement(Btn, { small: true, color: C.accent2,
         onClick: () => setCapas(viaDef.map(c => ({ nombre: c.nombre, espesor: c.espesor, id: Math.random(),
           // el sobreancho de cada capa se copia: general → el del parqueadero; propio → el valor de su lado
@@ -3835,7 +3852,7 @@ function CorteTransversal({
     textAnchor: "middle",
     fontSize: "13",
     fill: C.muted
-  }, "Define capas en 🏗 Estructura para ver el corte")));
+  }, "Define capas en 🛣 Vía › Estructura para ver el corte")));
 }
 
 // ─── PERFIL DEL EJE (linea de cotas vs abscisa, con PI marcados) ─────────────
@@ -4347,7 +4364,7 @@ function TabNivelaciones({ proyecto, tabla, onChange, onArchivo }) {
   const COLORES_EST = ["#2980B9", "#27AE60", "#8E44AD", "#E67E22", "#C0392B", "#16A085"];
 
   if (!tabla || !tabla.length) return React.createElement("div", { style: { color: C.muted, textAlign: "center", padding: 40, fontSize: 13 } },
-    "Primero presiona ⚡ CALCULAR para generar la Tabla. Las abscisas se copian de ahí.");
+    "Primero presiona ⚡ CALCULAR para generar las cotas. Las abscisas se copian de ahí.");
   if (nivelaciones.length === 0) return React.createElement("div", null,
     React.createElement("div", { style: { color: C.muted, textAlign: "center", padding: 30, fontSize: 13 } },
       "No hay nivelaciones. Crea la del terreno natural; después, la de la excavación en sitio cuando se nivele lo excavado. La app arma la cartera con las abscisas y los puntos de la vía."),
@@ -4860,7 +4877,7 @@ function App() {
       return t0.length ? t0 : null;
     } catch(e) { return null; }
   });
-  const [tab, setTab] = React.useState("eje");
+  const [tab, setTab] = React.useState("via");
   const [capaLectura, setCapaLectura] = React.useState("__rasante__");
   const [memoria, setMemoria] = React.useState([]);
   const [archivo, setArchivo] = React.useState(null); // Excel generado, listo para guardar o compartir
@@ -4933,7 +4950,7 @@ function App() {
     setActivoId(id);
     const t = generarTabla(np);
     setTabla(t.length ? t : null);
-    setTab("eje");
+    setTab("via");
     setNav({ vista: "via", obraId: np.obraId });
     window.scrollTo(0, 0);
   };
@@ -4973,7 +4990,7 @@ function App() {
     setProyectos(prev => [...prev, np]);
     setActivoId(np.id);
     setTabla(null);
-    setTab("eje");
+    setTab("via");
     setNav({ vista: "via", obraId });
     window.scrollTo(0, 0);
   };
@@ -5063,20 +5080,14 @@ function App() {
   const areasParqueaderos = () => areasCalc.parqs.map(x => ({ nombre: x.nombre, area: x.areaPlano }));
   const areaPlanta = () => areasCalc.totalPlano;
   const TABS = [{
-    id: "eje",
-    label: "\uD83D\uDCD0 Eje / Tramos"
-  }, {
-    id: "estructura",
-    label: "\uD83C\uDFD7 Estructura"
-  }, {
-    id: "laterales",
-    label: "\u2194 Laterales"
+    id: "via",
+    label: "\uD83D\uDEE3 V\u00EDa"
   }, {
     id: "parq",
     label: "\uD83C\uDD7F Parqueaderos"
   }, {
     id: "resultado",
-    label: "\uD83D\uDCCA Tabla"
+    label: "\uD83D\uDCCA Cotas y lecturas"
   }, {
     id: "plano",
     label: "\uD83D\uDDFA Plano"
@@ -5149,8 +5160,13 @@ function App() {
       color: tab === t.id ? C.accent : C.muted
     }
   }, t.label))), /*#__PURE__*/React.createElement("main", {
-    className: "tv-main"
-  }, tab === "eje" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Card, {
+    className: "tv-main",
+    style: tab === "via" ? { display: "flex", flexDirection: "column" } : undefined
+  }, tab === "via" && React.createElement(IndiceVia, null),
+  tab === "via" && React.createElement(TituloSeccionVia, { n: 1, id: "tv-sec-estructura", texto: "Estructura", orden: 1 }),
+  tab === "via" && React.createElement(TituloSeccionVia, { n: 2, id: "tv-sec-eje", texto: "Eje y tramos", orden: 3 }),
+  tab === "via" && React.createElement(TituloSeccionVia, { n: 3, id: "tv-sec-laterales", texto: "Laterales", orden: 5 }),
+  tab === "via" && /*#__PURE__*/React.createElement("div", { style: { order: 4, minWidth: 0 } }, /*#__PURE__*/React.createElement(Card, {
     title: "Proyecto"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -5283,7 +5299,7 @@ function App() {
         valor: ""
       }]
     })
-  }, "+ Abscisa intermedia"))), tab === "laterales" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, "+ Abscisa intermedia"))), tab === "via" && /*#__PURE__*/React.createElement("div", { style: { order: 6, minWidth: 0 } }, /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#FFF9E6",
       border: `1px solid ${C.warn}`,
@@ -5304,7 +5320,8 @@ function App() {
     onChange: v => upd({
       lateralIzq: v
     })
-  }), proy.lateralDer.modo === "longitudinal" && React.createElement(CalcCoordenadas, { label: "LATERAL DERECHO", prefijo: "Tramo", nTramos: proy.lateralDer.tramos.length, puntos: proy.coordsDer || [], onChange: function(arr) { updSinRecalcular({ coordsDer: arr }); }, onAplicar: function(ds) { upd({ lateralDer: Object.assign({}, proy.lateralDer, { tramos: aplicarDistancias(proy.lateralDer.tramos, ds) }) }); }}), proy.lateralIzq.modo === "longitudinal" && React.createElement(CalcCoordenadas, { label: "LATERAL IZQUIERDO", prefijo: "Tramo", nTramos: proy.lateralIzq.tramos.length, puntos: proy.coordsIzq || [], onChange: function(arr) { updSinRecalcular({ coordsIzq: arr }); }, onAplicar: function(ds) { upd({ lateralIzq: Object.assign({}, proy.lateralIzq, { tramos: aplicarDistancias(proy.lateralIzq.tramos, ds) }) }); }})), tab === "estructura" && /*#__PURE__*/React.createElement(Card, {
+  }), proy.lateralDer.modo === "longitudinal" && React.createElement(CalcCoordenadas, { label: "LATERAL DERECHO", prefijo: "Tramo", nTramos: proy.lateralDer.tramos.length, puntos: proy.coordsDer || [], onChange: function(arr) { updSinRecalcular({ coordsDer: arr }); }, onAplicar: function(ds) { upd({ lateralDer: Object.assign({}, proy.lateralDer, { tramos: aplicarDistancias(proy.lateralDer.tramos, ds) }) }); }}), proy.lateralIzq.modo === "longitudinal" && React.createElement(CalcCoordenadas, { label: "LATERAL IZQUIERDO", prefijo: "Tramo", nTramos: proy.lateralIzq.tramos.length, puntos: proy.coordsIzq || [], onChange: function(arr) { updSinRecalcular({ coordsIzq: arr }); }, onAplicar: function(ds) { upd({ lateralIzq: Object.assign({}, proy.lateralIzq, { tramos: aplicarDistancias(proy.lateralIzq.tramos, ds) }) }); }})), tab === "via" && /*#__PURE__*/React.createElement(Card, {
+    style: { order: 2, minWidth: 0 },
     title: "Capas de Estructura de Pavimento"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -5541,10 +5558,10 @@ function App() {
       fontSize: 18,
       color: s.color
     }
-  }, s.val)))), /*#__PURE__*/React.createElement(TablaResultado, {
+  }, s.val)))), React.createElement(TituloSeccionVia, { n: 1, id: "tv-sec-cotas", texto: "Tabla de cotas", orden: 0 }), /*#__PURE__*/React.createElement(TablaResultado, {
     tabla: tabla,
     capas: proy.capas
-  }), /*#__PURE__*/React.createElement(TablaLecturas, {
+  }), React.createElement(TituloSeccionVia, { n: 2, id: "tv-sec-lecturas", texto: "Tabla de lecturas (replanteo)", orden: 0 }), /*#__PURE__*/React.createElement(TablaLecturas, {
     tabla: tabla,
     capasDisponibles: (tabla[0]?.capas || []).filter(c => !c.esOculta).map(c => c.nombre),
     bmEstaciones: proy.bmEstaciones || [],
@@ -5750,7 +5767,7 @@ function App() {
       setProyectos(prev => [...prev, np]);
       setActivoId(np.id);
       setTabla(null);
-      setTab("eje");
+      setTab("via");
     }
   }, "Cargar como nuevo proyecto")))))));
 }
