@@ -1344,7 +1344,11 @@ function calcCantidades(proy, tabla) {
     const k = claveCapa(c.nombre);
     if (!capas.some(x => x.clave === k)) capas.push({ clave: k, nombre: c.nombre.trim(), incluida: !excluidas.includes(k) });
     if (excluidas.includes(k) || area <= 0) return;
-    add(c.nombre, "m³", area * esp, `${quien}${area.toFixed(3)} m² × ${esp.toFixed(3)} m`);
+    const it = add(c.nombre, "m³", area * esp, `${quien}${area.toFixed(3)} m² × ${esp.toFixed(3)} m`);
+    // para la tabla: área total y espesor de la capa (si una estructura propia usa otro espesor, queda "varios")
+    it.areaExacta = (it.areaExacta || 0) + area;
+    it.area = r3(it.areaExacta);
+    it.espesor = it.espesor === undefined || Math.abs(it.espesor - esp) < 1e-9 ? esp : null;
   };
   if (usaManual) {
     capasVia.forEach(c => usarCapa(c, areaConf, ""));
@@ -1370,7 +1374,8 @@ function calcCantidades(proy, tabla) {
     const r = calcVolumenTotal(v, proy, tabla);
     if (!r) return;
     const destino = (v.concepto || "").trim() || v.nombre || "Volumen";
-    add(destino, "m³", r.volTotal, `volumen "${v.nombre || "Volumen"}" ${r.volTotal.toFixed(3)} m³`);
+    const it = add(destino, "m³", r.volTotal, `volumen "${v.nombre || "Volumen"}" ${r.volTotal.toFixed(3)} m³`);
+    it.conVolumen = true;
   });
   (cfg.extras || []).forEach(x => { if (x.nombre && x.nombre.trim()) add(x.nombre, "m²", areaConf, "= área conformada"); });
   return { areas, areaConf, usaManual, capas, items };
@@ -1415,14 +1420,18 @@ function TabCantidades({ proyecto, tabla, onChange }) {
       React.createElement("div", { style: { overflowX: "auto" } },
         React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } },
           React.createElement("thead", null, React.createElement("tr", null,
-            ["Cantidad", "Unidad", "Valor", "Cómo se calcula"].map(h => React.createElement("th", { key: h, style: { ...thS, background: C.success, color: "#fff", textAlign: h === "Valor" ? "right" : "left" } }, h)))),
-          React.createElement("tbody", null, q.items.map((it, i) => React.createElement("tr", { key: it.clave, style: { background: i % 2 ? C.row2 : C.row1 } },
-            React.createElement("td", { style: { ...tdS, textAlign: "left", fontWeight: 700 } }, it.nombre),
-            React.createElement("td", { style: { ...tdS, textAlign: "left" } }, it.unidad),
-            React.createElement("td", { style: { ...tdS, textAlign: "right", fontFamily: "monospace", fontWeight: 800, color: C.accent } }, it.valor.toFixed(3)),
-            React.createElement("td", { style: { ...tdS, textAlign: "left", whiteSpace: "normal", color: C.muted, fontSize: 12 } }, it.partes.join(" + "))))))),
-      React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 8 } },
-        "Las cantidades con el mismo nombre se suman. Para sumar un volumen a una capa (ej. un relleno a la base), en Volúmenes escribe el nombre de esa capa en \"Suma a la cantidad\".")),
+            ["Ítem", "Área (m²)", "Espesor (m)", "Cantidad"].map((h, k) => React.createElement("th", { key: h, style: { ...thS, background: C.success, color: "#fff", textAlign: k < 1 ? "left" : "right", padding: "6px 6px" } }, h)))),
+          React.createElement("tbody", null, q.items.map((it, i) => {
+            const num = { ...tdS, textAlign: "right", fontFamily: "monospace", padding: "6px 5px", whiteSpace: "nowrap", fontSize: 12 };
+            const sumaVol = it.conVolumen && it.area !== undefined;   // capa a la que además se le suma un volumen
+            return React.createElement("tr", { key: it.clave, style: { background: i % 2 ? C.row2 : C.row1 } },
+              React.createElement("td", { style: { ...tdS, textAlign: "left", fontWeight: 700, padding: "6px 5px", whiteSpace: "normal", fontSize: 12 } }, it.nombre),
+              React.createElement("td", { style: num }, it.area !== undefined ? it.area.toFixed(3) : ""),
+              React.createElement("td", { style: num }, it.area !== undefined ? (it.espesor !== null ? it.espesor.toFixed(3) : "varios") : ""),
+              React.createElement("td", { style: { ...num, fontWeight: 800, color: C.accent } }, it.valor.toFixed(3) + " " + it.unidad + (sumaVol ? " *" : "")));
+          })))),
+      q.items.some(it => it.conVolumen && it.area !== undefined) && React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 8 } },
+        "* Incluye además un volumen de 📦 Volúmenes sumado a esa capa.")),
     React.createElement(Card, { title: "Ítems por área (m²)" },
       React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 8 } }, "Cantidades que son igual al área conformada, por ejemplo un geotextil."),
       (cfg.extras || []).map((x, i) => React.createElement("div", { key: x.id, style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 6 } },
