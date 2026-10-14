@@ -51,6 +51,11 @@
   .tv-in:focus { border-color: #0EA5E9 !important; box-shadow: 0 0 0 3px rgba(14,165,233,0.16); background: #fff !important; }
   .tv-card { box-shadow: 0 1px 2px rgba(15,23,42,0.05), 0 1px 3px rgba(15,23,42,0.04); }
   .tv-acciones button { white-space: nowrap; }
+  .tv-guardado { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: #94A3B8; white-space: nowrap; }
+  .tv-guardado.error { color: #FCA5A5; }
+  .tv-bloqueada input.tv-in, .tv-bloqueada textarea { background: #F1F5F9 !important; color: #475569 !important; cursor: not-allowed; }
+  .tv-banner-bloqueo { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #FFFBEB; border-bottom: 1px solid #FDE68A; color: #92400E; padding: 9px 16px; font-size: 13px; font-weight: 600; }
+  .tv-aviso { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(70px + env(safe-area-inset-bottom, 0px)); z-index: 130; background: #0F172A; color: #fff; padding: 11px 18px; border-radius: 12px; font-size: 13.5px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.3); max-width: calc(100vw - 32px); text-align: center; }
 
   /* ── Pestañas: una sola fila que se desliza, fija arriba al hacer scroll ── */
   .tv-tabs { position: sticky; top: 0; z-index: 50; background: #fff; border-bottom: 1px solid #E2E8F0; display: flex; gap: 2px;
@@ -78,7 +83,7 @@
     .tv-logo { width: 32px; height: 32px; border-radius: 9px; }
     .tv-sub { display: none; }
     .tv-acciones { order: 2; margin-left: auto; }
-    .tv-acciones .tv-txt { display: none; }
+    .tv-acciones .tv-txt, .tv-guardado .tv-txt { display: none; }
     .tv-proyecto { order: 3; flex-basis: 100%; }
     .tv-proyecto select { flex: 1 1 auto; max-width: none; }
     .tv-main { padding-top: 12px; padding-left: max(10px, env(safe-area-inset-left)); padding-right: max(10px, env(safe-area-inset-right)); }
@@ -464,7 +469,7 @@ const C = {
   row2: "#F8FAFC"
 };
 // Íconos (lucide, licencia ISC) dibujados como SVG: no necesitan internet
-const ICONOS = {"compass":[["path",{"d":"m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z"}],["circle",{"cx":"12","cy":"12","r":"10"}]],"ruler":[["path",{"d":"M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"}],["path",{"d":"m14.5 12.5 2-2"}],["path",{"d":"m11.5 9.5 2-2"}],["path",{"d":"m8.5 6.5 2-2"}],["path",{"d":"m17.5 15.5 2-2"}]],"car":[["path",{"d":"M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"}],["circle",{"cx":"7","cy":"17","r":"2"}],["path",{"d":"M9 17h6"}],["circle",{"cx":"17","cy":"17","r":"2"}]],"table":[["path",{"d":"M12 3v18"}],["rect",{"width":"18","height":"18","x":"3","y":"3","rx":"2"}],["path",{"d":"M3 9h18"}],["path",{"d":"M3 15h18"}]],"map":[["path",{"d":"M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"}],["path",{"d":"M15 5.764v15"}],["path",{"d":"M9 3.236v15"}]],"chart-column":[["path",{"d":"M3 3v16a2 2 0 0 0 2 2h16"}],["path",{"d":"M18 17V9"}],["path",{"d":"M13 17V5"}],["path",{"d":"M8 17v-3"}]],"trending-up":[["path",{"d":"M16 7h6v6"}],["path",{"d":"m22 7-8.5 8.5-5-5L2 17"}]],"calculator":[["rect",{"width":"16","height":"20","x":"4","y":"2","rx":"2"}],["line",{"x1":"8","x2":"16","y1":"6","y2":"6"}],["line",{"x1":"16","x2":"16","y1":"14","y2":"18"}],["path",{"d":"M16 10h.01"}],["path",{"d":"M12 10h.01"}],["path",{"d":"M8 10h.01"}],["path",{"d":"M12 14h.01"}],["path",{"d":"M8 14h.01"}],["path",{"d":"M12 18h.01"}],["path",{"d":"M8 18h.01"}]],"shield-check":[["path",{"d":"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"}],["path",{"d":"m9 12 2 2 4-4"}]],"folder-open":[["path",{"d":"m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"}]],"file-spreadsheet":[["path",{"d":"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"}],["path",{"d":"M14 2v4a2 2 0 0 0 2 2h4"}],["path",{"d":"M8 13h2"}],["path",{"d":"M14 13h2"}],["path",{"d":"M8 17h2"}],["path",{"d":"M14 17h2"}]],"zap":[["path",{"d":"M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"}]],"plus":[["path",{"d":"M5 12h14"}],["path",{"d":"M12 5v14"}]],"chevron-left":[["path",{"d":"m15 18-6-6 6-6"}]],"layers":[["path",{"d":"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"}],["path",{"d":"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"}],["path",{"d":"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"}]],"undo-2":[["path",{"d":"M9 14 4 9l5-5"}],["path",{"d":"M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"}]],"redo-2":[["path",{"d":"m15 14 5-5-5-5"}],["path",{"d":"M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"}]],"route":[["circle",{"cx":"6","cy":"19","r":"3"}],["path",{"d":"M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"}],["circle",{"cx":"18","cy":"5","r":"3"}]],"save":[["path",{"d":"M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"}],["path",{"d":"M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"}],["path",{"d":"M7 3v4a1 1 0 0 0 1 1h7"}]],"upload":[["path",{"d":"M12 3v12"}],["path",{"d":"m17 8-5-5-5 5"}],["path",{"d":"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}]],"share-2":[["circle",{"cx":"18","cy":"5","r":"3"}],["circle",{"cx":"6","cy":"12","r":"3"}],["circle",{"cx":"18","cy":"19","r":"3"}],["line",{"x1":"8.59","x2":"15.42","y1":"13.51","y2":"17.49"}],["line",{"x1":"15.41","x2":"8.59","y1":"6.51","y2":"10.49"}]],"trash-2":[["path",{"d":"M10 11v6"}],["path",{"d":"M14 11v6"}],["path",{"d":"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"}],["path",{"d":"M3 6h18"}],["path",{"d":"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"}]],"copy":[["rect",{"width":"14","height":"14","x":"8","y":"8","rx":"2","ry":"2"}],["path",{"d":"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"}]],"x":[["path",{"d":"M18 6 6 18"}],["path",{"d":"m6 6 12 12"}]],"folder":[["path",{"d":"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"}]],"download":[["path",{"d":"M12 15V3"}],["path",{"d":"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}],["path",{"d":"m7 10 5 5 5-5"}]]};
+const ICONOS = {"compass":[["path",{"d":"m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z"}],["circle",{"cx":"12","cy":"12","r":"10"}]],"ruler":[["path",{"d":"M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"}],["path",{"d":"m14.5 12.5 2-2"}],["path",{"d":"m11.5 9.5 2-2"}],["path",{"d":"m8.5 6.5 2-2"}],["path",{"d":"m17.5 15.5 2-2"}]],"car":[["path",{"d":"M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"}],["circle",{"cx":"7","cy":"17","r":"2"}],["path",{"d":"M9 17h6"}],["circle",{"cx":"17","cy":"17","r":"2"}]],"table":[["path",{"d":"M12 3v18"}],["rect",{"width":"18","height":"18","x":"3","y":"3","rx":"2"}],["path",{"d":"M3 9h18"}],["path",{"d":"M3 15h18"}]],"map":[["path",{"d":"M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"}],["path",{"d":"M15 5.764v15"}],["path",{"d":"M9 3.236v15"}]],"chart-column":[["path",{"d":"M3 3v16a2 2 0 0 0 2 2h16"}],["path",{"d":"M18 17V9"}],["path",{"d":"M13 17V5"}],["path",{"d":"M8 17v-3"}]],"trending-up":[["path",{"d":"M16 7h6v6"}],["path",{"d":"m22 7-8.5 8.5-5-5L2 17"}]],"calculator":[["rect",{"width":"16","height":"20","x":"4","y":"2","rx":"2"}],["line",{"x1":"8","x2":"16","y1":"6","y2":"6"}],["line",{"x1":"16","x2":"16","y1":"14","y2":"18"}],["path",{"d":"M16 10h.01"}],["path",{"d":"M12 10h.01"}],["path",{"d":"M8 10h.01"}],["path",{"d":"M12 14h.01"}],["path",{"d":"M8 14h.01"}],["path",{"d":"M12 18h.01"}],["path",{"d":"M8 18h.01"}]],"shield-check":[["path",{"d":"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"}],["path",{"d":"m9 12 2 2 4-4"}]],"folder-open":[["path",{"d":"m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"}]],"file-spreadsheet":[["path",{"d":"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"}],["path",{"d":"M14 2v4a2 2 0 0 0 2 2h4"}],["path",{"d":"M8 13h2"}],["path",{"d":"M14 13h2"}],["path",{"d":"M8 17h2"}],["path",{"d":"M14 17h2"}]],"zap":[["path",{"d":"M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"}]],"plus":[["path",{"d":"M5 12h14"}],["path",{"d":"M12 5v14"}]],"chevron-left":[["path",{"d":"m15 18-6-6 6-6"}]],"layers":[["path",{"d":"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"}],["path",{"d":"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"}],["path",{"d":"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"}]],"undo-2":[["path",{"d":"M9 14 4 9l5-5"}],["path",{"d":"M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"}]],"redo-2":[["path",{"d":"m15 14 5-5-5-5"}],["path",{"d":"M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"}]],"route":[["circle",{"cx":"6","cy":"19","r":"3"}],["path",{"d":"M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"}],["circle",{"cx":"18","cy":"5","r":"3"}]],"save":[["path",{"d":"M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"}],["path",{"d":"M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"}],["path",{"d":"M7 3v4a1 1 0 0 0 1 1h7"}]],"upload":[["path",{"d":"M12 3v12"}],["path",{"d":"m17 8-5-5-5 5"}],["path",{"d":"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}]],"share-2":[["circle",{"cx":"18","cy":"5","r":"3"}],["circle",{"cx":"6","cy":"12","r":"3"}],["circle",{"cx":"18","cy":"19","r":"3"}],["line",{"x1":"8.59","x2":"15.42","y1":"13.51","y2":"17.49"}],["line",{"x1":"15.41","x2":"8.59","y1":"6.51","y2":"10.49"}]],"trash-2":[["path",{"d":"M10 11v6"}],["path",{"d":"M14 11v6"}],["path",{"d":"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"}],["path",{"d":"M3 6h18"}],["path",{"d":"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"}]],"copy":[["rect",{"width":"14","height":"14","x":"8","y":"8","rx":"2","ry":"2"}],["path",{"d":"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"}]],"x":[["path",{"d":"M18 6 6 18"}],["path",{"d":"m6 6 12 12"}]],"folder":[["path",{"d":"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"}]],"download":[["path",{"d":"M12 15V3"}],["path",{"d":"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}],["path",{"d":"m7 10 5 5 5-5"}]],"lock":[["rect",{"width":"18","height":"11","x":"3","y":"11","rx":"2","ry":"2"}],["path",{"d":"M7 11V7a5 5 0 0 1 10 0v4"}]],"lock-open":[["rect",{"width":"18","height":"11","x":"3","y":"11","rx":"2","ry":"2"}],["path",{"d":"M7 11V7a5 5 0 0 1 9.9-1"}]],"cloud-check":[["path",{"d":"m17 15-5.5 5.5L9 18"}],["path",{"d":"M5 17.743A7 7 0 1 1 15.71 10h1.79a4.5 4.5 0 0 1 1.5 8.742"}]],"history":[["path",{"d":"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"}],["path",{"d":"M3 3v5h5"}],["path",{"d":"M12 7v5l4 2"}]],"cloud-alert":[["path",{"d":"M12 12v4"}],["path",{"d":"M12 20h.01"}],["path",{"d":"M17 18h.5a1 1 0 0 0 0-9h-1.79A7 7 0 1 0 7 17.708"}]]};
 function Icono({ n, size, color, style }) {
   const nodos = ICONOS[n];
   if (!nodos) return null;
@@ -842,12 +847,15 @@ const Label = ({
     marginBottom: 5
   }
 }, children);
+// Vía bloqueada: los campos quedan de solo lectura (ver, calcular y exportar sí se puede)
+const BloqueoCtx = React.createContext(false);
 const Input = ({
   style,
   highlight,
   ...props
 }) => /*#__PURE__*/React.createElement("input", {
   className: "tv-in",
+  readOnly: React.useContext(BloqueoCtx) || props.readOnly,
   style: {
     border: `1px solid ${highlight ? "#6EE7B7" : C.border}`,
     borderRadius: 9,
@@ -889,9 +897,11 @@ const Btn = ({
   onClick,
   color = C.accent,
   small,
-  style
+  style,
+  title
 }) => /*#__PURE__*/React.createElement("button", {
   onClick: onClick,
+  title: title,
   className: "tv-btn",
   style: {
     background: color,
@@ -1129,11 +1139,48 @@ if (typeof window !== "undefined") window.addEventListener("input", function(e) 
 function leerDato(k) { return DATOS.valores[k]; }
 // Cada guardado lleva la hora (clave + "__t") en ambos lugares; al abrir se usa el más reciente.
 function guardarDato(k, v) {
+  if (k === TV_KEY || k === TV_KEY_OBRAS) copiaAutomatica();   // antes de cambiar nada
   DATOS.valores[k] = v;
   const t = Date.now();
-  if (DATOS.idb) TVDB.set(k, v).then(function() { return TVDB.set(k + "__t", t); }).catch(function(e) { console.error("No se pudo guardar en el dispositivo", e); });
-  try { localStorage.setItem(k, JSON.stringify(v)); localStorage.setItem(k + "__t", String(t)); }
+  let lsOk = false;
+  if (DATOS.idb) TVDB.set(k, v).then(function() { return TVDB.set(k + "__t", t); })
+    .then(function() { avisarGuardado(true); })
+    .catch(function(e) { console.error("No se pudo guardar en el dispositivo", e); if (!lsOk) avisarGuardado(false); });
+  try { localStorage.setItem(k, JSON.stringify(v)); localStorage.setItem(k + "__t", String(t)); lsOk = true; }
   catch (e) { try { localStorage.removeItem(k); localStorage.removeItem(k + "__t"); } catch (_) {} /* ya no cabe: queda solo en IndexedDB, sin copia vieja */ }
+  if (lsOk) avisarGuardado(true); else if (!DATOS.idb) avisarGuardado(false);
+}
+// Estado del guardado automático (lo muestra el encabezado)
+function avisarGuardado(ok) {
+  DATOS.guardado = { ok: ok, t: Date.now() };
+  try { window.dispatchEvent(new Event("tv-guardado")); } catch (_) {}
+}
+// ─── COPIAS AUTOMÁTICAS ───────────────────────────────────────────────────────
+// Con el primer cambio de cada vez que se abre la app (y de cada día) se guarda una foto
+// de todas las obras y vías COMO ESTABAN ANTES. Se guardan las últimas COPIAS_MAX.
+const COPIAS_MAX = 15;
+function diaLocal(f) { f = f || new Date(); return f.getFullYear() + "-" + String(f.getMonth() + 1).padStart(2, "0") + "-" + String(f.getDate()).padStart(2, "0"); }
+function leerCopiasAutomaticas() {
+  const k = TV_KEY + "_respaldos";
+  if (DATOS.idb) return TVDB.get(k).then(function(l) { return Array.isArray(l) ? l : []; }).catch(function() { return []; });
+  try { return Promise.resolve(JSON.parse(localStorage.getItem(k) || "[]")); } catch (_) { return Promise.resolve([]); }
+}
+function copiaAutomatica() {
+  const hoy = diaLocal();
+  if (DATOS.copiaDia === hoy || !DATOS.cargado) return;
+  DATOS.copiaDia = hoy;
+  const obras = DATOS.valores[TV_KEY_OBRAS], vias = DATOS.valores[TV_KEY];
+  if (!Array.isArray(vias) || !vias.length) return;
+  const copia = { fecha: new Date().toISOString(), obras: Array.isArray(obras) ? obras : [], vias: vias };
+  const k = TV_KEY + "_respaldos";
+  leerCopiasAutomaticas().then(function(lista) {
+    // si nada cambió desde la última copia, no repetirla
+    if (lista[0] && JSON.stringify(lista[0].vias) === JSON.stringify(vias) && JSON.stringify(lista[0].obras) === JSON.stringify(copia.obras)) return;
+    const nueva = [copia].concat(lista).slice(0, COPIAS_MAX);
+    if (DATOS.idb) return TVDB.set(k, nueva);
+    // sin IndexedDB solo cabe una copia
+    try { localStorage.setItem(k, JSON.stringify([copia])); } catch (_) {}
+  }).catch(function(e) { console.error("No se pudo hacer la copia automática", e); });
 }
 async function precargarDatos(claves) {
   try {
@@ -1158,6 +1205,7 @@ async function precargarDatos(claves) {
     DATOS.idb = false;
     claves.forEach(k => { try { const ls = localStorage.getItem(k); DATOS.valores[k] = ls ? corregirComas(JSON.parse(ls)) : undefined; } catch (_) {} });
   }
+  DATOS.cargado = true;
   pedirEspacioReservado();
 }
 // Pedir al sistema que no borre estos datos cuando libere espacio (sin frenar la apertura)
@@ -1215,6 +1263,28 @@ function histMover(desde, hacia, tipo) {
 const deshacer = () => histMover(HIST.atras, HIST.adelante, "deshacer");
 const rehacer = () => histMover(HIST.adelante, HIST.atras, "rehacer");
 
+// ─── VÍAS BLOQUEADAS ──────────────────────────────────────────────────────────
+// Una vía bloqueada no se puede cambiar ni borrar; solo desbloquear. Cualquier cambio que
+// llegue a una vía bloqueada se descarta aquí (última defensa, además de los avisos en pantalla).
+function avisar(texto) { setTimeout(function() { try { window.dispatchEvent(new CustomEvent("tv-aviso", { detail: texto })); } catch (_) {} }, 0); }
+const AVISO_BLOQUEADA = "🔒 Esta vía está bloqueada. Toca \"Desbloquear\" para editarla.";
+function sinBloqueo(p) { const c = Object.assign({}, p); delete c.bloqueada; return JSON.stringify(c); }
+function protegerBloqueadas(prev, next) {
+  if (!prev.some(function(p) { return p.bloqueada; })) return next;
+  let tocada = false;
+  const res = next.map(function(p) {
+    const ant = prev.find(function(x) { return x.id === p.id; });
+    if (!ant || !ant.bloqueada || ant === p) return p;
+    if (sinBloqueo(ant) === sinBloqueo(p)) return p;    // solo cambia el candado
+    tocada = true; return ant;
+  });
+  prev.forEach(function(ant, i) {                       // vías bloqueadas borradas: vuelven
+    if (ant.bloqueada && !res.some(function(p) { return p.id === ant.id; })) { tocada = true; res.splice(Math.min(i, res.length), 0, ant); }
+  });
+  if (!tocada) return next;
+  avisar(AVISO_BLOQUEADA);
+  return res.length === prev.length && res.every(function(p, i) { return p === prev[i]; }) ? prev : res;
+}
 function useLocalProyectos() {
   const [proyectos, _setProyectos] = React.useState(function() {
     var lista = [];
@@ -1234,9 +1304,11 @@ function useLocalProyectos() {
   });
   HIST.actual.proyectos = proyectos;
   HIST.crudo.proyectos = function(v) { HIST.actual.proyectos = v; guardarDato(TV_KEY, v); _setProyectos(v); };
-  var setProyectos = React.useCallback(function(updater) {
+  // opciones.forzar: restaurar una copia (el usuario ya lo confirmó) puede cambiar vías bloqueadas
+  var setProyectos = React.useCallback(function(updater, opciones) {
     _setProyectos(function(prev) {
       var next = typeof updater === 'function' ? updater(prev) : updater;
+      if (next !== prev && !(opciones && opciones.forzar)) next = protegerBloqueadas(prev, next);
       if (next !== prev) {
         histAntesDeCambio({ proyectos: prev, obras: HIST.actual.obras });
         HIST.actual.proyectos = next;
@@ -1764,6 +1836,44 @@ function leerCopiaSeguridad(texto) {
   return d;
 }
 
+// "Guardado h:mm" en el encabezado: cada cambio se guarda solo, sin botón
+function EstadoGuardado() {
+  const [, setN] = React.useState(0);
+  React.useEffect(() => {
+    const f = () => setN(n => n + 1);
+    window.addEventListener("tv-guardado", f);
+    return () => window.removeEventListener("tv-guardado", f);
+  }, []);
+  const g = DATOS.guardado;
+  const error = g && !g.ok;
+  const hora = g ? new Date(g.t).toLocaleTimeString("es-CO", { hour: "numeric", minute: "2-digit" }) : "";
+  return React.createElement("span", { className: "tv-guardado" + (error ? " error" : ""),
+      title: error ? "No se pudo guardar el último cambio. Haz una copia de seguridad (Inicio → Copia de seguridad)." : "Cada cambio se guarda solo en este dispositivo" },
+    React.createElement(Icono, { n: error ? "cloud-alert" : "cloud-check", size: 16 }),
+    React.createElement("span", { className: "tv-txt" }, error ? "No se pudo guardar" : g ? "Guardado " + hora : "Guardado automático"));
+}
+// Lista de copias automáticas para recuperar el trabajo de antes
+function CopiasAutomaticas({ onRestaurar }) {
+  const [lista, setLista] = React.useState(null);
+  const [verTodas, setVerTodas] = React.useState(false);
+  React.useEffect(() => { let vivo = true; leerCopiasAutomaticas().then(l => { if (vivo) setLista(l); }); return () => { vivo = false; }; }, []);
+  if (!lista) return null;
+  const visibles = verTodas ? lista : lista.slice(0, 4);
+  return React.createElement("div", { style: { marginTop: 14 } },
+    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, fontWeight: 700, fontSize: 13.5, marginBottom: 4 } },
+      React.createElement(Icono, { n: "history", size: 16 }), "Copias automáticas"),
+    React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 6, lineHeight: 1.5 } },
+      "Cada vez que abres la app y cambias algo, antes se guarda una foto de cómo estaba todo. Se guardan las últimas " + COPIAS_MAX + "."),
+    !lista.length && React.createElement("div", { style: { fontSize: 12.5, color: C.muted } }, "Todavía no hay copias: se hace la primera con tu próximo cambio."),
+    visibles.map(c => React.createElement("div", { key: c.fecha, className: "tv-copia-auto", style: { display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: `1px solid ${C.border}`, fontSize: 13, flexWrap: "wrap" } },
+      React.createElement("span", { style: { flex: 1, minWidth: 160 } },
+        React.createElement("strong", null, new Date(c.fecha).toLocaleString("es-CO", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })),
+        React.createElement("span", { style: { color: C.muted } }, " · " + c.obras.length + (c.obras.length === 1 ? " obra" : " obras") + " · " + c.vias.length + (c.vias.length === 1 ? " vía" : " vías"))),
+      React.createElement(Btn, { small: true, color: C.accent2, onClick: () => onRestaurar({ app: "TopoVias", fecha: c.fecha, obras: c.obras, vias: c.vias }) }, "Restaurar"))),
+    lista.length > 4 && React.createElement("button", { onClick: () => setVerTodas(!verTodas), style: { marginTop: 6, background: "none", border: "none", color: C.accent, fontWeight: 700, fontSize: 12.5, cursor: "pointer", padding: 0 } },
+      verTodas ? "Ver menos" : "Ver las " + lista.length + " copias"));
+}
+
 function PanelDatos({ obras, proyectos, onRestaurar, onArchivo }) {
   const [info, setInfo] = React.useState(null);
   const [instalable, setInstalable] = React.useState(!!window.__tvInstalar);
@@ -1813,6 +1923,7 @@ function PanelDatos({ obras, proyectos, onRestaurar, onArchivo }) {
       React.createElement(Btn, { color: C.accent, onClick: () => onArchivo(crearCopiaSeguridad(obras, proyectos)) }, "💾 Copia de seguridad"),
       React.createElement(Btn, { color: C.accent2, onClick: () => inputRef.current && inputRef.current.click() }, "📂 Restaurar copia"),
       React.createElement("input", { ref: inputRef, type: "file", accept: ".json,application/json", style: { display: "none" }, onChange: restaurar })),
+    React.createElement(CopiasAutomaticas, { onRestaurar }),
     !appInstalada() && !instalable && React.createElement("div", { style: { fontSize: 12, color: C.muted, marginTop: 10, lineHeight: 1.5 } },
       esIOS()
         ? "Para instalarla en iPhone/iPad: abre la app en Safari, toca Compartir ⬆ y luego \"Agregar a inicio\"."
@@ -1885,7 +1996,7 @@ function PantallaObra({ obra, vias, onVolver, onRenombrar, onEliminar, onAbrirVi
             return React.createElement("div", { key: v.id, role: "button", tabIndex: 0, onClick: () => onAbrirVia(v.id),
               onKeyDown: e => { if (e.key === "Enter") onAbrirVia(v.id); },
               style: { ...tarjetaS, borderLeft: `4px solid ${r.incompleta ? C.warn : C.success}` } },
-              React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: C.accent } }, "🛣 ", v.nombre || "(sin nombre)"),
+              React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: C.accent } }, v.bloqueada ? "🔒 " : "🛣 ", v.nombre || "(sin nombre)"),
               React.createElement("div", { style: { fontSize: 12, color: C.muted, fontFamily: "monospace" } },
                 r.largo.toFixed(3) + " m · " + r.pis + " PI" + (r.parqs ? " · " + r.parqs + " parq." : "")),
               r.incompleta && React.createElement("div", { style: { fontSize: 12, color: C.warn, fontWeight: 700 } }, "⚠ Tramos sin completar"),
@@ -4500,6 +4611,13 @@ function App() {
   const [memoria, setMemoria] = React.useState([]);
   const [archivo, setArchivo] = React.useState(null); // Excel generado, listo para guardar o compartir
   const [generando, setGenerando] = React.useState(""); // aviso mientras se arma el Excel
+  const [aviso, setAviso] = React.useState("");          // mensaje corto abajo (ej. vía bloqueada)
+  React.useEffect(() => {
+    let reloj = null;
+    const f = e => { setAviso(e.detail); clearTimeout(reloj); reloj = setTimeout(() => setAviso(""), 3200); };
+    window.addEventListener("tv-aviso", f);
+    return () => { window.removeEventListener("tv-aviso", f); clearTimeout(reloj); };
+  }, []);
   const preparar = async (texto, fn) => {
     setGenerando(texto);
     try { const a = await fn(); if (a) setArchivo(a); } finally { setGenerando(""); }
@@ -4542,6 +4660,7 @@ function App() {
   },
     botonHist("↶ Deshacer", "Deshacer el último cambio (Ctrl+Z)", deshacer, HIST.atras.length > 0),
     botonHist("↷", "Rehacer (Ctrl+Y)", rehacer, HIST.adelante.length > 0));
+  const avisoCorto = aviso && React.createElement("div", { className: "tv-aviso", role: "status" }, aviso);
   const avisoGenerando = generando && React.createElement("div", {
     style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 120, display: "flex", alignItems: "center", justifyContent: "center" }
   }, React.createElement("div", { style: { background: "#fff", borderRadius: 10, padding: "16px 22px", fontWeight: 700, color: C.accent, boxShadow: "0 8px 24px rgba(0,0,0,0.2)" } }, "⏳ ", generando));
@@ -4585,6 +4704,8 @@ function App() {
   const eliminarObra = id => {
     const o = obras.find(x => x.id === id);
     const n = viasDeObra(id).length;
+    const bloq = viasDeObra(id).filter(v => v.bloqueada).length;
+    if (bloq) { alert(`🔒 La obra tiene ${bloq} vía(s) bloqueada(s). Desbloquéalas primero si de verdad quieres eliminarla.`); return; }
     if (!confirm(`¿Eliminar la obra "${o ? o.nombre : ""}"${n ? ` y sus ${n} vía(s)` : ""}? Puedes recuperarla con ↶ Deshacer mientras la app esté abierta.`)) return;
     setProyectos(prev => prev.filter(p => p.obraId !== id));
     setObras(prev => prev.filter(x => x.id !== id));
@@ -4599,7 +4720,7 @@ function App() {
     const fecha = d.fecha ? new Date(d.fecha).toLocaleString("es-CO") : "";
     if (!confirm(`Copia del ${fecha}\n\n• ${nuevasO} obra(s) y ${nuevasV} vía(s) nuevas\n• ${actV} vía(s) que ya están en este equipo se reemplazarán por la versión de la copia\n\nNo se borra nada más. ¿Restaurar?`)) return;
     setObras(prev => prev.filter(o => !d.obras.some(x => x.id === o.id)).concat(d.obras));
-    setProyectos(prev => prev.filter(p => !d.vias.some(x => x.id === p.id)).concat(d.vias));
+    setProyectos(prev => prev.filter(p => !d.vias.some(x => x.id === p.id)).concat(d.vias), { forzar: true });
     alert("Copia restaurada.");
   };
   // ── Vías ──
@@ -4622,10 +4743,12 @@ function App() {
     const copia = JSON.parse(JSON.stringify(v));
     copia.id = Date.now() + Math.random();
     copia.nombre = v.nombre + " (copia)";
+    delete copia.bloqueada;   // la copia queda lista para editar
     setProyectos(prev => [...prev, copia]);
   };
   const eliminarVia = id => {
     const v = proyectos.find(p => p.id === id);
+    if (v && v.bloqueada) { alert("🔒 La vía \"" + v.nombre + "\" está bloqueada. Desbloquéala primero si de verdad quieres eliminarla."); return; }
     if (!v || !confirm(`¿Eliminar la vía "${v.nombre}"? Puedes recuperarla con ↶ Deshacer mientras la app esté abierta.`)) return;
     setProyectos(prev => prev.filter(p => p.id !== id));
     if (activoId === id) { setActivoId(null); setTabla(null); setNav({ vista: "obra", obraId: v.obraId }); }
@@ -4639,7 +4762,8 @@ function App() {
     return React.createElement("div", { style: { color: C.text, minHeight: "100vh", display: "flex", flexDirection: "column" } },
       React.createElement("header", { className: "tv-header" },
         React.createElement("div", { className: "tv-brand" }, React.createElement(Logo), React.createElement("div", null, "TopoVías",
-          React.createElement("div", { className: "tv-sub" }, "Calculadora topográfica · 3 decimales · Colombia")))),
+          React.createElement("div", { className: "tv-sub" }, "Calculadora topográfica · 3 decimales · Colombia"))),
+        React.createElement("div", { className: "tv-acciones", style: { marginLeft: "auto" } }, React.createElement(EstadoGuardado))),
       React.createElement("main", { className: "tv-main" },
         obraVista
           ? React.createElement(PantallaObra, {
@@ -4659,11 +4783,13 @@ function App() {
               onArchivo: setArchivo,
               onRestaurar: restaurarCopia
             })),
-      archivo && React.createElement(VentanaArchivo, { archivo: archivo, onClose: () => setArchivo(null) }), avisoGenerando, barraDeshacer);
+      archivo && React.createElement(VentanaArchivo, { archivo: archivo, onClose: () => setArchivo(null) }), avisoGenerando, avisoCorto, barraDeshacer);
   }
 
   const tramosIncompletos = resolverTodos(proy.tramos).map((r, i) => r.completo ? null : i + 1).filter(Boolean);
+  const bloqueada = !!proy.bloqueada;
   const upd = cambios => {
+    if (bloqueada) { avisar(AVISO_BLOQUEADA); return; }
     setProyectos(prev => prev.map(p => p.id === proy.id ? {
       ...p,
       ...cambios
@@ -4671,10 +4797,16 @@ function App() {
     setTabla(null);
   };
   const updSinRecalcular = cambios => {
+    if (bloqueada) { avisar(AVISO_BLOQUEADA); return; }
     setProyectos(prev => prev.map(p => p.id === proy.id ? {
       ...p,
       ...cambios
     } : p));
+  };
+  const alternarBloqueo = () => {
+    if (bloqueada && !confirm(`¿Desbloquear la vía "${proy.nombre}" para editarla?`)) return;
+    setProyectos(prev => prev.map(p => p.id === proy.id ? { ...p, bloqueada: !bloqueada } : p));
+    avisar(bloqueada ? "🔓 Vía desbloqueada: ya puedes editarla." : "🔒 Vía bloqueada: nadie la cambia por error.");
   };
   const calcular = () => {
     const t = generarTabla(proy);
@@ -4738,7 +4870,12 @@ function App() {
     style: { border: "1px solid #334155", padding: "7px 11px" }
   }, React.createElement(Icono, { n: "plus", size: 14 }), "Vía")), /*#__PURE__*/React.createElement("div", {
     className: "tv-acciones"
-  }, /*#__PURE__*/React.createElement(Btn, {
+  }, React.createElement(EstadoGuardado), React.createElement(Btn, {
+    onClick: alternarBloqueo,
+    title: bloqueada ? "Vía bloqueada: toca para desbloquear y editar" : "Bloquear la vía para que no se cambie nada por error",
+    color: bloqueada ? "#B45309" : "#1E293B",
+    style: { fontWeight: 700, fontSize: 13, border: bloqueada ? "none" : "1px solid #334155" }
+  }, React.createElement(Icono, { n: bloqueada ? "lock" : "lock-open", size: 16 }), React.createElement("span", { className: "tv-txt" }, bloqueada ? "Bloqueada" : "Bloquear")), /*#__PURE__*/React.createElement(Btn, {
     onClick: () => preparar("Preparando Excel…", () => exportarExcel(proy, tabla)),
     color: "linear-gradient(90deg, #059669, #0D9488)",
     style: { fontWeight: 700, fontSize: 13 }
@@ -4750,15 +4887,20 @@ function App() {
       fontSize: 13.5,
       letterSpacing: 0.3
     }
-  }, React.createElement(Icono, { n: "zap", size: 16 }), "CALCULAR"))), archivo && React.createElement(VentanaArchivo, { archivo: archivo, onClose: () => setArchivo(null) }), avisoGenerando, barraDeshacer, /*#__PURE__*/React.createElement("nav", {
+  }, React.createElement(Icono, { n: "zap", size: 16 }), "CALCULAR"))), archivo && React.createElement(VentanaArchivo, { archivo: archivo, onClose: () => setArchivo(null) }), avisoGenerando, avisoCorto, barraDeshacer, /*#__PURE__*/React.createElement("nav", {
     className: "tv-tabs"
   }, TABS.map(t => /*#__PURE__*/React.createElement("button", {
     key: t.id,
     "data-tab": t.id,
     onClick: e => { setTab(t.id); try { e.currentTarget.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }); } catch (_) {} },
     className: tab === t.id ? "activa" : undefined
-  }, React.createElement(Icono, { n: t.icono, size: 16 }), t.label))), /*#__PURE__*/React.createElement("main", {
-    className: "tv-main",
+  }, React.createElement(Icono, { n: t.icono, size: 16 }), t.label))),
+  bloqueada && React.createElement("div", { className: "tv-banner-bloqueo" },
+    React.createElement(Icono, { n: "lock", size: 16 }),
+    React.createElement("span", { style: { flex: 1, minWidth: 200 } }, "Vía bloqueada: puedes ver, calcular y exportar, pero no cambiar datos."),
+    React.createElement(Btn, { small: true, color: "#B45309", onClick: alternarBloqueo }, React.createElement(Icono, { n: "lock-open", size: 14 }), "Desbloquear")),
+  React.createElement(BloqueoCtx.Provider, { value: bloqueada }, /*#__PURE__*/React.createElement("main", {
+    className: "tv-main" + (bloqueada ? " tv-bloqueada" : ""),
     style: tab === "via" ? { display: "flex", flexDirection: "column" } : undefined
   }, tab === "via" && React.createElement(IndiceVia, null),
   tab === "via" && React.createElement(TituloSeccionVia, { n: 1, id: "tv-sec-estructura", texto: "Estructura", orden: 1 }),
@@ -5360,14 +5502,15 @@ function App() {
       const np = {
         ...m.proyecto,
         id: Date.now(),
-        nombre: m.nombre + " (copia)"
+        nombre: m.nombre + " (copia)",
+        bloqueada: false
       };
       setProyectos(prev => [...prev, np]);
       setActivoId(np.id);
       setTabla(null);
       setTab("via");
     }
-  }, "Cargar como nuevo proyecto")))))));
+  }, "Cargar como nuevo proyecto"))))))));
 }
 
 var __topoviasRoot__ = ReactDOM.createRoot(document.getElementById("root"));
