@@ -4550,6 +4550,9 @@ function TabNivelaciones({ proyecto, tabla, onChange, onArchivo }) {
       const quitarLectura = i => { if (confirm("¿Quitar esta lectura extra?")) guardar(lecturas.filter((_, j) => j !== i)); };
       const cotas = calcCotasNivelacion(niv, tabla);
       const hayCotas = cotas.some(c => c.cotaEje !== null || c.cotaDer !== null || c.cotaIzq !== null);
+      // lecturas escritas que aún no tienen altura instrumental (falta BM/V⁺ o marcar la estación)
+      const sinAI = lecturas.filter((l, i) => CAMPOS_LECTURA.some(k => hayLectura(l[k])) && cotas[i] && cotas[i].ai === null);
+      const hayLecturas = lecturas.some(l => CAMPOS_LECTURA.some(k => hayLectura(l[k])));
       const av = avanceNivelacion(niv, tabla);
       const idTabla = "tv-lect-" + String(niv.id).replace(/\W/g, "");
       const irADondeQuede = () => {
@@ -4652,8 +4655,10 @@ function TabNivelaciones({ proyecto, tabla, onChange, onArchivo }) {
                     }));
                 }))))),
         // ── Cotas ──
-        hayCotas && React.createElement("div", null,
+        (hayCotas || hayLecturas) && React.createElement("div", null,
           React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: C.success, marginBottom: 6 } }, "Cotas — ", niv.nombre, " (AI − Lectura)"),
+          sinAI.length > 0 && React.createElement("div", { style: { background: "#FDEDEC", border: `1px solid ${C.danger}`, color: C.danger, borderRadius: 8, padding: "8px 12px", marginBottom: 8, fontSize: 13, fontWeight: 600 } },
+            `⚠ ${sinAI.length === 1 ? "Hay 1 abscisa" : "Hay " + sinAI.length + " abscisas"} con lecturas pero sin cota: escribe la Cota BM y la Vista⁺ de la estación y márcala en 📌 Est. en la abscisa donde empieza (desde ${formatoAbscisa(sinAI[0].abs)}).`),
           React.createElement("div", { style: { overflow: "auto", maxHeight: "60vh", border: `1px solid ${C.border}`, borderRadius: 6 } },
             React.createElement("table", { style: { borderCollapse: "separate", borderSpacing: 0, fontSize: 12, width: "100%" } },
               React.createElement("thead", null, React.createElement("tr", null,
