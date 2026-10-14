@@ -12,6 +12,17 @@ Calculadora topográfica de vías, organizada por **obras** y **vías**.
 - `index.html`: toda la app en un solo archivo (React y ExcelJS incluidos, funciona sin internet).
 - `manifest.json`, íconos: para instalarla en el celular, tablet o PC.
 - `sw.js`: modo sin conexión. **Al publicar una versión nueva, cambiar `CACHE_VERSION`** para que los equipos la descarguen.
+- `netlify.toml`: publicación en Netlify (sitio estático, sin compilar). Hace que `index.html`, `sw.js` y `manifest.json` siempre se revisen, para que cada versión nueva llegue a todos los equipos.
+
+## Publicar
+
+1. En Netlify: *Add new site → Import an existing project → GitHub →* `bresmojce-stack/topovias`. Sin comando de compilación; carpeta de publicación: la raíz.
+2. Cada vez que se sube un cambio a `main`, Netlify publica la versión nueva sola.
+3. En el celular: abrir la dirección (https) en Chrome → menú ⋮ → *Instalar app*. En iPhone: Safari → Compartir → *Agregar a inicio*.
+
+## Diseño
+
+Cabecera pizarra con logo, pestañas con íconos (lucide, ISC), tarjetas blancas redondeadas; letras Plus Jakarta Sans y JetBrains Mono (SIL OFL 1.1) incrustadas, sin depender de internet.
 
 ## Datos
 

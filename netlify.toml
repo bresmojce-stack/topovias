@@ -1,0 +1,29 @@
+# Publicación en Netlify: la app es estática (no hay que compilar nada).
+[build]
+  publish = "."
+
+# La app y el modo sin conexión siempre se revisan: así cada versión nueva llega a todos los equipos.
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-cache"
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+    Service-Worker-Allowed = "/"
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Content-Type = "application/manifest+json; charset=utf-8"
+    Cache-Control = "no-cache"
+# Seguridad básica
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
