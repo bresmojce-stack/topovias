@@ -16,9 +16,13 @@ Calculadora topográfica de vías, organizada por **obras** y **vías**.
 
 ## Publicar
 
-1. En Netlify: *Add new site → Import an existing project → GitHub →* `bresmojce-stack/topovias`. Sin comando de compilación; carpeta de publicación: la raíz.
-2. Cada vez que se sube un cambio a `main`, Netlify publica la versión nueva sola.
-3. En el celular: abrir la dirección (https) en Chrome → menú ⋮ → *Instalar app*. En iPhone: Safari → Compartir → *Agregar a inicio*.
+**GitHub Pages** (gratis): en el repositorio → *Settings → Pages → Source: Deploy from a branch* → rama `main`, carpeta `/ (root)` → *Save*.
+Queda en `https://bresmojce-stack.github.io/topovias/` y cada cambio subido a `main` se publica solo en 1–2 minutos.
+Todas las rutas de la app son relativas, por eso funciona dentro de la subcarpeta `/topovias/`. `.nojekyll` hace que GitHub publique los archivos tal cual.
+
+En el celular: abrir la dirección en Chrome → menú ⋮ → *Instalar app*. En iPhone: Safari → Compartir → *Agregar a inicio*.
+
+(También sirve en Netlify con `netlify.toml`.)
 
 ## Diseño
 
