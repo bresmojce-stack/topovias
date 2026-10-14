@@ -1,6 +1,6 @@
 // TopoVías: funciona sin internet.
 // Al publicar una versión nueva, cambiar CACHE_VERSION para que los equipos la descarguen.
-const CACHE_VERSION = "topovias-v7";
+const CACHE_VERSION = "topovias-v8";
 const ARCHIVOS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png", "./icon-maskable.png", "./apple-touch-icon.png", "./favicon.png"];
 
 self.addEventListener("install", e => {

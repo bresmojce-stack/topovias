@@ -486,7 +486,12 @@ function resolverTramo(t) {
     out.faltante = "pendiente";
   } else if (di === null && ci !== null && cf !== null && pe !== null) {
     if (pe !== 0) {
-      out.distancia = r3((cf - ci) / (pe / 100));
+      const d = r3((cf - ci) / (pe / 100));
+      if (d < 0) {
+        // las cotas bajan y la pendiente sube (o al revés): una distancia nunca es negativa
+        out.distancia = null;
+        out.error = "La pendiente y las cotas no coinciden: las cotas " + (cf < ci ? "bajan" : "suben") + " pero la pendiente es " + (pe < 0 ? "negativa" : "positiva") + ". Revisa el signo de la pendiente.";
+      } else out.distancia = d;
     } else if (ci === cf) {
       out.distancia = 0;
     } else {
@@ -556,8 +561,9 @@ function generarAbscisas(absInicio, tramosResueltos, intermediasExtra, parqueade
   tramosResueltos.forEach(rt => {
     absFin = r3(absFin + (rt.distancia || 0));
   });
-  const set = new Set();
-  let a = absIni;
+  // Inicio exacto y luego cada 5 m en abscisas redondas (25.73 → 30, 35, 40…), como en el replanteo
+  const set = new Set([r3(absIni)]);
+  let a = r3(Math.ceil(absIni / 5 - 1e-9) * 5);
   while (a <= absFin + 0.0001) {
     set.add(r3(a));
     a = r3(a + 5);
@@ -5078,9 +5084,7 @@ function App() {
       filas: t.length,
       pendMin: t.length ? Math.min(...t.map(r => r.pendiente)) : 0,
       pendMax: t.length ? Math.max(...t.map(r => r.pendiente)) : 0,
-      proyecto: {
-        ...proy
-      }
+      proyecto: JSON.parse(JSON.stringify(proy))   // copia completa: no cambia si después se edita la vía
     };
     setMemoria(prev => [snap, ...prev].slice(0, 20));
   };
