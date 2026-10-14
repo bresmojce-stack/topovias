@@ -2604,93 +2604,138 @@ const nombreHoja = n => ((n || "Via").replace(/[\\\/\?\*\[\]:]/g, "-").trim() ||
 
 // Arma la hoja de Excel de una vía (memoria de cálculo). La usan el Excel de la vía
 // y el libro consolidado de la obra. Devuelve la hoja y dónde quedó cada cantidad.
+// Colores de la hoja de obra (tomados de "120 norte"): barra de título gris oscuro, rasante en
+// rojo, cada capa en su tono, excavación en café y terreno natural en verde. Cada bloque tiene un
+// tono fuerte para el título y uno suave para los encabezados.
+const PAL = {
+  barra: { fill: "37464F", txt: "FFFFFF" },
+  gris: { tit: "D9D9D9", hdr: "EFEFEF", txt: "262626" },
+  rasante: { tit: "EA9999", hdr: "F4CCCC", txt: "851F0B" },
+  capas: [
+    { tit: "9FC5E8", hdr: "CFE1F3", txt: "0A3C6D" },
+    { tit: "C8DAF8", hdr: "E8EFFB", txt: "0A3C6D" },
+    { tit: "D5C9EA", hdr: "E3DCEF", txt: "3E2A6B" },
+    { tit: "A2D7D3", hdr: "D7EFED", txt: "14524C" },
+    { tit: "F6D28B", hdr: "FCEBC6", txt: "6B4A06" }
+  ],
+  excavacion: { tit: "D4B894", hdr: "EEE2D2", txt: "5B391A" },
+  tn: { tit: "B6D6A8", hdr: "D9EAD2", txt: "274E13" },
+  relleno: { tit: "A9D08E", hdr: "E2EFDA", txt: "375623" },
+  encabezado: "E7E9EB", caja: "F2F2F2"
+};
+
 function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
-
-    // ── helpers ────────────────────────────────────────────────
-    const col2letter = n => { // 0-based → A, B, C...
-      let s = "";
-      n++;
-      while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26); }
-      return s;
-    };
-    const ref = (c, r) => col2letter(c) + (r + 1); // 0-based row/col → "A1"
-    const v = val => ({ v: val == null ? "" : val }); // plain value cell
-    const fv = (formula, val) => ({ f: formula, v: val == null ? 0 : val }); // formula cell
-    const style_title  = { font: { bold: true, sz: 14 } };
-    const style_header = { font: { bold: true }, fill: { fgColor: { rgb: "1A2A1A" } }, fontColor: "FFFFFF" };
-
-    // We'll collect all rows as arrays, then append merges and styles via ws
-    const wsData = []; // array of row-arrays
+    // ── ayudas ─────────────────────────────────────────────────
+    const ref = (c, r) => colLetra(c) + (r + 1);           // fila/columna desde 0 → "A1"
+    const abs$ = (c, r) => "$" + colLetra(c) + "$" + (r + 1);
+    const wsData = [];
     let row = 0;
     const merges = [];
     const boldRows = new Set();
     const headerRows = new Set();
-
-    const pushRow = (cells) => { wsData.push(cells); return row++; };
-    const filasConNumeroDeOrden = new Set(); // filas cuya 1ª columna es N° (1, 2, 3…), sin decimales
+    const filasConNumeroDeOrden = new Set();               // filas cuya 1ª columna es N° (sin decimales)
+    const estilos = new Map();                              // "fila,col" → { fill, txt, bold, size }
+    const pushRow = cells => { wsData.push(Array.from(cells, v => v == null ? "" : v)); return row++; };
     const blank = () => pushRow([""]);
-    // Abscisas: sin ceros de relleno (10 → 10, 23.45 → 23.45, 23.456 → 23.456)
-    const ABS = v => ({ __abs: v });
+    const ABS = v => ({ __abs: v });                        // abscisa sin ceros de relleno
+    const F = (f, v, nf) => ({ f, v: v == null ? 0 : v, nf });
+    const pinta = (r, c, s) => { const k = r + "," + c; estilos.set(k, { ...(estilos.get(k) || {}), ...s }); };
+    const pintaRango = (r, c1, c2, s) => { for (let c = c1; c <= c2; c++) pinta(r, c, s); };
+    // barra de sección: fondo gris oscuro y letra blanca, de lado a lado
+    const barra = (texto, ancho) => {
+      const r = pushRow([texto]);
+      merges.push({ s: { r, c: 0 }, e: { r, c: ancho - 1 } });
+      boldRows.add(r);
+      pintaRango(r, 0, ancho - 1, { fill: PAL.barra.fill, txt: PAL.barra.txt, bold: true, size: 12 });
+      return r;
+    };
+    // título de bloque (tono fuerte) sobre las columnas c0..c1
+    const tituloBloque = (r, c0, c1, texto, fam) => {
+      wsData[r][c0] = texto;
+      if (c1 > c0) merges.push({ s: { r, c: c0 }, e: { r, c: c1 } });
+      pintaRango(r, c0, c1, { fill: fam.tit, txt: fam.txt, bold: true });
+    };
+    const encabezadoBloque = (r, c0, c1, fam) => pintaRango(r, c0, c1, { fill: fam.hdr, txt: fam.txt, bold: true });
     for (let i = 0; i < (filasReservadas || 0); i++) blank(); // espacio para los gráficos
 
-    // ── 1. ENCABEZADO ───────────────────────────────────────────
-    const titleRow = pushRow([`MEMORIA DE CÁLCULO - ${(proyecto.nombre || "VÍA").toUpperCase()}`]);
-    merges.push({ s: { r: titleRow, c: 0 }, e: { r: titleRow, c: 9 } });
-    boldRows.add(titleRow);
+    // Puntos de la sección presentes en esta vía (como en la hoja de obra: lat der | eje | lat izq,
+    // y los parqueaderos en el mismo bloque cuando existen)
+    const hayParqDer = tabla.some(t => t.parqDerCota != null), hayParqIzq = tabla.some(t => t.parqIzqCota != null);
+    const K = [].concat(hayParqDer ? ["parqDer"] : [], ["der", "eje", "izq"], hayParqIzq ? ["parqIzq"] : []);
+    const NOMBRE_K = { parqDer: "PARQ DER", der: "LAT DER", eje: "EJE", izq: "LAT IZQ", parqIzq: "PARQ IZQ" };
+    // ancho de las barras de título: lo que ocupan los bloques de cotas (o los de volumen, si es más)
+    const nBloques = 1 + (tabla[0].capas || []).filter(c => !c.esOculta).length;
+    const ANCHO_HOJA = Math.max(10, 1 + nBloques * (K.length + 2) - 1, 1 + 3 * K.length + 5);
+    const claveAbs = (a, sub) => Number(a).toFixed(3) + "|" + (sub || 0);
 
+    // ── 1. ENCABEZADO ───────────────────────────────────────────
+    const titleRow = barra((proyecto.nombre || "VÍA").toUpperCase() + " — MEMORIA DE CÁLCULO", ANCHO_HOJA);
     const fechaHoy = new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "2-digit", year: "numeric" });
-    // etiqueta | valor | (espacio) | etiqueta (D:E combinadas, para que quepa) | | valor
+    // etiqueta | valor | (espacio) | etiqueta (D:E combinadas) | | valor
     const filaDato = (a, va, b, vb) => { const r = pushRow([a, va, "", b || "", "", vb === undefined ? "" : vb]); if (b) merges.push({ s: { r, c: 3 }, e: { r, c: 4 } }); return r; };
     filaDato("VÍA:", proyecto.nombre || "", "FECHA:", fechaHoy);
     const anchos = anchosProyecto(proyecto);
     const rAncho = filaDato("ANCHO VÍA (m):", r3(anchos.anchoIzq + anchos.anchoDer), "ELABORADO:", "");
-    // Abscisas inicial y final tomadas de la tabla (incluye distancias calculadas, no solo las digitadas)
     const rAbs = filaDato("ABS INICIO (m):", ABS(tabla[0].abs), "ABS FIN (m):", ABS(tabla[tabla.length - 1].abs));
     const sgen = sobreanchoGeneral(proyecto);
-    const rLargo = filaDato("LARGO (m):", { f: `${ref(5, rAbs)}-${ref(1, rAbs)}`, v: r3(tabla[tabla.length - 1].abs - tabla[0].abs) }, "SOBREANCHO IZQ (m):", sgen.izq);
+    const rLargo = filaDato("LARGO (m):", F(`${ref(5, rAbs)}-${ref(1, rAbs)}`, r3(tabla[tabla.length - 1].abs - tabla[0].abs)), "SOBREANCHO IZQ (m):", sgen.izq);
     const rSD = filaDato("", "", "SOBREANCHO DER (m):", sgen.der);
-    // Celdas que usan las fórmulas de cantidades
+    // celdas que usan las fórmulas de cotas y cantidades
     const R = { L: ref(1, rLargo), A: ref(1, rAncho), SI: ref(5, rLargo), SD: ref(5, rSD), esp: {}, saI: {}, saD: {}, parq: {} };
     blank();
 
-    // ── 2. ESTRUCTURA DE LA VÍA ─────────────────────────────────
-    const sec2Row = pushRow(["2. ESTRUCTURA DE LA VÍA"]);
-    merges.push({ s: { r: sec2Row, c: 0 }, e: { r: sec2Row, c: 5 } });
-    boldRows.add(sec2Row);
-
-    headerRows.add(pushRow(["N°", "CAPA / MATERIAL", "ESPESOR (m)", "SOBREANCHO IZQ (m)", "SOBREANCHO DER (m)"]));
+    // ── 2. ESTRUCTURA ───────────────────────────────────────────
     const capasViaX = capasDefinidas(proyecto.capas);
+    const capasVis = (tabla[0].capas || []).filter(c => !c.esOculta);
+    // familia de color de cada superficie de diseño (las capas visibles en orden, la excavación en café)
+    const famCapa = nombre => {
+      if (claveCapa(nombre) === claveCapa("Excavación")) return PAL.excavacion;
+      const i = capasVis.filter(c => !c.esExcavacion).findIndex(c => claveCapa(c.nombre) === claveCapa(nombre));
+      return i < 0 ? PAL.gris : PAL.capas[i % PAL.capas.length];
+    };
+    const famSuperficie = id => {
+      if (!id) return PAL.gris;
+      if (id.startsWith("nivel__")) {
+        const n = (proyecto.nivelaciones || []).find(x => "nivel__" + x.id === id);
+        const t = tipoNivelacion(n);
+        return t === "tn" ? PAL.tn : t === "excavacion" ? PAL.excavacion : PAL.gris;
+      }
+      return id === "tabla__rasante" ? PAL.rasante : famCapa(id.replace("tabla__", ""));
+    };
+    barra("ESTRUCTURA DE LA VÍA", ANCHO_HOJA);
+    const rHE = pushRow(["N°", "CAPA / MATERIAL", "ESPESOR (m)", "SOBREANCHO IZQ (m)", "SOBREANCHO DER (m)"]);
+    headerRows.add(rHE);
+    const filaCapa = (r, fam) => pintaRango(r, 0, 4, { fill: fam.hdr, txt: fam.txt });
     const totalCapas = cs => {
       const r1 = row - cs.length, r2 = row - 1;
-      pushRow(["", "TOTAL ESTRUCTURA", cs.length ? { f: `SUM(${ref(2, r1)}:${ref(2, r2)})`, v: espesorTotal(cs) } : 0]);
-      boldRows.add(row - 1);
+      const r = pushRow(["", "TOTAL ESTRUCTURA", cs.length ? F(`SUM(${ref(2, r1)}:${ref(2, r2)})`, espesorTotal(cs)) : 0]);
+      boldRows.add(r);
       blank();
     };
     capasViaX.forEach((capa, i) => {
       const sc = sobreanchoCapa(proyecto, capa.nombre), k = claveCapa(capa.nombre);
       const r = pushRow([i + 1, capa.nombre || "", parseFloat(capa.espesor) || 0, sc.izq, sc.der]);
       filasConNumeroDeOrden.add(r);
+      filaCapa(r, i === 0 ? PAL.gris : famCapa(capa.nombre));
+      if (i === 0) pintaRango(r, 0, 4, { fill: PAL.gris.tit });
       if (!(k in R.esp)) { R.esp[k] = ref(2, r); R.saI[k] = ref(3, r); R.saD[k] = ref(4, r); }
     });
     totalCapas(capasViaX);
-    // Parqueaderos: medidas (las usan las fórmulas de cantidades)
     const parqsX = (proyecto.parqueaderos || []).filter(pq => !isNaN(parseFloat(pq.absInicio)) && !isNaN(parseFloat(pq.absFin)));
     if (parqsX.length) {
-      boldRows.add(pushRow(["PARQUEADEROS"]));
+      const rt = pushRow(["PARQUEADEROS"]);
+      boldRows.add(rt);
       headerRows.add(pushRow(["PARQUEADERO", "ABS INICIO", "ABS FIN", "ANCHO (m)", "SOBREANCHO EXTERIOR (m)", "SOBREANCHO EXTREMOS (m)"]));
       parqsX.forEach(pq => {
         const r = row;
         pushRow([(pq.nombre || "Parqueadero") + (pq.lado === "izquierdo" ? " (IZQ)" : " (DER)"), ABS(parseFloat(pq.absInicio)), ABS(parseFloat(pq.absFin)),
           parseFloat(pq.ancho) || 0, sobreanchoParq(pq), sobreanchoExtremosParq(pq)]);
-        // largo del parqueadero = |fin − inicio| (dentro de cada fórmula)
         R.parq[pq.id] = { pq, L: `ABS(${ref(2, r)}-${ref(1, r)})`, A: ref(3, r), EXT: ref(4, r), EXTR: ref(5, r), esp: {}, sa: {} };
       });
       blank();
     }
-    // Parqueaderos con estructura propia
     parqsX.filter(pq => pq.estructura === "propia" && capasDefinidas(pq.capas).length).forEach(pq => {
-      const r0 = pushRow([`ESTRUCTURA PARQUEADERO: ${(pq.nombre || "Parqueadero").toUpperCase()} (${pq.lado === "izquierdo" ? "IZQ" : "DER"})`]);
-      boldRows.add(r0);
+      boldRows.add(pushRow([`ESTRUCTURA PARQUEADERO: ${(pq.nombre || "Parqueadero").toUpperCase()} (${pq.lado === "izquierdo" ? "IZQ" : "DER"})`]));
       headerRows.add(pushRow(["N°", "CAPA / MATERIAL", "ESPESOR (m)", "SOBREANCHO (m)"]));
       const cs = capasDefinidas(pq.capas), P = R.parq[pq.id];
       cs.forEach((capa, i) => {
@@ -2702,221 +2747,300 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
       totalCapas(cs);
     });
 
-    // ── 3. CÁLCULO DE COTAS (DISEÑO) ────────────────────────────
-    const sec3Row = pushRow(["3. COTAS DE DISEÑO POR CAPA"]);
-    merges.push({ s: { r: sec3Row, c: 0 }, e: { r: sec3Row, c: 6 } });
-    boldRows.add(sec3Row);
-    // Un bloque por superficie (rasante, cada capa, excavación), uno al lado del otro:
-    // abcs | parq der | lat der | eje | lat izq | parq izq   (igual que la hoja de obra)
-    const capasVis = (tabla[0].capas || []).filter(c => !c.esOculta);
-    const bloques = [{ titulo: "COTAS RASANTE", get: r => [r.parqDerCota, r.cotaLatDer, r.cotaEje, r.cotaLatIzq, r.parqIzqCota] }]
-      .concat(capasVis.map(c => ({ titulo: "COTAS " + c.nombre.toUpperCase(), get: r => { const k = (r.capas || []).find(x => x.nombre === c.nombre) || {}; return [k.parqDer, k.der, k.eje, k.izq, k.parqIzq]; } })));
-    const ANCHO_BLOQUE = 7; // 6 columnas + 1 de separación
-    const filaTit = [], filaHdr = [];
-    bloques.forEach((bq, i) => {
-      filaTit[i * ANCHO_BLOQUE] = bq.titulo;
-      ["ABCS", "PARQ DER", "LAT DER", "EJE", "LAT IZQ", "PARQ IZQ"].forEach((h, j) => { filaHdr[i * ANCHO_BLOQUE + j] = h; });
+    // ── 3. COTAS DE DISEÑO ──────────────────────────────────────
+    // Un bloque por superficie, uno al lado del otro (igual que la hoja de obra). La rasante lleva
+    // la pendiente; cada capa es fórmula: cota de la capa de arriba − espesor de esa capa.
+    barra("COTAS DE DISEÑO", ANCHO_HOJA);
+    const refDiseno = {};   // "tabla__x" → Map(abscisa → { punto: celda })
+    const getRasante = r => ({ parqDer: r.parqDerCota, der: r.cotaLatDer, eje: r.cotaEje, izq: r.cotaLatIzq, parqIzq: r.parqIzqCota });
+    const getCapa = nombre => r => { const k = (r.capas || []).find(x => x.nombre === nombre) || {}; return { parqDer: k.parqDer, der: k.der, eje: k.eje, izq: k.izq, parqIzq: k.parqIzq }; };
+    const bloques = [{ id: "tabla__rasante", titulo: "COTAS RASANTE", fam: PAL.rasante, get: getRasante, pend: true }]
+      .concat(capasVis.map(c => ({ id: "tabla__" + c.nombre, titulo: (c.esExcavacion ? "COTAS EXCAVACIÓN" : "COTAS " + c.nombre.toUpperCase()), fam: famCapa(c.nombre), get: getCapa(c.nombre), capa: c })));
+    // de qué bloque y con qué espesor sale cada capa de la vía (cadena: rasante → capa 2 → … → excavación)
+    const visIdx = id => bloques.findIndex(b => b.id === id);
+    bloques.forEach(b => {
+      if (!b.capa) return;
+      let i = b.capa.esExcavacion ? capasViaX.length : capasViaX.findIndex(c => claveCapa(c.nombre) === claveCapa(b.capa.nombre));
+      if (i <= 0) return;                                      // capa solo de un parqueadero: valores
+      const arriba = capasViaX[i - 1];
+      b.desde = i - 1 === 0 ? 0 : visIdx("tabla__" + arriba.nombre);
+      b.espRef = abs$(2, parseInt(R.esp[claveCapa(arriba.nombre)].replace(/[A-Z]+/, ""), 10) - 1);
     });
-    // Pendiente del eje por abscisa: a la derecha de los bloques, para no cortar la lectura de las cotas
-    const colPend = bloques.length * ANCHO_BLOQUE;
-    filaTit[colPend] = "PENDIENTE DEL EJE";
-    filaHdr[colPend] = "ABCS"; filaHdr[colPend + 1] = "PEND (%)";
-    const rTit = pushRow(Array.from(filaTit, v => v == null ? "" : v));
-    bloques.forEach((_, i) => merges.push({ s: { r: rTit, c: i * ANCHO_BLOQUE }, e: { r: rTit, c: i * ANCHO_BLOQUE + 5 } }));
-    merges.push({ s: { r: rTit, c: colPend }, e: { r: rTit, c: colPend + 1 } });
+    let c0 = 0;
+    bloques.forEach(b => { b.c0 = c0; b.cAbs = c0 + (b.pend ? 1 : 0); b.cK = b.cAbs + 1; c0 = b.cK + K.length + 1; });
+    const rTit = pushRow([]), rHdr = pushRow([]);
+    bloques.forEach(b => {
+      const c1 = b.cK + K.length - 1;
+      tituloBloque(rTit, b.c0, c1, b.titulo, b.fam);
+      if (b.pend) wsData[rHdr][b.c0] = "PEND (%)";
+      wsData[rHdr][b.cAbs] = "ABSCISA";
+      K.forEach((k, j) => { wsData[rHdr][b.cK + j] = NOMBRE_K[k]; });
+      encabezadoBloque(rHdr, b.c0, c1, b.fam);
+    });
+    for (let c = 0; c < c0; c++) if (wsData[rHdr][c] == null) wsData[rHdr][c] = "";
     boldRows.add(rTit);
-    headerRows.add(pushRow(Array.from(filaHdr, v => v == null ? "" : v)));
+    headerRows.add(rHdr);
     tabla.forEach(trow => {
-      const fila = [];
-      bloques.forEach((bq, i) => {
-        fila[i * ANCHO_BLOQUE] = ABS(trow.abs);
-        bq.get(trow).forEach((v, j) => { fila[i * ANCHO_BLOQUE + 1 + j] = v != null ? v : ""; });
+      const r = row, fila = [];
+      bloques.forEach((b, bi) => {
+        if (b.pend) fila[b.c0] = trow.pendiente != null ? trow.pendiente : "";
+        fila[b.cAbs] = bi === 0 ? ABS(trow.abs) : F(ref(bloques[0].cAbs, r), trow.abs, XL.abscisa);
+        const vals = b.get(trow);
+        const mapa = refDiseno[b.id] = refDiseno[b.id] || new Map();
+        const celdas = {};
+        K.forEach((k, j) => {
+          const v = vals[k];
+          if (v == null) { fila[b.cK + j] = ""; return; }
+          const c = b.cK + j;
+          celdas[k] = ref(c, r);
+          // parqueadero con estructura propia: su cota va como valor (sus espesores son otros)
+          const pq = k === "parqDer" ? parqEn(proyecto, "derecho", trow.abs) : k === "parqIzq" ? parqEn(proyecto, "izquierdo", trow.abs) : null;
+          const conFormula = b.espRef && !(pq && pq.estructura === "propia");
+          const arriba = conFormula ? bloques[b.desde] : null;
+          const vArriba = arriba ? arriba.get(trow)[k] : null;
+          fila[c] = conFormula && vArriba != null ? F(`${ref(arriba.cK + j, r)}-${b.espRef}`, v) : v;
+        });
+        mapa.set(claveAbs(trow.abs, 0), celdas);
       });
-      fila[colPend] = ABS(trow.abs);
-      fila[colPend + 1] = trow.pendiente != null ? trow.pendiente : "";
-      pushRow(Array.from(fila, v => v == null ? "" : v));
+      pushRow(fila);
     });
     blank();
 
     // ── 4. NIVELACIONES DE CAMPO ────────────────────────────────
-    const nivelaciones = proyecto.nivelaciones || [];
-    if (nivelaciones.length > 0) {
-      nivelaciones.forEach((niv, ni) => {
-        const sec4Row = pushRow([`4.${ni + 1}. NIVELACIÓN: ${etiquetaNivelacion(niv)}`]);
-        merges.push({ s: { r: sec4Row, c: 0 }, e: { r: sec4Row, c: 7 } });
-        boldRows.add(sec4Row);
-
-        // BM Estaciones
-        const estaciones = niv.estaciones || [];
+    // Como la hoja de obra: cotas medidas (fórmula = A.I. − lectura) y al lado la cartera con las
+    // lecturas; arriba el cuadro de estaciones (A.I. = cota BM + vista +).
+    const refNivel = {};    // "nivel__id" → Map("abscisa|sub" → { punto: celda })
+    (proyecto.nivelaciones || []).forEach((niv, ni) => {
+      const fam = famSuperficie("nivel__" + niv.id);
+      const rb = barra(`NIVELACIÓN ${ni + 1}: ${etiquetaNivelacion(niv).toUpperCase()}`, ANCHO_HOJA);
+      pintaRango(rb, 0, ANCHO_HOJA - 1, { fill: fam.tit, txt: fam.txt });
+      const estaciones = niv.estaciones || [];
+      const aiRef = {};
+      if (estaciones.length) {
+        headerRows.add(pushRow(["ESTACIÓN", "FECHA", "COTA BM", "VISTA +", "A.I."]));
         estaciones.forEach(est => {
-          const cBM = parseFloat(est.cotaBM), vM = parseFloat(est.vistaMas);
-          pushRow(["  BM:", est.nombre || "", "Cota BM:", isNaN(cBM) ? "" : cBM, "Vista +:", isNaN(vM) ? "" : vM, "A.I.:", !isNaN(cBM) && !isNaN(vM) ? r3(cBM + vM) : ""]);
-        });
-
-        const nHdr = pushRow(["ABSCISA", "A.I.", "PARQ DER", "LAT DER", "EJE", "LAT IZQ", "PARQ IZQ", "COTA EJE (calc)"]);
-        headerRows.add(nHdr);
-
-        // Compute nivelacion cotas using same logic as calcCotasNivelacion
-        const cotas = calcCotasNivelacion(niv, tabla);
-        cotas.forEach(cn => {
-          pushRow([
-            ABS(cn.abs),
-            cn.ai != null ? cn.ai : "",
-            cn.cotaParqDer != null ? cn.cotaParqDer : "",
-            cn.cotaDer != null ? cn.cotaDer : "",
-            cn.cotaEje != null ? cn.cotaEje : "",
-            cn.cotaIzq != null ? cn.cotaIzq : "",
-            cn.cotaParqIzq != null ? cn.cotaParqIzq : "",
-            cn.cotaEje != null ? cn.cotaEje : ""
-          ]);
+          const bm = parseFloat(est.cotaBM), vm = parseFloat(est.vistaMas);
+          const r = row;
+          pushRow([est.nombre || "", est.fecha ? fechaCorta(est.fecha) : "", isNaN(bm) ? "" : bm, isNaN(vm) ? "" : vm,
+            !isNaN(bm) && !isNaN(vm) ? F(`${ref(2, r)}+${ref(3, r)}`, r3(bm + vm)) : ""]);
+          pintaRango(r, 0, 4, { fill: PAL.caja });
+          if (!isNaN(bm) && !isNaN(vm)) aiRef[est.id] = abs$(4, r);
         });
         blank();
-      });
-    }
-
-    // ── 5. VOLÚMENES ────────────────────────────────────────────
-    const volumenes = proyecto.volumenes || [];
-    // Track resumen data: [name, totalCellRef]
-    const resumenData = [];
-
-    let nVol = 0;
-    volumenes.forEach(vol => {
-      const total = calcVolumenTotal(vol, proyecto, tabla);
-      if (!total) return;
-      nVol++;
-      const sec5Row = pushRow([`5.${nVol}. ${TIPOS_VOLUMEN[total.tipo].nombre.toUpperCase()}: ${vol.nombre || "Volumen"}`]);
-      merges.push({ s: { r: sec5Row, c: 0 }, e: { r: sec5Row, c: 8 } });
-      boldRows.add(sec5Row);
-      if (total.tipo !== "libre") pushRow([TIPOS_VOLUMEN[total.tipo].ayuda]);
-      const varias = total.partes.length > 1;
-      const totalesPartes = [];
-      total.partes.forEach(({ parte, r: resultado }, pi) => {
-      if (varias) { const rp = pushRow([`${String.fromCharCode(97 + pi)}) ${parte.nombre}`]); boldRows.add(rp); }
-      pushRow(["Superficie superior:", etiquetaSuperficie(parte.fuenteSup, proyecto, tabla), "", "Superficie inferior:", etiquetaSuperficie(parte.fuenteInf, proyecto, tabla), "", "Sobreancho izq (m):", resultado.saIzq, "Sobreancho der (m):", resultado.saDer]);
-
-      const vHdr = pushRow(["ABSCISA", "ÁREA m²", "DIST (m)", "VOL (m³)", "VOL ACUM (m³)"]);
-      headerRows.add(vHdr);
-
-      const filas = resultado.filas;
-      const dataStartRow = row;
-      const colArea = 1;   // B = col index 1
-      const colDist = 2;   // C
-      const colVol  = 3;   // D
-      const colAcum = 4;   // E
-
-      // DIST ya incluye el sobreancho en el primer y último segmento; el volumen extra
-      // por sobreancho de parqueaderos se suma como constante, así el total coincide con la app.
-      filas.forEach((f, fi) => {
-        if (fi === 0) {
-          pushRow([ABS(f.abs), f.area, "", 0, 0]);
-          return;
-        }
-        const prevAreaRef = ref(colArea, dataStartRow + fi - 1);
-        const currAreaRef = ref(colArea, dataStartRow + fi);
-        const distRef     = ref(colDist, dataStartRow + fi);
-        const prevAcumRef = ref(colAcum, dataStartRow + fi - 1);
-        const volFormula  = `(${prevAreaRef}+${currAreaRef})/2*${distRef}` + (f.extra ? `+${f.extra}` : "");
-        const acumFormula = `${prevAcumRef}+${ref(colVol, dataStartRow + fi)}`;
-        const acumVal = r3(filas.slice(1, fi + 1).reduce((s, ff) => s + (ff.volExacto || 0), 0)); // exacto, igual que la fórmula
-        pushRow([ABS(f.abs), f.area, f.dist, { f: volFormula, v: f.vol }, { f: acumFormula, v: acumVal }]);
-      });
-
-      const totalRow = row;
-      const volSumStart = ref(colVol, dataStartRow + 1);
-      const volSumEnd   = ref(colVol, dataStartRow + filas.length - 1);
-      const totalFormula = filas.length > 1 ? `SUM(${volSumStart}:${volSumEnd})` : "0";
-      pushRow([varias ? "SUBTOTAL " + String.fromCharCode(97 + pi) + ")" : "TOTAL", "", "", { f: totalFormula, v: resultado.volTotal }, ""]);
-      boldRows.add(totalRow);
-      totalesPartes.push(ref(colVol, totalRow));
-      if (varias && pi < total.partes.length - 1) blank();
-      });
-      let totalRef = totalesPartes[0];
-      if (varias) {
-        const tr = pushRow(["TOTAL " + (vol.nombre || "Volumen").toUpperCase(), "", "", { f: totalesPartes.join("+"), v: total.volTotal }, ""]);
-        boldRows.add(tr);
-        totalRef = ref(3, tr);   // columna D = VOL (m³)
       }
-      resumenData.push({ nombre: vol.nombre || "Volumen", totalRef, sheetName, totalVal: total.volTotal, vol });
+      const lecturas = alinearLecturas(niv, tabla);
+      const cotas = calcCotasNivelacion(niv, tabla);
+      // bloque de cotas | separación | bloque de cartera (abscisa, estación, A.I., lecturas)
+      const cA = 0, cK1 = 1, cL0 = cK1 + K.length + 1, cLEst = cL0 + 1, cLAI = cL0 + 2, cLK = cL0 + 3;
+      const rT = pushRow([]), rH = pushRow([]);
+      tituloBloque(rT, cA, cK1 + K.length - 1, "COTAS " + nombreTipoNivel(niv).toUpperCase(), fam);
+      tituloBloque(rT, cL0, cLK + K.length - 1, "CARTERA (LECTURAS)", fam);
+      wsData[rH][cA] = "ABSCISA";
+      K.forEach((k, j) => { wsData[rH][cK1 + j] = NOMBRE_K[k]; wsData[rH][cLK + j] = NOMBRE_K[k]; });
+      wsData[rH][cL0] = "ABSCISA"; wsData[rH][cLEst] = "ESTACIÓN"; wsData[rH][cLAI] = "A.I.";
+      for (let c = 0; c < cLK + K.length; c++) if (wsData[rH][c] == null) wsData[rH][c] = "";
+      encabezadoBloque(rH, cA, cK1 + K.length - 1, fam);
+      encabezadoBloque(rH, cL0, cLK + K.length - 1, fam);
+      boldRows.add(rT);
+      headerRows.add(rH);
+      const mapa = refNivel["nivel__" + niv.id] = new Map();
+      lecturas.forEach((lec, i) => {
+        // estación que rige esta fila: la última marcada hacia arriba (igual que la app)
+        let est = null;
+        for (let j = i; j >= 0; j--) { const id = lecturas[j].estacionId; if (id) { est = estaciones.find(e => e.id === id) || null; if (est) break; } }
+        const cn = cotas[i], r = row, fila = [];
+        fila[cA] = ABS(lec.abs);
+        fila[cL0] = F(ref(cA, r), lec.abs, XL.abscisa);
+        fila[cLEst] = est ? (est.nombre || "") + (lec.sub ? " · extra" : "") : "";
+        const ai = est && aiRef[est.id] ? aiRef[est.id] : null;
+        fila[cLAI] = ai && cn.ai != null ? F(ai, cn.ai) : "";
+        const celdas = {};
+        const cotaDe = { parqDer: cn.cotaParqDer, der: cn.cotaDer, eje: cn.cotaEje, izq: cn.cotaIzq, parqIzq: cn.cotaParqIzq };
+        K.forEach((k, j) => {
+          const l = parseFloat(lec[k]);
+          fila[cLK + j] = isNaN(l) ? "" : l;
+          if (cotaDe[k] == null) { fila[cK1 + j] = ""; return; }
+          fila[cK1 + j] = fila[cLAI] ? F(`${ref(cLAI, r)}-${ref(cLK + j, r)}`, cotaDe[k]) : cotaDe[k];
+          celdas[k] = ref(cK1 + j, r);
+        });
+        mapa.set(claveAbs(lec.abs, lec.sub), celdas);
+        pushRow(fila);
+      });
       blank();
     });
 
-    // ── 7. CANTIDADES DE LA VÍA ─────────────────────────────────
-    const cantRefs = {}; // clave de la cantidad → celda con su valor (para la hoja resumen)
-    let cantQ = null;
-    {
-      const q = calcCantidades(proyecto, tabla);
-      const r7 = pushRow(["6. CANTIDADES DE LA VÍA"]);
-      boldRows.add(r7);
-      // ITEM | UNID | CANTIDAD. Cada cantidad es una fórmula de Excel con las celdas de esta hoja
-      // (largo, ancho, sobreanchos, espesores, parqueaderos y totales de volumen), igual que calcCantidades.
-      const hC = pushRow(["ITEM", "UNID", "CANTIDAD"]);
-      headerRows.add(hC);
-      const cfg = proyecto.cantidades || {};
-      const manual = parseFloat(cfg.areaManual), usaManual = !isNaN(manual) && manual > 0;
-      const excl = (cfg.capasExcluidas || []).map(claveCapa);
-      const areaRef = ref(2, hC + 1); // el área conformada es siempre el primer item
-      const partes = {};
-      const addF = (nombre, unidad, f) => { const k = claveCapa(nombre) + "|" + unidad; (partes[k] = partes[k] || []).push(f); };
-      const parqs = Object.values(R.parq);
-      const ladoSA = (P, izq, der) => P.pq.lado === "izquierdo" ? izq : der;
-      if (!usaManual) {
-        addF("Área conformada", "m²", `${R.L}*(${R.A}+${R.SI}+${R.SD})`
-          + parqs.map(P => `-${P.L}*${ladoSA(P, R.SI, R.SD)}+(${P.L}+2*${P.EXTR})*(${P.A}+${P.EXT})`).join(""));
-      }
-      capasViaX.forEach(c => {
-        const k = claveCapa(c.nombre);
-        if (excl.includes(k) || R.esp[k] === undefined) return;
-        if (usaManual) { addF(c.nombre, "m³", `${areaRef}*${R.esp[k]}`); return; }
-        const desc = parqs.map(P => `-${P.L}*${ladoSA(P, R.saI[k], R.saD[k])}`).join("");
-        addF(c.nombre, "m³", `(${R.L}*(${R.A}+${R.saI[k]}+${R.saD[k]})${desc})*${R.esp[k]}`);
-      });
-      if (!usaManual) parqs.forEach(P => {
-        const propia = P.pq.estructura === "propia";
-        const estr = propia ? capasDefinidas(P.pq.capas) : capasViaX;
-        estr.forEach(c => {
-          const k = claveCapa(c.nombre);
-          if (excl.includes(k)) return;
-          const esp = propia ? P.esp[k] : R.esp[k];
-          if (!esp) return;
-          // sobreancho de esta capa en el parqueadero
-          let sp = "0";
-          if (propia) sp = P.sa[k];
-          else if (c.sobreancho === "general") sp = P.EXT;
-          else if (c.sobreancho === "propio") sp = ladoSA(P, R.saI[k], R.saD[k]);
-          addF(c.nombre, "m³", sp === "0" ? `${P.L}*${P.A}*${esp}` : `IF(${sp}>0,${P.L}+2*${P.EXTR},${P.L})*(${P.A}+${sp})*${esp}`);
+    // ── 5. VOLÚMENES ────────────────────────────────────────────
+    // Por abscisa: cotas de arriba | cotas de abajo | cortes por punto | promedio | ancho | área |
+    // distancia | volumen. Las cotas apuntan a las celdas de las secciones 3 y 4.
+    const resumenData = [];
+    const celdaSuperficie = (id, a, sub, k) => {
+      const m = id.startsWith("nivel__") ? refNivel[id] : refDiseno[id];
+      if (!m) return null;
+      const c = m.get(claveAbs(a, sub)) || m.get(claveAbs(a, 0));
+      return c && c[k] ? c[k] : null;
+    };
+    // nombre corto de la superficie para el título del bloque (que no se corte)
+    const nombreCorto = id => {
+      if (id === "tabla__rasante") return "RASANTE";
+      if (id.startsWith("tabla__")) { const n = id.replace("tabla__", ""); return claveCapa(n) === claveCapa("Excavación") ? "EXCAVACIÓN TEÓRICA" : "COTA " + n.toUpperCase(); }
+      const nv = (proyecto.nivelaciones || []).find(x => "nivel__" + x.id === id);
+      return nv ? etiquetaNivelacion(nv).toUpperCase() : "";
+    };
+    const valorSuperficie = (serie, a, sub) => {
+      const igual = serie.filter(p => Math.abs(p.abs - a) < 0.0005);
+      return igual.find(p => (p.sub || 0) === (sub || 0)) || igual[igual.length - 1] || null;
+    };
+    let nVol = 0;
+    (proyecto.volumenes || []).forEach(vol => {
+      const total = calcVolumenTotal(vol, proyecto, tabla);
+      if (!total) return;
+      nVol++;
+      const famV = total.tipo === "excavacion" ? PAL.excavacion : total.tipo === "relleno" ? PAL.relleno : PAL.gris;
+      const rb = barra(`VOLUMEN ${nVol}: ${(vol.nombre || "Volumen").toUpperCase()} (${TIPOS_VOLUMEN[total.tipo].nombre.toLowerCase()})`, ANCHO_HOJA);
+      pintaRango(rb, 0, ANCHO_HOJA - 1, { fill: famV.tit, txt: famV.txt });
+      const varias = total.partes.length > 1;
+      const totalesPartes = [];
+      let colVolUlt = 0;
+      total.partes.forEach(({ parte, r: res }, pi) => {
+        const Kv = [].concat(res.filas.some(f => f.tieneParqDer) ? ["parqDer"] : [], ["der", "eje", "izq"], res.filas.some(f => f.tieneParqIzq) ? ["parqIzq"] : []);
+        const n = Kv.length;
+        const cS = 1, cI = cS + n, cC = cI + n, cP = cC + n, cAn = cP + 1, cAr = cP + 2, cD = cP + 3, cV = cP + 4;
+        colVolUlt = cV;
+        if (varias) boldRows.add(pushRow([`${String.fromCharCode(97 + pi)}) ${parte.nombre}`]));
+        const famS = famSuperficie(parte.fuenteSup), famI = famSuperficie(parte.fuenteInf);
+        const rT = pushRow([]), rH = pushRow([]);
+        wsData[rT][0] = "";
+        tituloBloque(rT, cS, cI - 1, nombreCorto(parte.fuenteSup), famS);
+        tituloBloque(rT, cI, cC - 1, nombreCorto(parte.fuenteInf), famI);
+        tituloBloque(rT, cC, cC + n - 1, parte.conSigno ? "SOBRE-EXCAVACIÓN" : "CORTES", PAL.excavacion);
+        tituloBloque(rT, cP, cV, "ÁREA Y VOLUMEN", PAL.excavacion);
+        wsData[rH][0] = "ABSCISA";
+        Kv.forEach((k, j) => { wsData[rH][cS + j] = NOMBRE_K[k]; wsData[rH][cI + j] = NOMBRE_K[k]; wsData[rH][cC + j] = NOMBRE_K[k]; });
+        wsData[rH][cP] = "PROMEDIO"; wsData[rH][cAn] = "ANCHO (m)"; wsData[rH][cAr] = "ÁREA (m²)"; wsData[rH][cD] = "DIST (m)"; wsData[rH][cV] = "VOLUMEN (m³)";
+        encabezadoBloque(rH, 0, 0, PAL.gris);
+        encabezadoBloque(rH, cS, cI - 1, famS); encabezadoBloque(rH, cI, cC - 1, famI); encabezadoBloque(rH, cC, cV, PAL.excavacion);
+        boldRows.add(rT);
+        headerRows.add(rH);
+        const serS = getSerie(parte.fuenteSup, proyecto, tabla), serI = getSerie(parte.fuenteInf, proyecto, tabla);
+        const r0 = row;
+        res.filas.forEach((f, fi) => {
+          const r = row, fila = [];
+          fila[0] = ABS(f.abs);
+          const pS = valorSuperficie(serS, f.abs, f.sub), pI = valorSuperficie(serI, f.abs, f.sub);
+          const dif = { parqDer: f.dParqDer, der: f.dDer, eje: f.dEje, izq: f.dIzq, parqIzq: f.dParqIzq };
+          Kv.forEach((k, j) => {
+            const vs = pS ? pS[k] : null, vi = pI ? pI[k] : null;
+            const rs = vs != null ? celdaSuperficie(parte.fuenteSup, f.abs, f.sub, k) : null;
+            const ri = vi != null ? celdaSuperficie(parte.fuenteInf, f.abs, f.sub, k) : null;
+            fila[cS + j] = vs == null ? "" : rs ? F(rs, vs) : vs;
+            fila[cI + j] = vi == null ? "" : ri ? F(ri, vi) : vi;
+            fila[cC + j] = dif[k] == null || vs == null || vi == null ? "" : F(`${ref(cS + j, r)}-${ref(cI + j, r)}`, dif[k]);
+          });
+          fila[cP] = F(`ROUND(AVERAGE(${ref(cC, r)}:${ref(cC + n - 1, r)}),3)`, f.prom);
+          fila[cAn] = f.ancho;
+          fila[cAr] = F(parte.conSigno ? `ROUND(${ref(cP, r)}*${ref(cAn, r)},3)` : `ROUND(MAX(0,${ref(cP, r)}*${ref(cAn, r)}),3)`, f.area);
+          if (fi === 0 || f.inicioTramo) { fila[cD] = ""; fila[cV] = ""; }
+          else {
+            const ajuste = r3(f.dist - Math.abs(f.abs - res.filas[fi - 1].abs));   // sobreancho a lo largo (si se pidió)
+            fila[cD] = F(`${ref(0, r)}-${ref(0, r - 1)}` + (ajuste ? `+${ajuste}` : ""), f.dist);
+            fila[cV] = F(`(${ref(cAr, r - 1)}+${ref(cAr, r)})/2*${ref(cD, r)}` + (f.extra ? `+${f.extra}` : ""), f.vol);
+          }
+          pushRow(fila);
         });
+        const rt = pushRow([]);
+        wsData[rt][cD] = varias ? "SUBTOTAL" : "TOTAL";
+        wsData[rt][cV] = F(res.filas.length > 1 ? `SUM(${ref(cV, r0)}:${ref(cV, rt - 1)})` : "0", res.volTotal);
+        for (let c = 0; c < cV; c++) if (wsData[rt][c] == null) wsData[rt][c] = "";
+        boldRows.add(rt);
+        totalesPartes.push(ref(cV, rt));
+        blank();
       });
-      resumenData.forEach(rd => addF((rd.vol.concepto || "").trim() || rd.vol.nombre || "Volumen", "m³", rd.totalRef));
-      (cfg.extras || []).forEach(x => { if (x.nombre && x.nombre.trim()) addF(x.nombre, "m²", areaRef); });
-      q.items.forEach(it => {
-        const fs = partes[it.clave];
-        const r = pushRow([it.nombre, it.unidad, fs && fs.length ? { f: fs.join("+"), v: it.valor } : it.valor]);
-        cantRefs[it.clave] = ref(2, r);
+      let totalRef = totalesPartes[0];
+      if (varias) {
+        const tr = pushRow([]);
+        wsData[tr][colVolUlt - 1] = "TOTAL";
+        wsData[tr][colVolUlt] = F(totalesPartes.join("+"), total.volTotal);
+        for (let c = 0; c < colVolUlt; c++) if (wsData[tr][c] == null) wsData[tr][c] = "";
+        pintaRango(tr, colVolUlt - 1, colVolUlt, { fill: PAL.caja, bold: true, borde: true });
+        boldRows.add(tr);
+        totalRef = ref(colVolUlt, tr);
+        blank();
+      }
+      resumenData.push({ nombre: vol.nombre || "Volumen", totalRef, totalVal: total.volTotal, vol });
+    });
+
+    // ── 6. CANTIDADES ───────────────────────────────────────────
+    // ÍTEM | UNID | ÁREA | ESPESOR | CANTIDAD, todo con fórmulas de esta hoja.
+    const cantRefs = {};
+    const q = calcCantidades(proyecto, tabla);
+    barra("CANTIDADES " + (proyecto.nombre || "DE LA VÍA").toUpperCase(), ANCHO_HOJA);
+    const hC = pushRow(["ÍTEM", "UNID", "ÁREA (m²)", "ESPESOR (m)", "CANTIDAD"]);
+    headerRows.add(hC);
+    const cfg = proyecto.cantidades || {};
+    const manual = parseFloat(cfg.areaManual), usaManual = !isNaN(manual) && manual > 0;
+    const excl = (cfg.capasExcluidas || []).map(claveCapa);
+    const areaRef = ref(4, hC + 1);   // el área conformada es siempre el primer ítem
+    const partes = {};                // clave → { areas: [[área, espesor]], vols: [celdas], f: [fórmulas sueltas] }
+    const P_ = k => (partes[k] = partes[k] || { areas: [], vols: [], f: [] });
+    const parqs = Object.values(R.parq);
+    const ladoSA = (P, izq, der) => P.pq.lado === "izquierdo" ? izq : der;
+    if (!usaManual) P_("área conformada|m²").f.push(`${R.L}*(${R.A}+${R.SI}+${R.SD})`
+      + parqs.map(P => `-${P.L}*${ladoSA(P, R.SI, R.SD)}+(${P.L}+2*${P.EXTR})*(${P.A}+${P.EXT})`).join(""));
+    capasViaX.forEach(c => {
+      const k = claveCapa(c.nombre);
+      if (excl.includes(k) || R.esp[k] === undefined) return;
+      if (usaManual) { P_(k + "|m³").areas.push([areaRef, R.esp[k]]); return; }
+      const desc = parqs.map(P => `-${P.L}*${ladoSA(P, R.saI[k], R.saD[k])}`).join("");
+      P_(k + "|m³").areas.push([`${R.L}*(${R.A}+${R.saI[k]}+${R.saD[k]})${desc}`, R.esp[k]]);
+    });
+    if (!usaManual) parqs.forEach(P => {
+      const propia = P.pq.estructura === "propia";
+      const estr = propia ? capasDefinidas(P.pq.capas) : capasViaX;
+      estr.forEach(c => {
+        const k = claveCapa(c.nombre);
+        if (excl.includes(k)) return;
+        const esp = propia ? P.esp[k] : R.esp[k];
+        if (!esp) return;
+        let sp = "0";
+        if (propia) sp = P.sa[k];
+        else if (c.sobreancho === "general") sp = P.EXT;
+        else if (c.sobreancho === "propio") sp = ladoSA(P, R.saI[k], R.saD[k]);
+        P_(k + "|m³").areas.push([sp === "0" ? `${P.L}*${P.A}` : `IF(${sp}>0,${P.L}+2*${P.EXTR},${P.L})*(${P.A}+${sp})`, esp]);
       });
-      cantQ = q;
-      blank();
+    });
+    resumenData.forEach(rd => P_(claveCapa((rd.vol.concepto || "").trim() || rd.vol.nombre || "Volumen") + "|m³").vols.push(rd.totalRef));
+    (cfg.extras || []).forEach(x => { if (x.nombre && x.nombre.trim()) P_(claveCapa(x.nombre) + "|m²").f.push(areaRef); });
+    q.items.forEach(it => {
+      const p = partes[it.clave] || { areas: [], vols: [], f: [] };
+      const r = row;
+      const fila = [it.nombre, it.unidad, "", "", ""];
+      if (p.areas.length) {
+        // área = suma de las partes; si todas usan la misma celda de espesor: cantidad = área × espesor
+        const mismoEsp = p.areas.every(a => a[1] === p.areas[0][1]);
+        fila[2] = F(p.areas.map(a => a[0]).join("+"), it.area);
+        fila[3] = it.espesor != null ? F(p.areas[0][1], it.espesor) : "varios";
+        const base = mismoEsp ? `${ref(2, r)}*${ref(3, r)}` : p.areas.map(a => `(${a[0]})*${a[1]}`).join("+");
+        fila[4] = F([base].concat(p.vols).join("+"), it.valor);
+      } else {
+        const fs = p.f.concat(p.vols);
+        fila[4] = fs.length ? F(fs.join("+"), it.valor) : it.valor;
+      }
+      pushRow(fila);
+      pinta(r, 0, { bold: true });
+      cantRefs[it.clave] = ref(4, r);
+    });
+    blank();
+
+    // ── 7. RESUMEN DE VOLÚMENES ─────────────────────────────────
+    if (resumenData.length) {
+      barra("RESUMEN DE VOLÚMENES", ANCHO_HOJA);
+      headerRows.add(pushRow(["N°", "VOLUMEN / ACTIVIDAD", "TOTAL (m³)"]));
+      const ini = row;
+      resumenData.forEach((rd, i) => filasConNumeroDeOrden.add(pushRow([i + 1, rd.nombre, F(rd.totalRef, rd.totalVal)])));
+      boldRows.add(pushRow(["", "TOTAL GENERAL", F(`SUM(${ref(2, ini)}:${ref(2, row - 1)})`, r3(resumenData.reduce((s, rd) => s + rd.totalVal, 0)))]));
     }
 
-    // ── 6. RESUMEN ──────────────────────────────────────────────
-    if (resumenData.length > 0) {
-      const sec6Row = pushRow(["7. RESUMEN DE VOLÚMENES"]);
-      merges.push({ s: { r: sec6Row, c: 0 }, e: { r: sec6Row, c: 3 } });
-      boldRows.add(sec6Row);
-
-      const rHdr = pushRow(["N°", "VOLUMEN / ACTIVIDAD", "TOTAL (m³)"]);
-      headerRows.add(rHdr);
-
-      resumenData.forEach((rd, i) => {
-        const formula = `'${sheetName.replace(/'/g, "''")}'!${rd.totalRef}`;
-        filasConNumeroDeOrden.add(pushRow([i + 1, rd.nombre, { f: formula, v: rd.totalVal }]));
-      });
-      const sumStart = ref(2, row - resumenData.length);
-      const sumEnd   = ref(2, row - 1);
-      pushRow(["", "TOTAL GENERAL", { f: `SUM(${sumStart}:${sumEnd})`, v: r3(resumenData.reduce((s, rd) => s + rd.totalVal, 0)) }]);
-      boldRows.add(row - 1);
-    }
-
-    return { wsData, merges, boldRows, headerRows, filasConNumeroDeOrden, titleRow, cantRefs, cant: cantQ };
+    return { wsData, merges, boldRows, headerRows, filasConNumeroDeOrden, titleRow, cantRefs, cant: q, estilos, anchoUniforme: true };
 }
 
 const colLetra = n => { let s = ""; n++; while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26); } return s; };
@@ -2940,7 +3064,7 @@ function escribirHojaExcel(wb, nombre, desc, opciones) {
   const filas = desc.wsData;
   let maxCol = 0;
   filas.forEach(f => { if (f.length > maxCol) maxCol = f.length; });
-  ws.columns = Array.from({ length: Math.max(maxCol, 8) }, (_, c) => ({ width: c === 0 ? 16 : c === 1 ? 19 : 13 })); // A–G caben en una hoja vertical
+  ws.columns = Array.from({ length: Math.max(maxCol, 8) }, (_, c) => ({ width: desc.anchoUniforme ? (c === 0 ? 15 : c === 1 ? 17 : 11.5) : c === 0 ? 16 : c === 1 ? 19 : 13 })); // A–G caben en una hoja vertical
   const esVacia = f => !f || f.every(v => v === "" || v == null);
   let columnasTabla = null; // columnas de la tabla en curso (las del encabezado)
   filas.forEach((f, r) => {
@@ -2954,7 +3078,7 @@ function escribirHojaExcel(wb, nombre, desc, opciones) {
     f.forEach((v, c) => {
       if (v === "" || v == null) return;
       const cel = fila.getCell(c + 1);
-      if (v && typeof v === "object" && v.f) { cel.value = { formula: v.f, result: v.v != null ? v.v : 0 }; cel.numFmt = XL.numero; }
+      if (v && typeof v === "object" && v.f) { cel.value = { formula: v.f, result: v.v != null ? v.v : 0 }; cel.numFmt = v.nf || XL.numero; }
       else if (v && typeof v === "object" && "__abs" in v) { cel.value = v.__abs; cel.numFmt = XL.abscisa; }
       else {
         cel.value = v;
@@ -2986,6 +3110,17 @@ function escribirHojaExcel(wb, nombre, desc, opciones) {
         }
       });
     }
+  });
+  // abscisas centradas (como en la hoja de obra)
+  ws.eachRow(fr => fr.eachCell(cel => { if (cel.numFmt === XL.abscisa) cel.alignment = { ...(cel.alignment || {}), horizontal: "center" }; }));
+  // colores por bloque (hoja de la vía): fondo, color y peso de la letra
+  if (desc.estilos) desc.estilos.forEach((st, k) => {
+    const [r, c] = k.split(",").map(Number);
+    const cel = ws.getCell(r + 1, c + 1);
+    if (st.fill) cel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + st.fill } };
+    if (st.borde) cel.border = { ...bordesFinos, top: { style: "medium", color: { argb: XL.azul } } };
+    const f0 = cel.font || {};
+    cel.font = { name: "Arial", size: st.size || f0.size || 10, bold: st.bold != null ? st.bold : !!f0.bold, color: st.txt ? { argb: "FF" + st.txt } : f0.color };
   });
   (desc.merges || []).forEach(m => {
     const maestra = ws.getCell(m.s.r + 1, m.s.c + 1);
@@ -3114,7 +3249,8 @@ async function exportarLibroObra(obra, vias) {
     data.push(["TOTAL"].concat(R.columnas.map((c, i) => ({ f: "SUM(" + colLetra(i + 1) + (ini + 1) + ":" + colLetra(i + 1) + (fin + 1) + ")", v: R.totales[i] }))));
     const ws = escribirHojaExcel(wb, "RESUMEN", {
       wsData: data, titleRow: 0, boldRows: new Set([0]), headerRows: new Set([3]), filasConNumeroDeOrden: new Set(),
-      merges: [{ s: { r: 0, c: 0 }, e: { r: 0, c: Math.max(nc, 4) } }]
+      merges: [{ s: { r: 0, c: 0 }, e: { r: 0, c: Math.max(nc, 4) } }],
+      estilos: new Map(Array.from({ length: Math.max(nc, 4) + 1 }, (_, c) => ["0," + c, { fill: PAL.barra.fill, txt: PAL.barra.txt, bold: true, size: 13 }]))
     });
     ws.getColumn(1).width = 30;
     R.columnas.forEach((c, i) => { ws.getColumn(i + 2).width = Math.max(14, c.nombre.length + 6); });
