@@ -483,7 +483,9 @@ const Logo = () => React.createElement("img", { className: "tv-logo", src: LOGO_
 // ─── MATEMÁTICA: RESOLVEDOR UNIVERSAL DE TRAMO ───────────────────────────────
 // Cada tramo tiene 4 campos: cotaInicio, cotaFin, pendiente (%), distancia (m)
 // El usuario llena 3 de los 4 (cualquier combinación) y se calcula el restante.
-const r3 = v => Math.round(v * 1000) / 1000;
+// Redondeo a 3 decimales igual que ROUND de Excel: el .5 se aleja del cero, también cuando la
+// computadora guarda 3.5375 como 3.53749999… (por eso se limpia con toFixed antes de redondear)
+const r3 = v => { if (!isFinite(v)) return v; const s = v < 0 ? -1 : 1; return s * Math.round(+(Math.abs(v) * 1000).toFixed(6)) / 1000; };
 function resolverTramo(t) {
   const ci = t.cotaInicio !== "" && t.cotaInicio !== null && t.cotaInicio !== undefined ? parseFloat(t.cotaInicio) : null;
   const cf = t.cotaFin !== "" && t.cotaFin !== null && t.cotaFin !== undefined ? parseFloat(t.cotaFin) : null;
@@ -1220,7 +1222,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "23";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "24";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
