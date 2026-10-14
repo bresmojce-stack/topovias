@@ -1325,6 +1325,9 @@ function calcAreas(proy, tabla) {
 //   · Por cada capa de la estructura: área × espesor (se puede excluir)
 //   · Cada volumen de la pestaña Volúmenes suma a la cantidad que se elija
 //   · Ítems por área agregados por el usuario (ej. un geotextil = área conformada)
+// En Cantidades: la excavación sale con su nombre; los demás volúmenes con "Nombre en Cantidades" (o el suyo)
+const destinoVolumen = v => tipoVolumen(v) === "excavacion" ? (v.nombre || "Excavación") : ((v.concepto || "").trim() || v.nombre || "Volumen");
+const nombreRellenoSobreexc = mat => "Relleno sobre-excavación (" + mat + ")";
 function calcCantidades(proy, tabla) {
   const cfg = proy.cantidades || {};
   const areas = calcAreas(proy, tabla);
@@ -1379,9 +1382,16 @@ function calcCantidades(proy, tabla) {
   (proy.volumenes || []).forEach(v => {
     const r = calcVolumenTotal(v, proy, tabla);
     if (!r) return;
-    const destino = (v.concepto || "").trim() || v.nombre || "Volumen";
-    const it = add(destino, "m³", r.volTotal, `volumen "${v.nombre || "Volumen"}" ${r.volTotal.toFixed(3)} m³`);
+    const it = add(destinoVolumen(v), "m³", r.volTotalExacto, `volumen "${v.nombre || "Volumen"}" ${r.volTotal.toFixed(3)} m³`);
     it.conVolumen = true;
+    // Excavación en dos cortes: el total se muestra dividido en teórica + sobre-excavación, y la
+    // sobre-excavación se repone con el material elegido (ítem aparte, mismo volumen)
+    const c1 = r.partes.find(x => x.parte.clave === "corte1"), c2 = r.partes.find(x => x.parte.clave === "corte2");
+    if (r.tipo === "excavacion" && c1 && c2) {
+      it.desglose = (it.desglose || []).concat([{ nombre: "Excavación teórica", valor: c1.r.volTotal }, { nombre: "Sobre-excavación", valor: c2.r.volTotal }]);
+      const mat = (v.materialRelleno || "").trim();
+      if (mat) add(nombreRellenoSobreexc(mat), "m³", Math.max(0, c2.r.volTotalExacto), "sobre-excavación").esRelleno = true;
+    }
   });
   (cfg.extras || []).forEach(x => { if (x.nombre && x.nombre.trim()) add(x.nombre, "m²", areaConf, "= área conformada"); });
   return { areas, areaConf, usaManual, capas, items };
@@ -1430,11 +1440,18 @@ function TabCantidades({ proyecto, tabla, onChange }) {
           React.createElement("tbody", null, q.items.map((it, i) => {
             const num = { ...tdS, textAlign: "right", fontFamily: "monospace", padding: "6px 5px", whiteSpace: "nowrap", fontSize: 12 };
             const sumaVol = it.conVolumen && it.area !== undefined;   // capa a la que además se le suma un volumen
-            return React.createElement("tr", { key: it.clave, style: { background: i % 2 ? C.row2 : C.row1 } },
-              React.createElement("td", { style: { ...tdS, textAlign: "left", fontWeight: 700, padding: "6px 5px", whiteSpace: "normal", fontSize: 12 } }, it.nombre),
-              React.createElement("td", { style: num }, it.area !== undefined ? it.area.toFixed(3) : ""),
-              React.createElement("td", { style: num }, it.area !== undefined ? (it.espesor !== null ? it.espesor.toFixed(3) : "varios") : ""),
-              React.createElement("td", { style: { ...num, fontWeight: 800, color: C.accent } }, it.valor.toFixed(3) + " " + it.unidad + (sumaVol ? " *" : "")));
+            const fondo = { background: i % 2 ? C.row2 : C.row1 };
+            return React.createElement(React.Fragment, { key: it.clave },
+              React.createElement("tr", { style: fondo },
+                React.createElement("td", { style: { ...tdS, textAlign: "left", fontWeight: 700, padding: "6px 5px", whiteSpace: "normal", fontSize: 12 } }, it.nombre),
+                React.createElement("td", { style: num }, it.area !== undefined ? it.area.toFixed(3) : ""),
+                React.createElement("td", { style: num }, it.area !== undefined ? (it.espesor !== null ? it.espesor.toFixed(3) : "varios") : ""),
+                React.createElement("td", { style: { ...num, fontWeight: 800, color: C.accent } }, it.valor.toFixed(3) + " " + it.unidad + (sumaVol ? " *" : ""))),
+              // excavación: su división en números (teórica + sobre-excavación)
+              (it.desglose || []).map((d, j) => React.createElement("tr", { key: j, style: fondo },
+                React.createElement("td", { style: { ...tdS, textAlign: "left", padding: "4px 5px 4px 18px", whiteSpace: "normal", fontSize: 12, color: C.muted } }, "· " + d.nombre),
+                React.createElement("td", { style: num }), React.createElement("td", { style: num }),
+                React.createElement("td", { style: { ...num, color: C.muted } }, d.valor.toFixed(3) + " m³"))));
           })))),
       q.items.some(it => it.conVolumen && it.area !== undefined) && React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 8 } },
         "* Incluye además un volumen de 📦 Volúmenes sumado a esa capa.")),
@@ -2966,7 +2983,8 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
         totalRef = ref(colVolUlt, tr);
         blank();
       }
-      resumenData.push({ nombre: vol.nombre || "Volumen", totalRef, totalVal: total.volTotal, vol });
+      resumenData.push({ nombre: vol.nombre || "Volumen", totalRef, totalVal: total.volTotal, vol, tipo: total.tipo,
+        partes: total.partes.map((x, i) => ({ clave: x.parte.clave, ref: totalesPartes[i], val: x.r.volTotal })) });
     });
 
     // ── 6. CANTIDADES ───────────────────────────────────────────
@@ -3008,7 +3026,16 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
         P_(k + "|m³").areas.push([sp === "0" ? `${P.L}*${P.A}` : `IF(${sp}>0,${P.L}+2*${P.EXTR},${P.L})*(${P.A}+${sp})`, esp]);
       });
     });
-    resumenData.forEach(rd => P_(claveCapa((rd.vol.concepto || "").trim() || rd.vol.nombre || "Volumen") + "|m³").vols.push(rd.totalRef));
+    resumenData.forEach(rd => {
+      const p = P_(claveCapa(destinoVolumen(rd.vol)) + "|m³");
+      p.vols.push(rd.totalRef);
+      const c1 = rd.partes.find(x => x.clave === "corte1"), c2 = rd.partes.find(x => x.clave === "corte2");
+      if (rd.tipo === "excavacion" && c1 && c2) {
+        p.desglose = (p.desglose || []).concat([{ nombre: "Excavación teórica", ref: c1.ref, val: c1.val }, { nombre: "Sobre-excavación", ref: c2.ref, val: c2.val }]);
+        const mat = (rd.vol.materialRelleno || "").trim();
+        if (mat) P_(claveCapa(nombreRellenoSobreexc(mat)) + "|m³").f.push(`MAX(0,${c2.ref})`);
+      }
+    });
     (cfg.extras || []).forEach(x => { if (x.nombre && x.nombre.trim()) P_(claveCapa(x.nombre) + "|m²").f.push(areaRef); });
     q.items.forEach(it => {
       const p = partes[it.clave] || { areas: [], vols: [], f: [] };
@@ -3028,6 +3055,11 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
       pushRow(fila);
       pinta(r, 0, { bold: true });
       cantRefs[it.clave] = ref(4, r);
+      // excavación: debajo, su división en números (teórica + sobre-excavación)
+      (p.desglose || []).forEach(d => {
+        const rd = pushRow(["   · " + d.nombre, "m³", "", "", F(d.ref, d.val)]);
+        pintaRango(rd, 0, 4, { txt: "5D6D7E" });
+      });
     });
     blank();
 
@@ -4835,12 +4867,19 @@ function TabVolumenes({ proyecto, tabla, onChange }) {
       React.createElement("div",{style:{fontSize:12,color:C.muted,marginBottom:10}},TIPOS_VOLUMEN[tipo].ayuda),
       React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(210px, 1fr))",gap:12,marginBottom:12}},
         camposSuperficies(vol, idx),
-        React.createElement("div",null,
-          React.createElement(Label,null,"Suma a la cantidad"),
-          React.createElement(Input,{value:vol.concepto||"",placeholder:vol.nombre||"Volumen",list:"tv-conceptos",
-            onChange:function(e){updVol(idx,{concepto:e.target.value});}}),
-          ayudaCampo("Vacío = su propio nombre. Mismo nombre = se suman.")
-        ),
+        tipo === "excavacion"
+          ? React.createElement("div",null,
+              React.createElement(Label,null,"Material de relleno de la sobre-excavación"),
+              React.createElement(Input,{value:vol.materialRelleno||"",placeholder:"ej. Rajón, Roca muerta, Sub-base",list:"tv-materiales",
+                onChange:function(e){updVol(idx,{materialRelleno:e.target.value});}}),
+              ayudaCampo(vol.fuenteTeorica && vol.fuenteInf
+                ? "Lo sobre-excavado se repone con este material: sale en Cantidades con el mismo volumen de la sobre-excavación."
+                : "Se usa cuando hay cota teórica y excavación en sitio (corte 2)."))
+          : React.createElement("div",null,
+              React.createElement(Label,null,"Nombre en Cantidades"),
+              React.createElement(Input,{value:vol.concepto||"",placeholder:vol.nombre||"Volumen",list:"tv-conceptos",
+                onChange:function(e){updVol(idx,{concepto:e.target.value});}}),
+              ayudaCampo("Vacío = su propio nombre. Mismo nombre = se suman.")),
         React.createElement("div",null,
           React.createElement(Label,null,"Sobreancho izq / der (m)"),
           React.createElement("div",{style:{display:"flex",gap:6}},
@@ -4859,8 +4898,12 @@ function TabVolumenes({ proyecto, tabla, onChange }) {
         ? React.createElement("div",null,
             React.createElement("div",{style:{background:"#1A1A2E",borderRadius:8,padding:"10px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}},
               React.createElement("span",{style:{color:"#D4AF37",fontWeight:700,fontSize:13}},
-                (vol.nombre||"Volumen")+(varias?" = "+total.partes.map(function(x,i){ var v=x.r.volTotal; return (i===0?(v<0?"−":""):(v<0?" − ":" + "))+Math.abs(v).toFixed(3); }).join(""):"")),
-              React.createElement("span",{style:{color:"#D4AF37",fontWeight:900,fontSize:20}},total.volTotal.toFixed(3)+" m³")
+                (vol.nombre||"Volumen")+(varias?" = "+total.partes.map(function(x,i){ var v=x.r.volTotal;
+                  var et = x.parte.clave==="corte1" ? " teórica" : x.parte.clave==="corte2" ? " sobre-excavación" : "";
+                  return (i===0?(v<0?"−":""):(v<0?" − ":" + "))+Math.abs(v).toFixed(3)+et; }).join(""):"")),
+              React.createElement("span",{style:{color:"#D4AF37",fontWeight:900,fontSize:20}},total.volTotal.toFixed(3)+" m³"),
+              varias && tipo==="excavacion" && (vol.materialRelleno||"").trim() && React.createElement("span",{style:{color:"#E8D9A8",fontSize:12,flexBasis:"100%"}},
+                "Relleno de la sobre-excavación en "+vol.materialRelleno.trim()+": "+Math.max(0,(total.partes[1]||{r:{volTotal:0}}).r.volTotal).toFixed(3)+" m³")
             ),
             total.faltan>0 && React.createElement("div",{style:{fontSize:12,color:C.warn,marginBottom:8}},
               "⚠ "+esperadas.filter(function(p){ return !total.partes.some(function(x){ return x.parte.clave===p.clave; }); }).map(function(p){ return p.nombre; }).join(", ")+
@@ -4882,6 +4925,8 @@ function TabVolumenes({ proyecto, tabla, onChange }) {
         "+ "+TIPOS_VOLUMEN[t].icono+" "+TIPOS_VOLUMEN[t].nombre);
     }));
   return React.createElement("div",null,
+    React.createElement("datalist",{id:"tv-materiales"}, ["Rajón","Roca muerta","Sub-base","Base","Recebo","Material de préstamo"].concat(capasDefinidas(proyecto.capas).map(function(c){ return c.nombre; }))
+      .filter(function(c,i,a){ return a.findIndex(function(x){ return claveCapa(x)===claveCapa(c); })===i; }).map(function(c){ return React.createElement("option",{key:c,value:c}); })),
     React.createElement("datalist",{id:"tv-conceptos"}, conceptos.filter(function(c,i){ return conceptos.indexOf(c) === i; }).map(function(c){ return React.createElement("option",{key:c,value:c}); })),
     React.createElement("div",{style:{marginBottom:14}},
       React.createElement("div",{style:{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:8}},
