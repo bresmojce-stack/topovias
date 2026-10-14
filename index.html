@@ -1220,7 +1220,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "22";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "23";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -3050,6 +3050,11 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
             if (igual(saP, sobreanchoParq(pq))) return { f: `${P.A}+${P.EXT}`, v: anchoP + saP };
             const kp = claveCapa(SV.capa);
             if (P.sa[kp] && igual(saP, sobreanchoCapaParq(proyecto, pq, SV.capa))) return { f: `${P.A}+${P.sa[kp]}`, v: anchoP + saP };
+            // parqueadero con la estructura de la vía y capa con sobreancho propio: la celda de esa capa en la tabla
+            if (pq.estructura !== "propia") {
+              const izqP = pq.lado === "izquierdo", celda = izqP ? R.saI[kp] : R.saD[kp], sc = sobreanchoCapa(proyecto, SV.capa);
+              if (celda && igual(saP, izqP ? sc.izq : sc.der)) return { f: `${P.A}+${celda}`, v: anchoP + saP };
+            }
             return null;
           };
           const iz = lado("izquierdo", f.tieneParqIzq, res.saIzq, pSI, SV.escritoIzq);
