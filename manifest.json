@@ -10,8 +10,8 @@
   "background_color": "#F1F5F9",
   "theme_color": "#0F172A",
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "icon-topo-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-topo-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-topo-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
