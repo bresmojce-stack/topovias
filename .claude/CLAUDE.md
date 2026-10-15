@@ -15,6 +15,11 @@ App de topografía de vías (Colombia) para Brian Escobar, topógrafo. Un solo a
 - Commit con `git -c user.email=bresmojce@gmail.com -c user.name=bresmojce-stack commit`, push a `main`.
 - Revisar el despliegue: `https://api.github.com/repos/bresmojce-stack/topovias/actions/runs?per_page=1`.
 
+## Mapa en red (artefacto)
+https://claude.ai/artifact/XNYfBVg1uuBN8sugkcosTy : las 40 piezas, sus 59 conexiones (qué alimenta a qué) y
+dónde está cada una en el código. Leerlo (Artifact, action "read") antes de un cambio que cruce varias piezas.
+Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía juntos.
+
 ## Mapa del código (buscar por el comentario de sección; los números de línea cambian)
 | Sección (comentario `// ───`) | Qué hay |
 |---|---|
