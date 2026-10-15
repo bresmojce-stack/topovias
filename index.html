@@ -1245,7 +1245,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "35";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "36";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -4052,7 +4052,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   const setActivoId = id => { setActivoIdR(id); try { localStorage.setItem(claveActivo, JSON.stringify(id)); } catch (_) {} };
   const dib = dibujos.find(d => d.id === activoId) || dibujos[0] || null;
   const objs = dib ? dib.objs : [];
-  const cambiarDib = cambio => onChange(dibujos.map(d => d.id === dib.id ? { ...d, ...(typeof cambio === "function" ? cambio(d) : cambio) } : d));
+  const cambiarDib = cambio => { HIST.ultimo = 0; onChange(dibujos.map(d => d.id === dib.id ? { ...d, ...(typeof cambio === "function" ? cambio(d) : cambio) } : d)); };
   const nuevoId = () => Date.now() + Math.random();
   const colorRef = React.useRef(null);
   const agregar = (nuevos, extraDib) => cambiarDib(d => ({ objs: d.objs.concat(nuevos.map(o => ({ ...o, ...(colorRef.current && !("col" in o) ? { col: colorRef.current } : {}), id: nuevoId() }))), ...(extraDib ? extraDib(d) : {}) }));
@@ -4149,6 +4149,12 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   const [estVal, setEstVal] = React.useState("5");
   const eje = objs.find(o => o.t === "eje");
   const setHerr = x => { setHerrR(x); setHoverId(null); setTemp([]); setRes(null); setSel(null); setGrupo(null); setTeclado(null); setSelSet([]); setSelListo(false); setObjA(null); };
+  const deshacerDib = () => {
+    if (gesto.current.trazo) return;
+    if (temp.length) { setTemp(temp.slice(0, -1)); return; }
+    if (objA || selSet.length) { setObjA(null); setSelSet([]); setSelListo(false); return; }
+    setRes(null); deshacer();
+  };
   const cancelar = () => { setTemp([]); setTeclado(null); setGrupo(null); setBuscar(null); setSelSet([]); setSelListo(false); setObjA(null); setTrazo(null); };
   const aviso = t => { try { window.dispatchEvent(new CustomEvent("tv-aviso", { detail: t })); } catch (_) {} };
 
@@ -4479,6 +4485,15 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     return () => el.removeEventListener("wheel", rueda);
   });
   React.useEffect(() => {
+    const ctrlZ = e => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "z") return;
+      if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+      if (temp.length || objA || selSet.length) { e.preventDefault(); e.stopImmediatePropagation(); deshacerDib(); }
+    };
+    window.addEventListener("keydown", ctrlZ, true);
+    return () => window.removeEventListener("keydown", ctrlZ, true);
+  });
+  React.useEffect(() => {
     const tecla = e => {
       if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
       if (e.key === "Escape") cancelar();
@@ -4495,7 +4510,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     const nombre = prompt("Nombre del dibujo", "Dibujo " + (dibujos.length + 1));
     if (nombre === null) return;
     const d = dibujoNuevo(nombre.trim() || "Dibujo " + (dibujos.length + 1));
-    onChange(dibujos.concat([d])); setActivoId(d.id); setHerr("linea");
+    HIST.ultimo = 0; onChange(dibujos.concat([d])); setActivoId(d.id); setHerr("linea");
   };
   const renombrar = () => { const n = prompt("Nuevo nombre", dib.nombre); if (n && n.trim()) cambiarDib({ nombre: n.trim() }); };
   const duplicar = () => { const d = { ...JSON.parse(JSON.stringify(dib)), id: Date.now() + Math.random(), nombre: dib.nombre + " (copia)" }; onChange(dibujos.concat([d])); setActivoId(d.id); };
@@ -4516,8 +4531,8 @@ function TabDibujo({ proy, onChange, onArchivo }) {
 
   // ── acciones de los menús ──
   const accion = id => {
-    if (id === "@deshacer") return deshacer();
-    if (id === "@rehacer") return rehacer();
+    if (id === "@deshacer") { setGrupo(null); return deshacerDib(); }
+    if (id === "@rehacer") { setGrupo(null); return rehacer(); }
     if (id === "@todo") { setGrupo(null); return verTodo(); }
     if (id === "@buscar") { setGrupo(null); return setBuscar(""); }
     if (id === "@imanes") { setGrupo(null); return setVerImanes(true); }
@@ -4816,7 +4831,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
           herr === "polilinea" && temp.length >= 3 && btnBarra("Cerrar", () => terminarPoli(true), C.accent),
           herr === "area" && temp.length >= 3 && btnBarra("Calcular", () => terminarPoli(true), C.success, "check"),
           (temp.length > 0 || selSet.length > 0 || objA) && btnBarra("Cancelar", cancelar, "#475569", "x"),
-          btnBarra("", () => deshacer(), "#334155", "undo-2"), btnBarra("", () => rehacer(), "#334155", "redo-2"))),
+          null)),
       h("div", { style: { position: "relative", flex: 1, minHeight: 0 } },
         h("svg", { ref: svgRef, width: "100%", height: "100%", className: "tv-dib-svg", style: { display: "block", touchAction: "none", userSelect: "none", cursor: ptr ? "none" : herr === "elegir" ? "grab" : "crosshair", background: "#fff" },
           onPointerDown: onDown, onPointerMove: onMove, onPointerUp: onUp, onPointerCancel: e => { gesto.current.ptrs.delete(e.pointerId); gesto.current.pinch = null; gesto.current.pan = null; gesto.current.trazo = null; setTrazo(null); fijarVista(); },
@@ -4829,10 +4844,14 @@ function TabDibujo({ proy, onChange, onArchivo }) {
             h("svg", { width: D, height: D, viewBox: `${s.X - D / (2 * z)} ${s.Y - D / (2 * z)} ${D / z} ${D / z}`, style: { display: "block" } }, els,
               h("line", { x1: s.X - 8, y1: s.Y, x2: s.X + 8, y2: s.Y, stroke: "#DC2626", strokeWidth: 1.5 }), h("line", { x1: s.X, y1: s.Y - 8, x2: s.X, y2: s.Y + 8, stroke: "#DC2626", strokeWidth: 1.5 })));
         })(),
+        // deshacer / rehacer, siempre a la vista (como en el resto de la app)
+        h("div", { className: "tv-dib-deshacer", style: { position: "absolute", right: 8, bottom: 8, zIndex: 3, display: "flex", borderRadius: 22, overflow: "hidden", boxShadow: "0 3px 12px rgba(0,0,0,0.25)", background: "#fff" } },
+          h("button", { onClick: deshacerDib, title: "Deshacer (Ctrl+Z)", "data-accion": "deshacer", style: { border: "none", background: C.accent, color: "#fff", padding: "9px 14px", fontWeight: 800, fontSize: 13.5, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 } }, h(Icono, { n: "undo-2", size: 16 }), temp.length ? "Quitar punto" : "Deshacer"),
+          h("button", { onClick: () => rehacer(), title: "Rehacer (Ctrl+Y)", "data-accion": "rehacer", style: { border: "none", borderLeft: "1px solid rgba(255,255,255,0.35)", background: "#0369A1", color: "#fff", padding: "9px 12px", cursor: "pointer", display: "flex", alignItems: "center" } }, h(Icono, { n: "redo-2", size: 16 }))),
         // escala y coordenadas del puntero
-        h("div", { style: { position: "absolute", left: 8, bottom: 8, background: "rgba(255,255,255,0.92)", borderRadius: 8, padding: "3px 8px", fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: "#334155", pointerEvents: "none" } },
-          h("span", { style: { display: "inline-block", width: paso * vista.k, borderBottom: "2px solid #334155", marginRight: 6, verticalAlign: "middle" } }), (paso >= 1 ? paso : paso.toPrecision(1)) + " m",
-          (cursor || hover) && "  ·  N " + f3((cursor || hover).y) + "  E " + f3((cursor || hover).x)),
+        h("div", { className: "tv-dib-escala", style: { position: "absolute", left: 8, bottom: 8, maxWidth: W - 170, background: "rgba(255,255,255,0.92)", borderRadius: 8, padding: "3px 8px", fontSize: 11, lineHeight: "15px", fontFamily: "'JetBrains Mono', monospace", color: "#334155", pointerEvents: "none" } },
+          h("div", null, h("span", { style: { display: "inline-block", width: paso * vista.k, borderBottom: "2px solid #334155", marginRight: 6, verticalAlign: "middle" } }), (paso >= 1 ? paso : paso.toPrecision(1)) + " m"),
+          (cursor || hover) && h("div", { style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, "N " + f3((cursor || hover).y) + "  E " + f3((cursor || hover).x))),
         // resultado de medir
         res && panel({ abscisa: "ABSCISA Y DESPLAZAMIENTO", area: "ÁREA Y PERÍMETRO", distancia: "DISTANCIA Y AZIMUT", circulo: res.obj && res.obj.t === "ar" ? "ARCO" : "CÍRCULO", angulo: "ÁNGULO ENTRE LÍNEAS" }[res.tipo], res.rows.map(([a, b], i) => filaInfo(a, b, i)),
           [res.tipo === "abscisa" && h(Btn, { small: true, color: "#334155", onClick: () => { agregar([{ t: "p", x: res.p.x, y: res.p.y, nom: absCorta(res.pr.abs) + (Math.abs(res.pr.desp) >= 0.0005 ? (res.pr.desp > 0 ? " D" : " I") + f3(Math.abs(res.pr.desp)) : "") }]); setRes(null); } }, "📍 Dejar punto"),
