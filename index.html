@@ -1226,7 +1226,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "30";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "31";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -4097,10 +4097,12 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   const [rapD, setRapD] = React.useState("");           // medida rápida: distancia y azimut desde el último punto
   const [rapAz, setRapAz] = React.useState("");
   const [lupa, setLupa] = React.useState(null);         // lupa mientras el dedo está en la pantalla
+  const [ptr, setPtr] = React.useState(null);           // posición del mouse en pantalla (cursor propio)
+  const [hoverId, setHoverId] = React.useState(null);   // objeto bajo el mouse (se resalta)
   const [estModo, setEstModo] = React.useState("cada");  // estacar: "cada" X metros o en N "partes"
   const [estVal, setEstVal] = React.useState("5");
   const eje = objs.find(o => o.t === "eje");
-  const setHerr = x => { setHerrR(x); setTemp([]); setRes(null); setSel(null); setGrupo(null); setTeclado(null); setSelSet([]); setSelListo(false); setObjA(null); };
+  const setHerr = x => { setHerrR(x); setHoverId(null); setTemp([]); setRes(null); setSel(null); setGrupo(null); setTeclado(null); setSelSet([]); setSelListo(false); setObjA(null); };
   const cancelar = () => { setTemp([]); setTeclado(null); setGrupo(null); setBuscar(null); setSelSet([]); setSelListo(false); setObjA(null); setTrazo(null); };
   const aviso = t => { try { window.dispatchEvent(new CustomEvent("tv-aviso", { detail: t })); } catch (_) {} };
 
@@ -4324,6 +4326,14 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     }
     if (DIB_PIDE_PUNTO.includes(herr) || (DIB_SELECCION.includes(herr) && selListo)) ponerPunto(conIman(X, Y));
   };
+  const filtroHerr = () => {
+    const todo = () => true, cerr = o => DIB.cerrada(o);
+    if (herr === "elegir" || herr === "borrar") return todo;
+    if (DIB_SELECCION.includes(herr)) return selListo ? null : todo;
+    return { unir: o => DIB_UNIBLES.includes(o.t), recortar: o => ["l", "pl", "ci", "ar"].includes(o.t), extender: o => o.t === "l" || (o.t === "pl" && !o.c),
+      paralela: objA ? null : o => ["l", "pl", "ci", "ar", "eje"].includes(o.t), desfase: o => ["l", "pl", "ci", "ar", "eje"].includes(o.t), estacar: o => ["l", "pl", "ci", "ar", "eje"].includes(o.t),
+      sombrear: cerr, radio: o => o.t === "ci" || o.t === "ar", angulo: o => o.t === "l" || o.t === "pl", area: temp.length ? null : cerr }[herr] || null;
+  };
   const pideIman = herr2 => DIB_PIDE_PUNTO.includes(herr2) || (DIB_SELECCION.includes(herr2) && selListo);
 
   // ── gestos: un dedo dibuja, dos dedos mueven y hacen zoom; mouse: rueda = zoom ──
@@ -4349,6 +4359,11 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   const onMove = e => {
     const G = gesto.current, p = posEn(e);
     setHover(aM(p.X, p.Y));
+    if (e.pointerType === "mouse") {
+      setPtr(p);
+      // resaltar lo que está bajo el mouse solo al borrar o al elegir para editar
+      if (!G.ptrs.has(e.pointerId)) { const o = herr === "borrar" || herr === "elegir" ? tocarObjeto(p.X, p.Y) : null; setHoverId(o ? o.id : null); }
+    }
     if (!G.ptrs.has(e.pointerId)) { if (e.pointerType === "mouse" && pideIman(herr)) setCursor(conIman(p.X, p.Y)); return; }
     G.ptrs.set(e.pointerId, p);
     if (G.pinch && G.ptrs.size >= 2) {
@@ -4516,7 +4531,9 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     return null;
   };
   const marcado = o => o.id === sel || selSet.includes(o.id) || (objA && objA.id === o.id);
-  objs.forEach(o => els.push(dibujarObj(o, o.id, marcado(o) ? { col: "#F59E0B", ancho: 3.5 } : null)));
+  const hovObj = hoverId && objs.find(o => o.id === hoverId);
+  if (hovObj) els.push(h("g", { key: "halo", opacity: 0.4, className: "tv-dib-halo" }, dibujarObj(hovObj, "halo-o", { col: herr === "borrar" ? "#DC2626" : "#F59E0B", ancho: 10 })));
+  objs.forEach(o => els.push(dibujarObj(o, o.id, marcado(o) ? { col: "#F59E0B", ancho: 3.5 } : o.id === hoverId && herr === "borrar" ? { col: "#DC2626", ancho: 3 } : null)));
   // operación en curso
   const tempS = temp.map(p => aP(p));
   const fig = cursor && figuraCon(cursor);
@@ -4561,7 +4578,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     else if (cursor.tipo === "abscisa") els.push(h("polygon", { key: "im", points: `${s.X},${s.Y - 9} ${s.X + 9},${s.Y} ${s.X},${s.Y + 9} ${s.X - 9},${s.Y}`, fill: "none", stroke: "#BE185D", strokeWidth: 2.5 }));
     else if (cursor.tipo === "centro") els.push(h("circle", { key: "im", cx: s.X, cy: s.Y, r: 8, fill: "none", stroke: "#7C3AED", strokeWidth: 2.5 }));
     else if (cursor.tipo === "cruce") els.push(h("g", { key: "im" }, h("line", { x1: s.X - 8, y1: s.Y - 8, x2: s.X + 8, y2: s.Y + 8, stroke: c, strokeWidth: 3 }), h("line", { x1: s.X + 8, y1: s.Y - 8, x2: s.X - 8, y2: s.Y + 8, stroke: c, strokeWidth: 3 })));
-    else els.push(h("g", { key: "im" }, h("line", { x1: s.X - 12, y1: s.Y, x2: s.X + 12, y2: s.Y, stroke: "#64748B" }), h("line", { x1: s.X, y1: s.Y - 12, x2: s.X, y2: s.Y + 12, stroke: "#64748B" })));
+    else if (!ptr) els.push(h("g", { key: "im" }, h("line", { x1: s.X - 12, y1: s.Y, x2: s.X + 12, y2: s.Y, stroke: "#64748B" }), h("line", { x1: s.X, y1: s.Y - 12, x2: s.X, y2: s.Y + 12, stroke: "#64748B" })));
     // medida en vivo desde el último punto
     const ult = temp[temp.length - 1];
     if (ult && herr !== "acotar") {
@@ -4569,6 +4586,14 @@ function TabDibujo({ proy, onChange, onArchivo }) {
       els.push(h("g", { key: "vivo" }, h("rect", { x: s.X + 12, y: s.Y + 12, width: t.length * 7.2 + 12, height: 22, rx: 6, fill: "#FBBF24" }),
         h("text", { x: s.X + 18, y: s.Y + 27, fontSize: 12, fontWeight: 800, fill: "#0F172A", style: { fontFamily: "'JetBrains Mono', monospace" } }, t)));
     }
+  }
+  if (ptr) {
+    // cursor propio: cruz oscura con borde blanco (se ve sobre cualquier fondo); con cuadrito si la herramienta toma objetos
+    const { X, Y } = ptr, L = 13, g0 = 3, caja = !!filtroHerr();
+    const cruz = (col, w) => [h("line", { key: "a" + w, x1: X - L, y1: Y, x2: X - g0, y2: Y, stroke: col, strokeWidth: w }), h("line", { key: "b" + w, x1: X + g0, y1: Y, x2: X + L, y2: Y, stroke: col, strokeWidth: w }),
+      h("line", { key: "c" + w, x1: X, y1: Y - L, x2: X, y2: Y - g0, stroke: col, strokeWidth: w }), h("line", { key: "d" + w, x1: X, y1: Y + g0, x2: X, y2: Y + L, stroke: col, strokeWidth: w })]
+      .concat(caja ? [h("rect", { key: "e" + w, x: X - 5, y: Y - 5, width: 10, height: 10, fill: "none", stroke: col, strokeWidth: w })] : []);
+    els.push(h("g", { key: "cursor", className: "tv-dib-cursor", pointerEvents: "none" }, cruz("#fff", 3.5), cruz(herr === "borrar" ? "#B91C1C" : "#0F172A", 1.5)));
   }
   if (marca) { const s = aP(marca); els.push(h("circle", { key: "marca", cx: s.X, cy: s.Y, r: 26, fill: "none", stroke: "#F59E0B", strokeWidth: 3, strokeDasharray: "7 5", className: "tv-dib-marca" })); }
 
@@ -4725,9 +4750,9 @@ function TabDibujo({ proy, onChange, onArchivo }) {
           (temp.length > 0 || selSet.length > 0 || objA) && btnBarra("Cancelar", cancelar, "#475569", "x"),
           btnBarra("", () => deshacer(), "#334155", "undo-2"), btnBarra("", () => rehacer(), "#334155", "redo-2"))),
       h("div", { style: { position: "relative", flex: 1, minHeight: 0 } },
-        h("svg", { ref: svgRef, width: "100%", height: "100%", className: "tv-dib-svg", style: { display: "block", touchAction: "none", userSelect: "none", cursor: herr === "elegir" ? "grab" : "crosshair", background: "#fff" },
+        h("svg", { ref: svgRef, width: "100%", height: "100%", className: "tv-dib-svg", style: { display: "block", touchAction: "none", userSelect: "none", cursor: ptr ? "none" : herr === "elegir" ? "grab" : "crosshair", background: "#fff" },
           onPointerDown: onDown, onPointerMove: onMove, onPointerUp: onUp, onPointerCancel: e => { gesto.current.ptrs.delete(e.pointerId); gesto.current.pinch = null; gesto.current.trazo = null; setTrazo(null); },
-          onPointerLeave: e => { if (e.pointerType === "mouse") setCursor(null); }, onContextMenu: e => e.preventDefault() }, els),
+          onPointerLeave: e => { if (e.pointerType === "mouse") { setCursor(null); setPtr(null); setHoverId(null); } }, onContextMenu: e => e.preventDefault() }, els),
         // lupa: muestra ampliado lo que queda bajo el dedo (arriba del dedo para que no lo tape)
         lupa && cursor && pideIman(herr) && (() => {
           const s = aP(cursor), D = 128, z = 3, arriba = s.Y > D + 30, cy = arriba ? s.Y - D / 2 - 34 : s.Y + D / 2 + 34;
