@@ -1370,6 +1370,8 @@ if (typeof window !== "undefined") window.addEventListener("input", function(e) 
 function leerDato(k) { return DATOS.valores[k]; }
 // Cada guardado lleva la hora (clave + "__t") en ambos lugares; al abrir se usa el más reciente.
 function guardarDato(k, v) {
+  // otra ventana o pestaña de la app ya cambió los datos: esta tiene una versión vieja y no escribe encima
+  if (DATOS.otraVentana) { avisarGuardado(false); return; }
   if (k === TV_KEY || k === TV_KEY_OBRAS) copiaAutomatica();   // antes de cambiar nada
   DATOS.valores[k] = v;
   const t = Date.now();
@@ -1387,6 +1389,7 @@ function guardarDato(k, v) {
   }
   if (lsOk) try { localStorage.removeItem(k + "__soloIdb"); } catch (_) {}
   if (lsOk) avisarGuardado(true); else if (!DATOS.idb) avisarGuardado(false);
+  try { if (TV_CANAL && (k === TV_KEY || k === TV_KEY_OBRAS)) TV_CANAL.postMessage({ guardo: k }); } catch (_) {}
 }
 // Estado del guardado automático (lo muestra el encabezado)
 function avisarGuardado(ok) {
@@ -1464,12 +1467,34 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "43";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "44";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
 // Cada vía (proyecto) pertenece a una obra (obraId). Las obras se guardan aparte.
 const TV_KEY_OBRAS = TV_KEY + '_obras';
+// ─── OTRA VENTANA ─────────────────────────────────────────────────────────────
+// Si la app está abierta en dos ventanas o pestañas y una guarda, la otra queda con datos viejos:
+// deja de guardar y de sincronizar, y pide recargar (si no, la última en guardar borraría lo de la otra).
+const TV_CANAL = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("topovias_" + TV_VIA_ID) : null;
+function otraVentanaGuardo() {
+  if (DATOS.otraVentana) return;
+  DATOS.otraVentana = true;
+  try { window.dispatchEvent(new Event("tv-otra-ventana")); } catch (_) {}
+}
+if (TV_CANAL) TV_CANAL.onmessage = e => { if (e.data && e.data.guardo) otraVentanaGuardo(); };
+if (typeof window !== "undefined") window.addEventListener("storage", e => { if (e.key === TV_KEY + "__t" || e.key === TV_KEY_OBRAS + "__t") otraVentanaGuardo(); });
+function AvisoOtraVentana() {
+  const [ver, setVer] = React.useState(!!DATOS.otraVentana);
+  React.useEffect(() => { const f = () => setVer(true); window.addEventListener("tv-otra-ventana", f); return () => window.removeEventListener("tv-otra-ventana", f); }, []);
+  if (!ver) return null;
+  return React.createElement("div", { className: "tv-otra-ventana", style: { position: "fixed", inset: 0, background: "rgba(15,23,42,0.75)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 } },
+    React.createElement("div", { style: { background: "#fff", borderRadius: 14, padding: 22, maxWidth: 420, boxShadow: "0 10px 40px rgba(0,0,0,0.35)" } },
+      React.createElement("div", { style: { fontWeight: 800, fontSize: 17, marginBottom: 8, color: "#0F172A" } }, "TopoVías se cambió en otra ventana"),
+      React.createElement("div", { style: { fontSize: 14, color: "#334155", lineHeight: 1.5, marginBottom: 14 } },
+        "La app está abierta en otra ventana o pestaña y allá se guardaron cambios. Para no borrarlos, esta ventana dejó de guardar. Recárgala para seguir con los datos al día (no se pierde nada)."),
+      React.createElement("button", { onClick: () => location.reload(), style: { background: "#0369A1", color: "#fff", border: "none", borderRadius: 9, padding: "10px 18px", fontWeight: 800, fontSize: 14, cursor: "pointer" } }, "Recargar")));
+}
 function leerObras() {
   var d = leerDato(TV_KEY_OBRAS); if (Array.isArray(d)) return d;
   return null;
@@ -1512,6 +1537,8 @@ const rehacer = () => histMover(HIST.adelante, HIST.atras, "rehacer");
 // Dibujos libres (desde el inicio, sin obra ni vía): se guardan en un registro especial junto a las vías,
 // así tienen guardado automático, deshacer y copia de seguridad, pero no aparecen como vía.
 const LIBRE_ID = "__libre__";
+// una vía u obra guardada debe ser un objeto con id (un archivo dañado no puede tumbar la app)
+const viaValida = v => !!v && typeof v === "object" && !Array.isArray(v) && v.id != null;
 const libreBase = () => ({ id: LIBRE_ID, obraId: LIBRE_ID, libre: true, nombre: "Dibujos libres", absInicio: "0", coordsEje: [], dibujos: [] });
 // ─── VÍAS BLOQUEADAS ──────────────────────────────────────────────────────────
 // Una vía bloqueada no se puede cambiar ni borrar; solo desbloquear. Cualquier cambio que
@@ -1539,7 +1566,7 @@ function useLocalProyectos() {
   const [proyectos, _setProyectos] = React.useState(function() {
     var lista = [];
     try {
-      var d = leerDato(TV_KEY); if (Array.isArray(d)) lista = d;
+      var d = leerDato(TV_KEY); if (Array.isArray(d)) lista = d.filter(viaValida);
     } catch(e) {}
     // Migración: las vías guardadas antes de existir las obras quedan en la obra "Mis vías"
     var obras = leerObras() || [];
@@ -1570,7 +1597,7 @@ function useLocalProyectos() {
   return [proyectos, setProyectos];
 }
 function useLocalObras() {
-  const [obras, _setObras] = React.useState(function() { return leerObras() || []; });
+  const [obras, _setObras] = React.useState(function() { return (leerObras() || []).filter(viaValida); });
   HIST.actual.obras = obras;
   HIST.crudo.obras = function(v) { HIST.actual.obras = v; guardarObras(v); _setObras(v); };
   var setObras = React.useCallback(function(updater) {
@@ -1647,13 +1674,13 @@ async function nubeApi(url, op) {
   op = op || {};
   const r = await fetch(url, { ...op, headers: { ...(op.headers || {}), Authorization: "Bearer " + m.token } });
   if (r.status === 401) { const mm = nubeMeta(); mm.exp = 0; nubeGuardarMeta(mm); const e = new Error("sesion"); e.sesion = true; throw e; }
-  if (!r.ok) throw new Error("Drive respondió " + r.status);
+  if (!r.ok) { const e = new Error("Drive respondió " + r.status); e.status = r.status; throw e; }
   return r;
 }
 async function nubeCarpeta(m) {
   if (m.carpeta) {
     try { const r = await nubeApi(NUBE_API + "/files/" + m.carpeta + "?fields=id,trashed"); const f = await r.json(); if (!f.trashed) return m.carpeta; }
-    catch (e) { if (e.sesion) throw e; }
+    catch (e) { if (e.sesion || e.status !== 404) throw e; }   // un error de red no es "la carpeta ya no existe"
   }
   const q = encodeURIComponent("name='" + NUBE_CARPETA + "' and mimeType='application/vnd.google-apps.folder' and trashed=false");
   const r = await nubeApi(NUBE_API + "/files?q=" + q + "&fields=files(id)&spaces=drive");
@@ -1691,7 +1718,7 @@ const nubeNombreVia = p => (p.libre ? "Dibujos libres" : "Vía - " + (p.nombre |
 // Sincroniza todo. interactivo = lo pidió el usuario tocando un botón (puede abrir la ventana de Google).
 async function nubeSincronizar(interactivo) {
   if (!nubeConectada() && !interactivo) return;
-  if (NUBE.ocupado) return;
+  if (NUBE.ocupado || DATOS.otraVentana) return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) { nubeAvisar("pendiente", "Sin internet: se sincroniza cuando vuelva la señal."); return; }
   NUBE.ocupado = true; clearTimeout(NUBE.temporizador);
   try {
@@ -1707,12 +1734,22 @@ async function nubeSincronizar(interactivo) {
       try { const r = await nubeApi(NUBE_API + "/about?fields=user(emailAddress)"); const j = await r.json(); m.email = j.user && j.user.emailAddress; } catch (e) { if (e.sesion) throw e; }
     }
     m.conectado = true;
+    const carpetaAntes = m.carpeta;
     m.carpeta = await nubeCarpeta(m);
     m.items = m.items || {};
+    // otra carpeta (la borraron o se creó una nueva): se trata como primera conexión, que sube y
+    // nunca borra; si no, todas las vías parecerían "borradas en otro equipo"
+    if (carpetaAntes && carpetaAntes !== m.carpeta) m.items = {};
     nubeGuardarMeta(m);
+    // foto de cómo estaban los datos al empezar: si se cambian mientras se sincroniza, no se aplica nada
+    // (se compara el contenido: la pantalla a veces vuelve a guardar lo mismo sin cambiar nada)
+    const huellaDatos = () => nubeHuella(HIST.actual.proyectos) + nubeHuella(HIST.actual.obras);
+    const baseH = huellaDatos();
     const remotos = await nubeListar(m.carpeta);
     const R = {};
     remotos.forEach(f => { const k = f.appProperties && f.appProperties.k; if (k && !R[k]) R[k] = { id: f.id, h: f.appProperties.h, t: Date.parse(f.modifiedTime) || 0, nombre: f.name }; });
+    // la carpeta de Drive no tiene ninguna vía pero aquí ya se habían sincronizado: no se borra nada aquí, se sube todo
+    if (!Object.keys(R).some(k => k.indexOf("via:") === 0) && Object.keys(m.items).some(k => k.indexOf("via:") === 0)) m.items = {};
     const tLocal = parseInt(localStorage.getItem(TV_KEY + "__t") || "0", 10) || Date.now();
     let vias = (HIST.actual.proyectos || []).slice(), cambioVias = false;
     const S = m.items, nuevoS = {};
@@ -1728,19 +1765,19 @@ async function nubeSincronizar(interactivo) {
         const cambioL = !s || hL !== s.h, cambioR = !s || rem.h !== s.h;
         const ganaLocal = cambioL && (!cambioR || tLocal >= rem.t);
         if (ganaLocal) { await nubeSubir(m.carpeta, rem.id, nubeNombreVia(loc), props(loc), loc); nuevoS[k] = { h: hL }; subidas++; }
-        else { const v = await nubeBajar(rem.id); vias = vias.map(p => "via:" + p.id === k ? v : p); cambioVias = true; nuevoS[k] = { h: rem.h }; bajadas++; }
+        else { const v = await nubeBajar(rem.id); if (!viaValida(v)) continue; vias = vias.map(p => "via:" + p.id === k ? v : p); cambioVias = true; nuevoS[k] = { h: rem.h }; bajadas++; }
       } else if (loc) {
         if (s && hL === s.h) { vias = vias.filter(p => "via:" + p.id !== k); cambioVias = true; bajadas++; }   // la borraron en otro equipo
         else { await nubeSubir(m.carpeta, null, nubeNombreVia(loc), props(loc), loc); nuevoS[k] = { h: hL }; subidas++; }
       } else if (rem) {
         if (s && rem.h === s.h) { await nubeBorrar(rem.id); subidas++; }                                    // se borró aquí
-        else { const v = await nubeBajar(rem.id); vias = vias.concat([v]); cambioVias = true; nuevoS[k] = { h: rem.h }; bajadas++; }
+        else { const v = await nubeBajar(rem.id); if (!viaValida(v)) continue; vias = vias.concat([v]); cambioVias = true; nuevoS[k] = { h: rem.h }; bajadas++; }
       }
     }
     // ── obras: se juntan las de los dos lados (las borradas en un lado se quitan) ──
     const obrasL = (HIST.actual.obras || []).slice(), sO = S.obras || {};
     let obrasR = null;
-    if (R.obras) obrasR = await nubeBajar(R.obras.id);
+    if (R.obras) { obrasR = await nubeBajar(R.obras.id); if (Array.isArray(obrasR)) obrasR = obrasR.filter(viaValida); }
     let obras = obrasL;
     if (Array.isArray(obrasR)) {
       const antes = sO.ids || [], idL = obrasL.map(o => String(o.id)), idR = obrasR.map(o => String(o.id));
@@ -1761,11 +1798,20 @@ async function nubeSincronizar(interactivo) {
     nuevoS.obras = { h: hO, ids: obras.map(o => String(o.id)) };
     // ── aplicar lo que llegó de la nube (antes, una copia automática de cómo estaba) ──
     const cambioObras = nubeHuella(obrasL) !== hO;
+    if (huellaDatos() !== baseH) {
+      // se escribió algo mientras se sincronizaba: no se pisa; se repite la sincronización en un momento
+      clearTimeout(NUBE.temporizador); NUBE.temporizador = setTimeout(() => nubeSincronizar(false), 4000);
+      nubeAvisar("pendiente", "Cambios por subir…");
+      return;
+    }
     if (cambioVias || cambioObras) {
       DATOS.copiaDia = null; copiaAutomatica();
       NUBE.aplicadoEn = Date.now();   // estos guardados vienen de la nube: no son "cambios por subir"
       if (cambioObras) HIST.crudo.obras(obras);
       if (cambioVias) HIST.crudo.proyectos(vias);
+      // deshacer no puede volver a antes de lo que llegó de otro equipo (lo borraría allá también)
+      HIST.atras = []; HIST.adelante = []; HIST.ultimo = 0;
+      histAvisar("nube");
     }
     m = nubeMeta(); m.items = nuevoS; m.ultima = Date.now(); m.conectado = true; nubeGuardarMeta(m);
     nubeAvisar("listo", subidas || bajadas ? (subidas ? subidas + " subido" + (subidas > 1 ? "s" : "") : "") + (subidas && bajadas ? " · " : "") + (bajadas ? bajadas + " traído" + (bajadas > 1 ? "s" : "") + " de otro equipo" : "") : "Todo al día.");
@@ -2293,7 +2339,7 @@ function crearCopiaSeguridad(obras, proyectos) {
 function leerCopiaSeguridad(texto) {
   const d = corregirComas(JSON.parse(texto));
   if (!d || d.app !== "TopoVias" || !Array.isArray(d.obras) || !Array.isArray(d.vias)) throw new Error("El archivo no es una copia de seguridad de TopoVías.");
-  return d;
+  return { ...d, obras: d.obras.filter(viaValida), vias: d.vias.filter(viaValida) };
 }
 
 // "Guardado h:mm" en el encabezado: cada cambio se guarda solo, sin botón
@@ -7212,7 +7258,7 @@ function App() {
   React.useEffect(() => {
     const oyente = tipo => {
       setVerHist(v => v + 1);
-      if (tipo !== "deshacer" && tipo !== "rehacer") return;
+      if (tipo !== "deshacer" && tipo !== "rehacer" && tipo !== "nube") return;
       // la tabla se vuelve a calcular con los datos restaurados
       const p = HIST.actual.proyectos.find(x => x.id === activoRef.current);
       const t = p ? generarTabla(p) : [];
@@ -8108,10 +8154,35 @@ function App() {
   }, "Cargar como nuevo proyecto"))))))));
 }
 
+// Si algo falla al mostrar la app, en vez de una pantalla en blanco se ofrece guardar los datos y recuperar
+class FalloApp extends React.Component {
+  constructor(p) { super(p); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(e) { console.error("TopoVías:", e); }
+  render() {
+    if (!this.state.error) return this.props.children;
+    const btn = (texto, onClick, color) => React.createElement("button", { onClick, style: { background: color, color: "#fff", border: "none", borderRadius: 9, padding: "10px 16px", fontWeight: 800, fontSize: 14, cursor: "pointer", margin: "0 8px 8px 0" } }, texto);
+    const guardar = () => {
+      const a = crearCopiaSeguridad(DATOS.valores[TV_KEY_OBRAS] || [], DATOS.valores[TV_KEY] || []);
+      const el = document.createElement("a"); el.href = URL.createObjectURL(a.blob); el.download = a.nombre; document.body.appendChild(el); el.click(); el.remove();
+    };
+    const restaurar = () => leerCopiasAutomaticas().then(l => {
+      const c = l.find(x => Array.isArray(x.vias));
+      if (!c) { alert("No hay copias automáticas en este equipo."); return; }
+      if (!confirm("¿Volver a como estaba todo el " + new Date(c.fecha).toLocaleString("es-CO") + "? Antes guarda una copia con el otro botón.")) return;
+      guardarDato(TV_KEY_OBRAS, (c.obras || []).filter(viaValida)); guardarDato(TV_KEY, c.vias.filter(viaValida)); location.reload();
+    });
+    return React.createElement("div", { style: { maxWidth: 520, margin: "40px auto", padding: 20, fontFamily: "system-ui, sans-serif", color: "#0F172A" } },
+      React.createElement("h2", { style: { color: "#B91C1C" } }, "Algo falló al mostrar TopoVías"),
+      React.createElement("p", { style: { lineHeight: 1.5 } }, "Tus datos siguen guardados en este equipo. Primero guarda una copia de tus datos; después prueba volver a abrir. Si sigue fallando, restaura la última copia automática."),
+      React.createElement("p", { style: { fontSize: 12, color: "#64748B" } }, String(this.state.error && this.state.error.message || this.state.error)),
+      btn("💾 Guardar copia de mis datos", guardar, "#0369A1"), btn("Volver a abrir", () => location.reload(), "#475569"), btn("Restaurar copia automática", restaurar, "#B45309"));
+  }
+}
 var __topoviasRoot__ = ReactDOM.createRoot(document.getElementById("root"));
 // Primero se cargan los datos guardados en el dispositivo, luego se muestra la app
 precargarDatos([TV_KEY, TV_KEY + '_obras']).then(function() {
-  __topoviasRoot__.render(React.createElement(App));
+  __topoviasRoot__.render(React.createElement(React.Fragment, null, React.createElement(FalloApp, null, React.createElement(App)), React.createElement(AvisoOtraVentana)));
   setTimeout(nubeIniciar, 800);
   if (DATOS.avisoCarga) setTimeout(function() { alert("⚠ No se pudieron abrir todos tus datos guardados (la base de datos del equipo no respondió).\n\nNo se perdió nada: cierra las otras pestañas o ventanas de TopoVías y vuelve a abrir la app. Mientras tanto, los cambios no se guardarán."); }, 300);
 });
