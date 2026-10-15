@@ -38,7 +38,7 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 | TABLA RESULTADO / TABLA DE LECTURAS | `TablaResultado` (tabla de cotas, bloque corona), `CopiarEstructura`, `TabSardinel`, `TablaLecturas` (replanteo) |
 | VOLÚMENES / SOBREANCHO / TIPOS DE VOLUMEN | `calcVolumen` (en el borde de una cabecera parte la sección en dos), `parqEn`, `sobreanchoVolumen`, `construirHojaVia` (hoja Excel con fórmulas) |
 | EXCEL CON ESTILO | `exportarExcel`, `exportarLibroObra` |
-| DIBUJO (mini CAD de obra) | `TabDibujo`, `DIB`, `EJE`, `crearDXF`; herramientas en `DIB_GRUPOS` (Dibujar/Medir/Editar/Ver) |
+| DIBUJO (mini CAD de obra) | `TabDibujo`, `DIB`, `EJE`, `crearDXF`; herramientas en `DIB_GRUPOS` (Dibujar/Medir/Editar/Ver); "Seleccionar varios" usa `selSet` (tocar o recuadro) y pasa la selección a mover/copiar/girar, borrar, color o unir (`unirObjetos`) |
 | CALCULADORAS | `evaluarExpresion`, `CalcNormal`, `CalcCoordenadas`, `Calculadora` |
 | EDITOR LATERAL / EDITOR PARQUEADERO | `EditorLateral` (modo transversal o "rasante propia" con PI), `EditorParq` (lateral o cabecera) |
 | HELPERS NIVELACIONES / TAB VOLÚMENES | `resolverAI`, `alinearLecturas`, `calcCotasNivelacion`, `exportarCartera`, `TabVolumenes` |

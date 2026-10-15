@@ -1467,7 +1467,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "45";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "46";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -4770,15 +4770,15 @@ const DIB_GRUPOS = [
     ["sombrear", "Sombrear", "paint-bucket"], ["pluma", "Pluma libre", "pen-line"], ["paralela", "Paralela", "between-vertical-start"], ["desfase", "Desfase (sobreancho)", "expand"],
     ["@eje", "Eje de la vía", "signpost"], ["estacar", "Dividir / estacar", "milestone"]] },
   { id: "medir", label: "Medir", icono: "ruler", herr: [["idcoord", "ID coordenada", "map-pin"], ["distancia", "Distancia y azimut", "ruler"], ["area", "Área y perímetro", "pentagon"], ["angulo", "Ángulo", "triangle-right"], ["radio", "Radio y cuerda", "circle-dot-dashed"], ["abscisa", "Abscisa y desplaz.", "locate-fixed"], ["acotar", "Acotar", "move-horizontal"]] },
-  { id: "editar", label: "Editar", icono: "scissors", herr: [["elegir", "Elegir y editar", "mouse-pointer-2"], ["mover", "Mover", "move"], ["copiar", "Copiar", "copy"], ["girar", "Girar", "rotate-ccw"], ["recortar", "Recortar", "scissors"], ["extender", "Extender", "move-up-right"], ["unir", "Unir en una figura", "combine"], ["borrar", "Borrar", "trash-2"], ["@deshacer", "Deshacer", "undo-2"], ["@rehacer", "Rehacer", "redo-2"]] },
+  { id: "editar", label: "Editar", icono: "scissors", herr: [["elegir", "Elegir y editar", "mouse-pointer-2"], ["seleccionar", "Seleccionar varios", "square-dashed-mouse-pointer"], ["mover", "Mover", "move"], ["copiar", "Copiar", "copy"], ["girar", "Girar", "rotate-ccw"], ["recortar", "Recortar", "scissors"], ["extender", "Extender", "move-up-right"], ["unir", "Unir en una figura", "combine"], ["borrar", "Borrar", "trash-2"], ["@deshacer", "Deshacer", "undo-2"], ["@rehacer", "Rehacer", "redo-2"]] },
   { id: "ver", label: "Ver", icono: "search", herr: [["mano", "Mover la vista", "hand"], ["@todo", "Ver todo", "scan"], ["@buscar", "Buscar punto", "map-pin"], ["@imanes", "Imanes", "magnet"], ["@cuadricula", "Cuadrícula", "grid-3x3"]] }
 ];
 const DIB_NOMBRE = { punto: "PUNTO", linea: "LÍNEA", polilinea: "POLILÍNEA", rect: "RECTÁNGULO", cuadrado: "CUADRADO", triangulo: "TRIÁNGULO", circulo: "CÍRCULO", arco: "ARCO", sombrear: "SOMBREAR", pluma: "PLUMA LIBRE", paralela: "PARALELA",
-  estacar: "DIVIDIR / ESTACAR", desfase: "DESFASE", unir: "UNIR", abscisa: "ABSCISA", distancia: "DISTANCIA", area: "ÁREA", angulo: "ÁNGULO", radio: "RADIO Y CUERDA", acotar: "ACOTAR", idcoord: "ID COORDENADA", mano: "MOVER LA VISTA", elegir: "ELEGIR", mover: "MOVER", copiar: "COPIAR", girar: "GIRAR", recortar: "RECORTAR", extender: "EXTENDER", borrar: "BORRAR" };
+  estacar: "DIVIDIR / ESTACAR", desfase: "DESFASE", unir: "UNIR", abscisa: "ABSCISA", distancia: "DISTANCIA", area: "ÁREA", angulo: "ÁNGULO", radio: "RADIO Y CUERDA", acotar: "ACOTAR", idcoord: "ID COORDENADA", mano: "MOVER LA VISTA", seleccionar: "SELECCIONAR", elegir: "ELEGIR", mover: "MOVER", copiar: "COPIAR", girar: "GIRAR", recortar: "RECORTAR", extender: "EXTENDER", borrar: "BORRAR" };
 // herramientas que piden puntos (con imanes y "Escribir")
 const DIB_PIDE_PUNTO = ["punto", "linea", "polilinea", "rect", "cuadrado", "triangulo", "circulo", "arco", "distancia", "area", "acotar", "abscisa", "idcoord"];
 const DIB_SELECCION = ["mover", "copiar", "girar"];
-const DIB_UNIBLES = ["l", "pl", "ar"];
+const DIB_UNIBLES = ["l", "pl", "ar", "fh"];
 
 function TabDibujo({ proy, onChange, onArchivo }) {
   const h = React.createElement;
@@ -4866,6 +4866,8 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   const [selSet, setSelSet] = React.useState([]);      // objetos para mover / copiar / girar
   const [selListo, setSelListo] = React.useState(false);
   const [objA, setObjA] = React.useState(null);        // primer objeto tocado (paralela, ángulo)
+  const [ventana, setVentana] = React.useState(null);  // recuadro de "Seleccionar varios" (en pantalla)
+  const [colorSel, setColorSel] = React.useState(false);
   const [paraD, setParaD] = React.useState("1");       // distancia de la paralela
   const [extD, setExtD] = React.useState("");          // medida para extender (vacío = hasta la próxima línea)
   const [giroTxt, setGiroTxt] = React.useState("");    // ángulo escrito para girar
@@ -5002,11 +5004,16 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     terminarSeleccion();
   };
   const terminarSeleccion = () => { setSelSet([]); setSelListo(false); setTemp([]); };
+  // con varios elegidos: borrar, color, o pasar a mover / copiar / girar sin volver a tocarlos
+  const borrarSeleccion = () => { const ids = selSet; cambiarDib(d => ({ objs: d.objs.filter(o => !ids.includes(o.id)) })); aviso(ids.length + " borrado" + (ids.length > 1 ? "s" : "")); setSelSet([]); };
+  const colorSeleccion = c => { const ids = selSet; cambiarDib(d => ({ objs: d.objs.map(o => ids.includes(o.id) ? (c ? { ...o, col: c } : (({ col, ...r }) => r)(o)) : o) })); setColorSel(false); };
+  const pasarSeleccion = x => { setHerrR(x); setTemp([]); setRes(null); setSel(null); setSelListo(true); setColorSel(false); };
   const unirSeleccion = () => {
-    const lista = objs.filter(o => selSet.includes(o.id)); if (lista.length < 2) return aviso("Toca al menos dos líneas o polilíneas.");
+    const lista = objs.filter(o => selSet.includes(o.id) && DIB_UNIBLES.includes(o.t)); if (lista.length < 2) return aviso("Elige al menos dos líneas, polilíneas, arcos o trazos.");
+    const ids = lista.map(o => o.id);
     const u = unirObjetos(lista);
     const nuevo = { t: "pl", v: u.v, c: u.c, col: lista[0].col, id: nuevoId() };
-    cambiarDib(d => ({ objs: d.objs.filter(o => !selSet.includes(o.id)).concat([nuevo]) }));
+    cambiarDib(d => ({ objs: d.objs.filter(o => !ids.includes(o.id)).concat([nuevo]) }));
     setSelSet([]);
     if (u.c) setRes(resArea(u.v));
     aviso(u.c ? "Figura cerrada: " + f3(DIB.area(u.v)) + " m²" + (u.hueco > 0.0005 ? " (había un hueco de " + f3(u.hueco) + " m)" : "")
@@ -5083,6 +5090,10 @@ function TabDibujo({ proy, onChange, onArchivo }) {
       const c = nuevos[0]; if (c.t === "pl" && c.c) aviso("Desfase " + f3(d) + " m: área " + f3(DIB.area(c.v)) + " m² (antes " + f3(DIB.area(o.v)) + ")");
       return;
     }
+    if (herr === "seleccionar") {
+      const o = tocarObjeto(X, Y); if (!o) return;
+      setSelSet(selSet.includes(o.id) ? selSet.filter(x => x !== o.id) : selSet.concat([o.id])); return;
+    }
     if (herr === "unir") {
       const o = tocarObjeto(X, Y, o => DIB_UNIBLES.includes(o.t)); if (!o) return;
       setSelSet(selSet.includes(o.id) ? selSet.filter(x => x !== o.id) : selSet.concat([o.id])); return;
@@ -5145,7 +5156,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     if (G.ptrs.size === 2) {
       const [a, b] = [...G.ptrs.values()];
       G.pinch = { d0: Math.hypot(b.X - a.X, b.Y - a.Y) || 1, m0: { X: (a.X + b.X) / 2, Y: (a.Y + b.Y) / 2 }, v0: vistaRef.current };
-      G.anulado = true; G.trazo = null; G.pan = null; setTrazo(null); setCursor(null); setLupa(null); return;
+      G.anulado = true; G.trazo = null; G.pan = null; G.ventana = null; setVentana(null); setTrazo(null); setCursor(null); setLupa(null); return;
     }
     if (G.ptrs.size > 2) return;
     G.anulado = false;
@@ -5190,6 +5201,8 @@ function TabDibujo({ proy, onChange, onArchivo }) {
       return;
     }
     if (G.pan) G.pan.mov = Math.max(G.pan.mov, Math.hypot(p.X - G.pan.X, p.Y - G.pan.Y));
+    // seleccionar varios: arrastrar un dedo (o el mouse) dibuja el recuadro
+    if (herr === "seleccionar" && G.pan && G.ptrs.size === 1 && G.pan.mov > 8) { G.ventana = { x0: G.pan.X, y0: G.pan.Y, x1: p.X, y1: p.Y }; setVentana(G.ventana); return; }
     if (pideIman(herr)) setCursor(conIman(p.X, p.Y));
   };
   const onUp = e => {
@@ -5213,6 +5226,15 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     if (pan && pan.solo) return;
     if (herr === "mano") return;   // solo mueve la vista, nunca dibuja ni elige
     if (pan && herr === "elegir" && pan.mov > 8) return;
+    if (G.ventana) {
+      // lo que queda completo dentro del recuadro se suma a la selección
+      const v = G.ventana; G.ventana = null; setVentana(null);
+      const A = aM(Math.min(v.x0, v.x1), Math.max(v.y0, v.y1)), B = aM(Math.max(v.x0, v.x1), Math.min(v.y0, v.y1));
+      const dentro = objs.filter(o => { const c = DIB.caja(o); return c.length && c.every(q => q.x >= A.x && q.x <= B.x && q.y >= A.y && q.y <= B.y); }).map(o => o.id);
+      setSelSet(prev => prev.concat(dentro.filter(id => !prev.includes(id))));
+      if (!dentro.length) aviso("No quedó ningún objeto completo dentro del recuadro.");
+      return;
+    }
     if (e.button !== undefined && e.button > 0) return;
     tocar(p.X, p.Y);
     if (e.pointerType !== "mouse") setCursor(null);
@@ -5392,6 +5414,8 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   if (res && res.tipo === "distancia") { const A = aP(res.a), B = aP(res.b); els.push(h("line", { key: "rd", x1: A.X, y1: A.Y, x2: B.X, y2: B.Y, stroke: "#059669", strokeWidth: 3 })); }
   if (res && res.tipo === "area") els.push(h("polygon", { key: "ra", points: res.v.map(p => { const s = aP(p); return s.X + "," + s.Y; }).join(" "), fill: "rgba(5,150,105,0.18)", stroke: "#059669", strokeWidth: 2.5 }));
   if (res && res.tipo === "circulo") els.push(dibujarObj(res.obj, "rc", { col: "#059669", ancho: 3.5 }));
+  if (ventana) els.push(h("rect", { key: "ventana", x: Math.min(ventana.x0, ventana.x1), y: Math.min(ventana.y0, ventana.y1), width: Math.abs(ventana.x1 - ventana.x0), height: Math.abs(ventana.y1 - ventana.y0),
+    fill: "rgba(2,132,199,0.08)", stroke: "#0284C7", strokeWidth: 1.5, strokeDasharray: "6 4" }));
   if (res && res.tipo === "coord") { const A = aP(res.p);   // marca del punto consultado
     els.push(h("circle", { key: "rco", cx: A.X, cy: A.Y, r: 9, fill: "none", stroke: "#059669", strokeWidth: 2.5 }),
       h("line", { key: "rco1", x1: A.X - 14, y1: A.Y, x2: A.X + 14, y2: A.Y, stroke: "#059669", strokeWidth: 2 }),
@@ -5447,6 +5471,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     estacar: "toca la línea, arco o eje para marcar los puntos",
     desfase: "escribe la medida, elige el lado y toca la figura",
     unir: `toca las líneas a unir (${selSet.length}) y luego Unir`,
+    seleccionar: selSet.length ? `${selSet.length} elegido${selSet.length > 1 ? "s" : ""} · toca o arrastra para sumar más` : "toca objetos o arrastra un recuadro",
     idcoord: "toca un punto: te digo su Norte y Este",
     mano: "arrastra para moverte por el dibujo · zoom con dos dedos o la rueda · ✋ para volver",
     abscisa: eje ? "toca un punto: te digo su abscisa y desplazamiento" : "primero pon el eje (Dibujar → Eje de la vía)",
@@ -5567,6 +5592,14 @@ function TabDibujo({ proy, onChange, onArchivo }) {
           herr === "desfase" && [h(React.Fragment, { key: "c" }, campoBarra(desD, setDesD, "0.50", 60)), h("span", { key: "m" }, "m"),
             ...[["afuera", "Afuera +"], ["adentro", "Adentro −"], ["ambos", "Ambos"]].map(([k, t]) => h(React.Fragment, { key: k }, btnBarra(t, () => setDesLado(k), desLado === k ? C.accent : "#334155")))],
           herr === "unir" && btnBarra("Unir (" + selSet.length + ")", unirSeleccion, selSet.length >= 2 ? C.accent : "#475569", "check"),
+          herr === "seleccionar" && !selSet.length && objs.length > 0 && btnBarra("Todo", () => setSelSet(objs.map(o => o.id)), "#334155"),
+          herr === "seleccionar" && selSet.length > 0 && [
+            ["borrar", btnBarra("Borrar (" + selSet.length + ")", borrarSeleccion, C.danger, "trash-2")],
+            ["unir", btnBarra("Unir", unirSeleccion, objs.filter(o => selSet.includes(o.id) && DIB_UNIBLES.includes(o.t)).length >= 2 ? C.accent : "#475569", "combine")],
+            ["color", btnBarra("Color", () => setColorSel(!colorSel), colorSel ? C.accent : "#334155")],
+            ["mover", btnBarra("Mover", () => pasarSeleccion("mover"), "#334155", "move")],
+            ["copiar", btnBarra("Copiar", () => pasarSeleccion("copiar"), "#334155", "copy")],
+            ["girar", btnBarra("Girar", () => pasarSeleccion("girar"), "#334155", "rotate-ccw")]].map(([k, el]) => h(React.Fragment, { key: k }, el)),
           puedeRapido && h("form", { key: "rap", className: "tv-dib-rapido", onSubmit: e => { e.preventDefault(); medidaRapida(); }, style: { display: "flex", gap: 4, alignItems: "center", flex: "0 0 auto" } },
             campoBarra(rapD, setRapD, "Dist.", 66), campoBarra(rapAz, setRapAz, "Azimut", 84, "text"),
             h("button", { type: "submit", className: "tv-dib-btn", style: { background: C.accent, color: "#fff", border: "none", borderRadius: 8, padding: "6px 9px", fontWeight: 800, cursor: "pointer" } }, "✓")),
@@ -5609,6 +5642,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
           h("div", null, h("span", { style: { display: "inline-block", width: paso * vista.k, borderBottom: "2px solid #334155", marginRight: 6, verticalAlign: "middle" } }), (paso >= 1 ? paso : paso.toPrecision(1)) + " m"),
           (cursor || hover) && h("div", { style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, "N " + f3((cursor || hover).y) + "  E " + f3((cursor || hover).x))),
         // resultado de medir
+        herr === "seleccionar" && colorSel && selSet.length > 0 && panel("COLOR DE " + selSet.length + " OBJETO" + (selSet.length > 1 ? "S" : ""), paleta(null, colorSeleccion), null, () => setColorSel(false)),
         res && panel({ coord: "COORDENADA DEL PUNTO", abscisa: "ABSCISA Y DESPLAZAMIENTO", area: "ÁREA Y PERÍMETRO", distancia: "DISTANCIA Y AZIMUT", circulo: res.obj && res.obj.t === "ar" ? "ARCO" : "CÍRCULO", angulo: "ÁNGULO ENTRE LÍNEAS" }[res.tipo], res.rows.map(([a, b], i) => filaInfo(a, b, i)),
           [res.tipo === "coord" && h(Btn, { small: true, color: "#334155", onClick: () => { agregar([{ t: "p", x: res.p.x, y: res.p.y, nom: "N " + f3(res.p.y) + "  E " + f3(res.p.x) }]); setRes(null); } }, "📍 Anotar en el dibujo"),
            res.tipo === "coord" && h(Btn, { small: true, color: "#334155", onClick: () => { const t = "N " + f3(res.p.y) + "  E " + f3(res.p.x);
