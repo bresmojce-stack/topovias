@@ -664,7 +664,7 @@ function espesorAntesDe(cs, nombre) {
 
 // ─── PARQUEADERO DE CABECERA ──────────────────────────────────────────────────
 // Un parqueadero "de cabecera" queda detrás del inicio de la vía (abscisas negativas, ej. −0+005 a
-// 0+000) o después del fin, con los cupos de frente. Se ubica con su fondo y con el desplazamiento
+// 0+000) o después del fin. Se ubica con su fondo y con el desplazamiento
 // desde/hasta el eje; aquí se convierte en abscisas y ancho para que el resto del cálculo lo trate
 // igual que un parqueadero lateral. Distancias, anchos y áreas siempre en valor absoluto.
 const esCabecera = p => !!p && (p.ubicacion === "inicio" || p.ubicacion === "fin");
@@ -1334,7 +1334,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "38";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "39";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -5749,8 +5749,7 @@ function EditorParq({
       color: C.parq,
       marginBottom: 10
     }
-  }, cab ? ["CABECERA AL ", p.ubicacion === "inicio" ? "INICIO" : "FIN", " (", p.lado === "izquierdo" ? "IZQ" : "DER", ") \xA0|\xA0 los cupos quedan de frente, ",
-      p.ubicacion === "inicio" ? "detrás del inicio" : "después del fin", " de la vía. Desde/hasta se miden desde el eje."]
+  }, cab ? ["CABECERA AL ", p.ubicacion === "inicio" ? "INICIO" : "FIN", " (", p.lado === "izquierdo" ? "IZQ" : "DER", ") \xA0|\xA0 nace en ", formatoAbscisa(borde), " y va ", p.ubicacion === "inicio" ? "hacia atrás (abscisas negativas)" : "hacia adelante", ". Desde/hasta se miden desde el eje."]
     : ["EJE → LATERAL (", p.lado === "izquierdo" ? "IZQ" : "DER", ") → ", /*#__PURE__*/React.createElement("strong", { key: "pq" }, "PARQUEADERO"), " \xA0|\xA0 el parqueadero nace desde el borde de vía (lateral), no desde el eje."]), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
