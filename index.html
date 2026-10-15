@@ -58,7 +58,7 @@
   .tv-guardado.error { color: #FCA5A5; }
   .tv-bloqueada input.tv-in, .tv-bloqueada textarea { background: #F1F5F9 !important; color: #475569 !important; cursor: not-allowed; }
   .tv-banner-bloqueo { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #FFFBEB; border-bottom: 1px solid #FDE68A; color: #92400E; padding: 9px 16px; font-size: 13px; font-weight: 600; }
-  .tv-aviso { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(70px + env(safe-area-inset-bottom, 0px)); z-index: 130; background: #0F172A; color: #fff; padding: 11px 18px; border-radius: 12px; font-size: 13.5px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.3); max-width: calc(100vw - 32px); text-align: center; }
+  .tv-aviso { pointer-events: none; position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(70px + env(safe-area-inset-bottom, 0px)); z-index: 130; background: #0F172A; color: #fff; padding: 11px 18px; border-radius: 12px; font-size: 13.5px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.3); max-width: calc(100vw - 32px); text-align: center; }
 
   /* ── Pestañas: una sola fila que se desliza, fija arriba al hacer scroll ── */
   .tv-tabs { position: sticky; top: 0; z-index: 50; background: #fff; border-bottom: 1px solid #E2E8F0; display: flex; gap: 2px;
@@ -472,7 +472,7 @@ const C = {
   row2: "#F8FAFC"
 };
 // Íconos (lucide, licencia ISC) dibujados como SVG: no necesitan internet
-const ICONOS = {"compass":[["path",{"d":"m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z"}],["circle",{"cx":"12","cy":"12","r":"10"}]],"ruler":[["path",{"d":"M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"}],["path",{"d":"m14.5 12.5 2-2"}],["path",{"d":"m11.5 9.5 2-2"}],["path",{"d":"m8.5 6.5 2-2"}],["path",{"d":"m17.5 15.5 2-2"}]],"car":[["path",{"d":"M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"}],["circle",{"cx":"7","cy":"17","r":"2"}],["path",{"d":"M9 17h6"}],["circle",{"cx":"17","cy":"17","r":"2"}]],"table":[["path",{"d":"M12 3v18"}],["rect",{"width":"18","height":"18","x":"3","y":"3","rx":"2"}],["path",{"d":"M3 9h18"}],["path",{"d":"M3 15h18"}]],"map":[["path",{"d":"M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"}],["path",{"d":"M15 5.764v15"}],["path",{"d":"M9 3.236v15"}]],"chart-column":[["path",{"d":"M3 3v16a2 2 0 0 0 2 2h16"}],["path",{"d":"M18 17V9"}],["path",{"d":"M13 17V5"}],["path",{"d":"M8 17v-3"}]],"trending-up":[["path",{"d":"M16 7h6v6"}],["path",{"d":"m22 7-8.5 8.5-5-5L2 17"}]],"calculator":[["rect",{"width":"16","height":"20","x":"4","y":"2","rx":"2"}],["line",{"x1":"8","x2":"16","y1":"6","y2":"6"}],["line",{"x1":"16","x2":"16","y1":"14","y2":"18"}],["path",{"d":"M16 10h.01"}],["path",{"d":"M12 10h.01"}],["path",{"d":"M8 10h.01"}],["path",{"d":"M12 14h.01"}],["path",{"d":"M8 14h.01"}],["path",{"d":"M12 18h.01"}],["path",{"d":"M8 18h.01"}]],"shield-check":[["path",{"d":"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"}],["path",{"d":"m9 12 2 2 4-4"}]],"folder-open":[["path",{"d":"m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"}]],"file-spreadsheet":[["path",{"d":"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"}],["path",{"d":"M14 2v4a2 2 0 0 0 2 2h4"}],["path",{"d":"M8 13h2"}],["path",{"d":"M14 13h2"}],["path",{"d":"M8 17h2"}],["path",{"d":"M14 17h2"}]],"zap":[["path",{"d":"M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"}]],"plus":[["path",{"d":"M5 12h14"}],["path",{"d":"M12 5v14"}]],"chevron-left":[["path",{"d":"m15 18-6-6 6-6"}]],"layers":[["path",{"d":"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"}],["path",{"d":"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"}],["path",{"d":"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"}]],"undo-2":[["path",{"d":"M9 14 4 9l5-5"}],["path",{"d":"M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"}]],"redo-2":[["path",{"d":"m15 14 5-5-5-5"}],["path",{"d":"M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"}]],"route":[["circle",{"cx":"6","cy":"19","r":"3"}],["path",{"d":"M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"}],["circle",{"cx":"18","cy":"5","r":"3"}]],"save":[["path",{"d":"M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"}],["path",{"d":"M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"}],["path",{"d":"M7 3v4a1 1 0 0 0 1 1h7"}]],"upload":[["path",{"d":"M12 3v12"}],["path",{"d":"m17 8-5-5-5 5"}],["path",{"d":"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}]],"share-2":[["circle",{"cx":"18","cy":"5","r":"3"}],["circle",{"cx":"6","cy":"12","r":"3"}],["circle",{"cx":"18","cy":"19","r":"3"}],["line",{"x1":"8.59","x2":"15.42","y1":"13.51","y2":"17.49"}],["line",{"x1":"15.41","x2":"8.59","y1":"6.51","y2":"10.49"}]],"trash-2":[["path",{"d":"M10 11v6"}],["path",{"d":"M14 11v6"}],["path",{"d":"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"}],["path",{"d":"M3 6h18"}],["path",{"d":"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"}]],"copy":[["rect",{"width":"14","height":"14","x":"8","y":"8","rx":"2","ry":"2"}],["path",{"d":"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"}]],"x":[["path",{"d":"M18 6 6 18"}],["path",{"d":"m6 6 12 12"}]],"folder":[["path",{"d":"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"}]],"download":[["path",{"d":"M12 15V3"}],["path",{"d":"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}],["path",{"d":"m7 10 5 5 5-5"}]],"lock":[["rect",{"width":"18","height":"11","x":"3","y":"11","rx":"2","ry":"2"}],["path",{"d":"M7 11V7a5 5 0 0 1 10 0v4"}]],"lock-open":[["rect",{"width":"18","height":"11","x":"3","y":"11","rx":"2","ry":"2"}],["path",{"d":"M7 11V7a5 5 0 0 1 9.9-1"}]],"cloud-check":[["path",{"d":"m17 15-5.5 5.5L9 18"}],["path",{"d":"M5 17.743A7 7 0 1 1 15.71 10h1.79a4.5 4.5 0 0 1 1.5 8.742"}]],"history":[["path",{"d":"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"}],["path",{"d":"M3 3v5h5"}],["path",{"d":"M12 7v5l4 2"}]],"cloud-alert":[["path",{"d":"M12 12v4"}],["path",{"d":"M12 20h.01"}],["path",{"d":"M17 18h.5a1 1 0 0 0 0-9h-1.79A7 7 0 1 0 7 17.708"}]],"clipboard-list":[["rect",{"width":"8","height":"4","x":"8","y":"2","rx":"1","ry":"1"}],["path",{"d":"M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"}],["path",{"d":"M12 11h4"}],["path",{"d":"M12 16h4"}],["path",{"d":"M8 11h.01"}],["path",{"d":"M8 16h.01"}]],"pencil-ruler":[["path",{"d":"M13 7 8.7 2.7a2.41 2.41 0 0 0-3.4 0L2.7 5.3a2.41 2.41 0 0 0 0 3.4L7 13"}],["path",{"d":"m8 6 2-2"}],["path",{"d":"m18 16 2-2"}],["path",{"d":"m17 11 4.3 4.3c.94.94.94 2.46 0 3.4l-2.6 2.6c-.94.94-2.46.94-3.4 0L11 17"}],["path",{"d":"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"}],["path",{"d":"m15 5 4 4"}]],"pencil":[["path",{"d":"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"}],["path",{"d":"m15 5 4 4"}]],"slash":[["path",{"d":"M22 2 2 22"}]],"spline":[["circle",{"cx":"19","cy":"5","r":"2"}],["circle",{"cx":"5","cy":"19","r":"2"}],["path",{"d":"M5 17A12 12 0 0 1 17 5"}]],"circle-dot":[["circle",{"cx":"12","cy":"12","r":"10"}],["circle",{"cx":"12","cy":"12","r":"1"}]],"pentagon":[["path",{"d":"M10.83 2.38a2 2 0 0 1 2.34 0l8 5.74a2 2 0 0 1 .73 2.25l-3.04 9.26a2 2 0 0 1-1.9 1.37H7.04a2 2 0 0 1-1.9-1.37L2.1 10.37a2 2 0 0 1 .73-2.25z"}]],"move-horizontal":[["path",{"d":"m18 8 4 4-4 4"}],["path",{"d":"M2 12h20"}],["path",{"d":"m6 8-4 4 4 4"}]],"mouse-pointer-2":[["path",{"d":"M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"}]],"scan":[["path",{"d":"M3 7V5a2 2 0 0 1 2-2h2"}],["path",{"d":"M17 3h2a2 2 0 0 1 2 2v2"}],["path",{"d":"M21 17v2a2 2 0 0 1-2 2h-2"}],["path",{"d":"M7 21H5a2 2 0 0 1-2-2v-2"}]],"map-pin":[["path",{"d":"M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"}],["circle",{"cx":"12","cy":"10","r":"3"}]],"magnet":[["path",{"d":"m12 15 4 4"}],["path",{"d":"M2.352 10.648a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l6.029-6.029a1 1 0 1 1 3 3l-6.029 6.029a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l6.365-6.367A1 1 0 0 0 8.716 4.282z"}],["path",{"d":"m5 8 4 4"}]],"grid-3x3":[["rect",{"width":"18","height":"18","x":"3","y":"3","rx":"2"}],["path",{"d":"M3 9h18"}],["path",{"d":"M3 15h18"}],["path",{"d":"M9 3v18"}],["path",{"d":"M15 3v18"}]],"keyboard":[["path",{"d":"M10 8h.01"}],["path",{"d":"M12 12h.01"}],["path",{"d":"M14 8h.01"}],["path",{"d":"M16 12h.01"}],["path",{"d":"M18 8h.01"}],["path",{"d":"M6 8h.01"}],["path",{"d":"M7 16h10"}],["path",{"d":"M8 12h.01"}],["rect",{"width":"20","height":"16","x":"2","y":"4","rx":"2"}]],"check":[["path",{"d":"M20 6 9 17l-5-5"}]],"scissors":[["circle",{"cx":"6","cy":"6","r":"3"}],["path",{"d":"M8.12 8.12 12 12"}],["path",{"d":"M20 4 8.12 15.88"}],["circle",{"cx":"6","cy":"18","r":"3"}],["path",{"d":"M14.8 14.8 20 20"}]],"search":[["path",{"d":"m21 21-4.34-4.34"}],["circle",{"cx":"11","cy":"11","r":"8"}]],"square-dashed-mouse-pointer":[["path",{"d":"M12.034 12.681a.498.498 0 0 1 .647-.647l9 3.5a.5.5 0 0 1-.033.943l-3.444 1.068a1 1 0 0 0-.66.66l-1.067 3.443a.5.5 0 0 1-.943.033z"}],["path",{"d":"M5 3a2 2 0 0 0-2 2"}],["path",{"d":"M19 3a2 2 0 0 1 2 2"}],["path",{"d":"M5 21a2 2 0 0 1-2-2"}],["path",{"d":"M9 3h1"}],["path",{"d":"M9 21h2"}],["path",{"d":"M14 3h1"}],["path",{"d":"M3 9v1"}],["path",{"d":"M21 9v2"}],["path",{"d":"M3 14v1"}]],"pen-line":[["path",{"d":"M13 21h8"}],["path",{"d":"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"}]],"rectangle-horizontal":[["rect",{"width":"20","height":"12","x":"2","y":"6","rx":"2"}]],"square":[["rect",{"width":"18","height":"18","x":"3","y":"3","rx":"2"}]],"triangle":[["path",{"d":"M13.73 4a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"}]],"circle":[["circle",{"cx":"12","cy":"12","r":"10"}]],"rainbow":[["path",{"d":"M22 17a10 10 0 0 0-20 0"}],["path",{"d":"M6 17a6 6 0 0 1 12 0"}],["path",{"d":"M10 17a2 2 0 0 1 4 0"}]],"paint-bucket":[["path",{"d":"m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z"}],["path",{"d":"m5 2 5 5"}],["path",{"d":"M2 13h15"}],["path",{"d":"M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z"}]],"between-vertical-start":[["rect",{"width":"7","height":"13","x":"3","y":"8","rx":"1"}],["path",{"d":"m15 2-3 3-3-3"}],["rect",{"width":"7","height":"13","x":"14","y":"8","rx":"1"}]],"triangle-right":[["path",{"d":"M22 18a2 2 0 0 1-2 2H3c-1.1 0-1.3-.6-.4-1.3L20.4 4.3c.9-.7 1.6-.4 1.6.7Z"}]],"circle-dot-dashed":[["path",{"d":"M10.1 2.18a9.93 9.93 0 0 1 3.8 0"}],["path",{"d":"M17.6 3.71a9.95 9.95 0 0 1 2.69 2.7"}],["path",{"d":"M21.82 10.1a9.93 9.93 0 0 1 0 3.8"}],["path",{"d":"M20.29 17.6a9.95 9.95 0 0 1-2.7 2.69"}],["path",{"d":"M13.9 21.82a9.94 9.94 0 0 1-3.8 0"}],["path",{"d":"M6.4 20.29a9.95 9.95 0 0 1-2.69-2.7"}],["path",{"d":"M2.18 13.9a9.93 9.93 0 0 1 0-3.8"}],["path",{"d":"M3.71 6.4a9.95 9.95 0 0 1 2.7-2.69"}],["circle",{"cx":"12","cy":"12","r":"1"}]],"move":[["path",{"d":"M12 2v20"}],["path",{"d":"m15 19-3 3-3-3"}],["path",{"d":"m19 9 3 3-3 3"}],["path",{"d":"M2 12h20"}],["path",{"d":"m5 9-3 3 3 3"}],["path",{"d":"m9 5 3-3 3 3"}]],"rotate-ccw":[["path",{"d":"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"}],["path",{"d":"M3 3v5h5"}]],"move-up-right":[["path",{"d":"M13 5H19V11"}],["path",{"d":"M19 5L5 19"}]]};
+const ICONOS = {"compass":[["path",{"d":"m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z"}],["circle",{"cx":"12","cy":"12","r":"10"}]],"ruler":[["path",{"d":"M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"}],["path",{"d":"m14.5 12.5 2-2"}],["path",{"d":"m11.5 9.5 2-2"}],["path",{"d":"m8.5 6.5 2-2"}],["path",{"d":"m17.5 15.5 2-2"}]],"car":[["path",{"d":"M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"}],["circle",{"cx":"7","cy":"17","r":"2"}],["path",{"d":"M9 17h6"}],["circle",{"cx":"17","cy":"17","r":"2"}]],"table":[["path",{"d":"M12 3v18"}],["rect",{"width":"18","height":"18","x":"3","y":"3","rx":"2"}],["path",{"d":"M3 9h18"}],["path",{"d":"M3 15h18"}]],"map":[["path",{"d":"M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"}],["path",{"d":"M15 5.764v15"}],["path",{"d":"M9 3.236v15"}]],"chart-column":[["path",{"d":"M3 3v16a2 2 0 0 0 2 2h16"}],["path",{"d":"M18 17V9"}],["path",{"d":"M13 17V5"}],["path",{"d":"M8 17v-3"}]],"trending-up":[["path",{"d":"M16 7h6v6"}],["path",{"d":"m22 7-8.5 8.5-5-5L2 17"}]],"calculator":[["rect",{"width":"16","height":"20","x":"4","y":"2","rx":"2"}],["line",{"x1":"8","x2":"16","y1":"6","y2":"6"}],["line",{"x1":"16","x2":"16","y1":"14","y2":"18"}],["path",{"d":"M16 10h.01"}],["path",{"d":"M12 10h.01"}],["path",{"d":"M8 10h.01"}],["path",{"d":"M12 14h.01"}],["path",{"d":"M8 14h.01"}],["path",{"d":"M12 18h.01"}],["path",{"d":"M8 18h.01"}]],"shield-check":[["path",{"d":"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"}],["path",{"d":"m9 12 2 2 4-4"}]],"folder-open":[["path",{"d":"m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"}]],"file-spreadsheet":[["path",{"d":"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"}],["path",{"d":"M14 2v4a2 2 0 0 0 2 2h4"}],["path",{"d":"M8 13h2"}],["path",{"d":"M14 13h2"}],["path",{"d":"M8 17h2"}],["path",{"d":"M14 17h2"}]],"zap":[["path",{"d":"M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"}]],"plus":[["path",{"d":"M5 12h14"}],["path",{"d":"M12 5v14"}]],"chevron-left":[["path",{"d":"m15 18-6-6 6-6"}]],"layers":[["path",{"d":"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"}],["path",{"d":"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"}],["path",{"d":"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"}]],"undo-2":[["path",{"d":"M9 14 4 9l5-5"}],["path",{"d":"M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"}]],"redo-2":[["path",{"d":"m15 14 5-5-5-5"}],["path",{"d":"M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"}]],"route":[["circle",{"cx":"6","cy":"19","r":"3"}],["path",{"d":"M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"}],["circle",{"cx":"18","cy":"5","r":"3"}]],"save":[["path",{"d":"M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"}],["path",{"d":"M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"}],["path",{"d":"M7 3v4a1 1 0 0 0 1 1h7"}]],"upload":[["path",{"d":"M12 3v12"}],["path",{"d":"m17 8-5-5-5 5"}],["path",{"d":"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}]],"share-2":[["circle",{"cx":"18","cy":"5","r":"3"}],["circle",{"cx":"6","cy":"12","r":"3"}],["circle",{"cx":"18","cy":"19","r":"3"}],["line",{"x1":"8.59","x2":"15.42","y1":"13.51","y2":"17.49"}],["line",{"x1":"15.41","x2":"8.59","y1":"6.51","y2":"10.49"}]],"trash-2":[["path",{"d":"M10 11v6"}],["path",{"d":"M14 11v6"}],["path",{"d":"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"}],["path",{"d":"M3 6h18"}],["path",{"d":"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"}]],"copy":[["rect",{"width":"14","height":"14","x":"8","y":"8","rx":"2","ry":"2"}],["path",{"d":"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"}]],"x":[["path",{"d":"M18 6 6 18"}],["path",{"d":"m6 6 12 12"}]],"folder":[["path",{"d":"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"}]],"download":[["path",{"d":"M12 15V3"}],["path",{"d":"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}],["path",{"d":"m7 10 5 5 5-5"}]],"lock":[["rect",{"width":"18","height":"11","x":"3","y":"11","rx":"2","ry":"2"}],["path",{"d":"M7 11V7a5 5 0 0 1 10 0v4"}]],"lock-open":[["rect",{"width":"18","height":"11","x":"3","y":"11","rx":"2","ry":"2"}],["path",{"d":"M7 11V7a5 5 0 0 1 9.9-1"}]],"cloud-check":[["path",{"d":"m17 15-5.5 5.5L9 18"}],["path",{"d":"M5 17.743A7 7 0 1 1 15.71 10h1.79a4.5 4.5 0 0 1 1.5 8.742"}]],"history":[["path",{"d":"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"}],["path",{"d":"M3 3v5h5"}],["path",{"d":"M12 7v5l4 2"}]],"cloud-alert":[["path",{"d":"M12 12v4"}],["path",{"d":"M12 20h.01"}],["path",{"d":"M17 18h.5a1 1 0 0 0 0-9h-1.79A7 7 0 1 0 7 17.708"}]],"clipboard-list":[["rect",{"width":"8","height":"4","x":"8","y":"2","rx":"1","ry":"1"}],["path",{"d":"M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"}],["path",{"d":"M12 11h4"}],["path",{"d":"M12 16h4"}],["path",{"d":"M8 11h.01"}],["path",{"d":"M8 16h.01"}]],"pencil-ruler":[["path",{"d":"M13 7 8.7 2.7a2.41 2.41 0 0 0-3.4 0L2.7 5.3a2.41 2.41 0 0 0 0 3.4L7 13"}],["path",{"d":"m8 6 2-2"}],["path",{"d":"m18 16 2-2"}],["path",{"d":"m17 11 4.3 4.3c.94.94.94 2.46 0 3.4l-2.6 2.6c-.94.94-2.46.94-3.4 0L11 17"}],["path",{"d":"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"}],["path",{"d":"m15 5 4 4"}]],"pencil":[["path",{"d":"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"}],["path",{"d":"m15 5 4 4"}]],"slash":[["path",{"d":"M22 2 2 22"}]],"spline":[["circle",{"cx":"19","cy":"5","r":"2"}],["circle",{"cx":"5","cy":"19","r":"2"}],["path",{"d":"M5 17A12 12 0 0 1 17 5"}]],"circle-dot":[["circle",{"cx":"12","cy":"12","r":"10"}],["circle",{"cx":"12","cy":"12","r":"1"}]],"pentagon":[["path",{"d":"M10.83 2.38a2 2 0 0 1 2.34 0l8 5.74a2 2 0 0 1 .73 2.25l-3.04 9.26a2 2 0 0 1-1.9 1.37H7.04a2 2 0 0 1-1.9-1.37L2.1 10.37a2 2 0 0 1 .73-2.25z"}]],"move-horizontal":[["path",{"d":"m18 8 4 4-4 4"}],["path",{"d":"M2 12h20"}],["path",{"d":"m6 8-4 4 4 4"}]],"mouse-pointer-2":[["path",{"d":"M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"}]],"scan":[["path",{"d":"M3 7V5a2 2 0 0 1 2-2h2"}],["path",{"d":"M17 3h2a2 2 0 0 1 2 2v2"}],["path",{"d":"M21 17v2a2 2 0 0 1-2 2h-2"}],["path",{"d":"M7 21H5a2 2 0 0 1-2-2v-2"}]],"map-pin":[["path",{"d":"M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"}],["circle",{"cx":"12","cy":"10","r":"3"}]],"magnet":[["path",{"d":"m12 15 4 4"}],["path",{"d":"M2.352 10.648a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l6.029-6.029a1 1 0 1 1 3 3l-6.029 6.029a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l6.365-6.367A1 1 0 0 0 8.716 4.282z"}],["path",{"d":"m5 8 4 4"}]],"grid-3x3":[["rect",{"width":"18","height":"18","x":"3","y":"3","rx":"2"}],["path",{"d":"M3 9h18"}],["path",{"d":"M3 15h18"}],["path",{"d":"M9 3v18"}],["path",{"d":"M15 3v18"}]],"keyboard":[["path",{"d":"M10 8h.01"}],["path",{"d":"M12 12h.01"}],["path",{"d":"M14 8h.01"}],["path",{"d":"M16 12h.01"}],["path",{"d":"M18 8h.01"}],["path",{"d":"M6 8h.01"}],["path",{"d":"M7 16h10"}],["path",{"d":"M8 12h.01"}],["rect",{"width":"20","height":"16","x":"2","y":"4","rx":"2"}]],"check":[["path",{"d":"M20 6 9 17l-5-5"}]],"scissors":[["circle",{"cx":"6","cy":"6","r":"3"}],["path",{"d":"M8.12 8.12 12 12"}],["path",{"d":"M20 4 8.12 15.88"}],["circle",{"cx":"6","cy":"18","r":"3"}],["path",{"d":"M14.8 14.8 20 20"}]],"search":[["path",{"d":"m21 21-4.34-4.34"}],["circle",{"cx":"11","cy":"11","r":"8"}]],"square-dashed-mouse-pointer":[["path",{"d":"M12.034 12.681a.498.498 0 0 1 .647-.647l9 3.5a.5.5 0 0 1-.033.943l-3.444 1.068a1 1 0 0 0-.66.66l-1.067 3.443a.5.5 0 0 1-.943.033z"}],["path",{"d":"M5 3a2 2 0 0 0-2 2"}],["path",{"d":"M19 3a2 2 0 0 1 2 2"}],["path",{"d":"M5 21a2 2 0 0 1-2-2"}],["path",{"d":"M9 3h1"}],["path",{"d":"M9 21h2"}],["path",{"d":"M14 3h1"}],["path",{"d":"M3 9v1"}],["path",{"d":"M21 9v2"}],["path",{"d":"M3 14v1"}]],"pen-line":[["path",{"d":"M13 21h8"}],["path",{"d":"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"}]],"rectangle-horizontal":[["rect",{"width":"20","height":"12","x":"2","y":"6","rx":"2"}]],"square":[["rect",{"width":"18","height":"18","x":"3","y":"3","rx":"2"}]],"triangle":[["path",{"d":"M13.73 4a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"}]],"circle":[["circle",{"cx":"12","cy":"12","r":"10"}]],"rainbow":[["path",{"d":"M22 17a10 10 0 0 0-20 0"}],["path",{"d":"M6 17a6 6 0 0 1 12 0"}],["path",{"d":"M10 17a2 2 0 0 1 4 0"}]],"paint-bucket":[["path",{"d":"m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z"}],["path",{"d":"m5 2 5 5"}],["path",{"d":"M2 13h15"}],["path",{"d":"M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z"}]],"between-vertical-start":[["rect",{"width":"7","height":"13","x":"3","y":"8","rx":"1"}],["path",{"d":"m15 2-3 3-3-3"}],["rect",{"width":"7","height":"13","x":"14","y":"8","rx":"1"}]],"triangle-right":[["path",{"d":"M22 18a2 2 0 0 1-2 2H3c-1.1 0-1.3-.6-.4-1.3L20.4 4.3c.9-.7 1.6-.4 1.6.7Z"}]],"circle-dot-dashed":[["path",{"d":"M10.1 2.18a9.93 9.93 0 0 1 3.8 0"}],["path",{"d":"M17.6 3.71a9.95 9.95 0 0 1 2.69 2.7"}],["path",{"d":"M21.82 10.1a9.93 9.93 0 0 1 0 3.8"}],["path",{"d":"M20.29 17.6a9.95 9.95 0 0 1-2.7 2.69"}],["path",{"d":"M13.9 21.82a9.94 9.94 0 0 1-3.8 0"}],["path",{"d":"M6.4 20.29a9.95 9.95 0 0 1-2.69-2.7"}],["path",{"d":"M2.18 13.9a9.93 9.93 0 0 1 0-3.8"}],["path",{"d":"M3.71 6.4a9.95 9.95 0 0 1 2.7-2.69"}],["circle",{"cx":"12","cy":"12","r":"1"}]],"move":[["path",{"d":"M12 2v20"}],["path",{"d":"m15 19-3 3-3-3"}],["path",{"d":"m19 9 3 3-3 3"}],["path",{"d":"M2 12h20"}],["path",{"d":"m5 9-3 3 3 3"}],["path",{"d":"m9 5 3-3 3 3"}]],"rotate-ccw":[["path",{"d":"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"}],["path",{"d":"M3 3v5h5"}]],"move-up-right":[["path",{"d":"M13 5H19V11"}],["path",{"d":"M19 5L5 19"}]],"milestone":[["path",{"d":"M12 13v8"}],["path",{"d":"M12 3v3"}],["path",{"d":"M4 6a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h13a2 2 0 0 0 1.152-.365l3.424-2.317a1 1 0 0 0 0-1.635l-3.424-2.318A2 2 0 0 0 17 6z"}]],"locate-fixed":[["line",{"x1":"2","x2":"5","y1":"12","y2":"12"}],["line",{"x1":"19","x2":"22","y1":"12","y2":"12"}],["line",{"x1":"12","x2":"12","y1":"2","y2":"5"}],["line",{"x1":"12","x2":"12","y1":"19","y2":"22"}],["circle",{"cx":"12","cy":"12","r":"7"}],["circle",{"cx":"12","cy":"12","r":"3"}]],"signpost":[["path",{"d":"M12 13v8"}],["path",{"d":"M12 3v3"}],["path",{"d":"M18 6a2 2 0 0 1 1.387.56l2.307 2.22a1 1 0 0 1 0 1.44l-2.307 2.22A2 2 0 0 1 18 13H6a2 2 0 0 1-1.387-.56l-2.306-2.22a1 1 0 0 1 0-1.44l2.306-2.22A2 2 0 0 1 6 6z"}]]};
 function Icono({ n, size, color, style }) {
   const nodos = ICONOS[n];
   if (!nodos) return null;
@@ -1225,7 +1225,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "27";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "28";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -3550,6 +3550,7 @@ function VentanaArchivo({ archivo, onClose }) {
 //   arco      { t: "ar", c: {x,y}, r, a1, a2 }   ángulos en radianes desde el Este, contra reloj de a1 a a2
 //   pluma     { t: "fh", v: [{x,y}…] }           trazo a mano alzada
 //   cota      { t: "cota", a, b, d }             d = separación de la línea de cota (m, con signo)
+//   eje       { t: "eje", v: [{x,y}…], abs0, paso, nom }  eje de la vía con abscisas (abs0 en el primer punto)
 const dibujoNuevo = nombre => ({ id: Date.now() + Math.random(), nombre: nombre || "Dibujo 1", sig: 1, objs: [] });
 const TAU = Math.PI * 2;
 const normA = a => ((a % TAU) + TAU) % TAU;
@@ -3582,8 +3583,8 @@ const DIB = {
   area: v => Math.abs(v.reduce((s, p, i) => { const q = v[(i + 1) % v.length]; return s + p.x * q.y - q.x * p.y; }, 0)) / 2,
   areaSigno: v => v.reduce((s, p, i) => { const q = v[(i + 1) % v.length]; return s + p.x * q.y - q.x * p.y; }, 0) / 2,
   largo: (v, cerrada) => v.reduce((s, p, i) => i === 0 ? s : s + DIB.dist(v[i - 1], p), 0) + (cerrada && v.length > 2 ? DIB.dist(v[v.length - 1], v[0]) : 0),
-  segmentos: o => o.t === "l" ? [[o.a, o.b]] : o.t === "pl" || o.t === "fh" ? o.v.slice(1).map((p, i) => [o.v[i], p]).concat(o.t === "pl" && o.c && o.v.length > 2 ? [[o.v[o.v.length - 1], o.v[0]]] : []) : [],
-  extremos: o => o.t === "p" ? [{ x: o.x, y: o.y }] : o.t === "l" ? [o.a, o.b] : o.t === "pl" ? o.v : o.t === "fh" ? [o.v[0], o.v[o.v.length - 1]] : o.t === "ar" ? [DIB.enCirculo(o.c, o.r, o.a1), DIB.enCirculo(o.c, o.r, o.a2)] : [],
+  segmentos: o => o.t === "l" ? [[o.a, o.b]] : o.t === "pl" || o.t === "fh" || o.t === "eje" ? o.v.slice(1).map((p, i) => [o.v[i], p]).concat(o.t === "pl" && o.c && o.v.length > 2 ? [[o.v[o.v.length - 1], o.v[0]]] : []) : [],
+  extremos: o => o.t === "p" ? [{ x: o.x, y: o.y }] : o.t === "l" ? [o.a, o.b] : o.t === "pl" || o.t === "eje" ? o.v : o.t === "fh" ? [o.v[0], o.v[o.v.length - 1]] : o.t === "ar" ? [DIB.enCirculo(o.c, o.r, o.a1), DIB.enCirculo(o.c, o.r, o.a2)] : [],
   // puntos para encuadrar la vista
   caja: o => o.t === "ci" ? [{ x: o.c.x - o.r, y: o.c.y - o.r }, { x: o.c.x + o.r, y: o.c.y + o.r }] : o.t === "ar" ? DIB.extremos(o).concat([DIB.enCirculo(o.c, o.r, o.a1 + DIB.barrido(o) / 2)]) : o.t === "cota" ? DIB.cotaLinea(o).slice(0, 2) : o.t === "fh" ? o.v : DIB.extremos(o),
   cotaLinea: o => { const L = DIB.dist(o.a, o.b) || 1, n = { x: -(o.b.y - o.a.y) / L, y: (o.b.x - o.a.x) / L };
@@ -3595,6 +3596,58 @@ const DIB = {
 };
 const f3 = v => (Math.round(v * 1000) / 1000).toFixed(3);
 const gms = rad => gradosAGMS(normA(rad) * 180 / Math.PI);
+
+// ── EJE: abscisa y desplazamiento ──
+// Abscisa = abscisa inicial + distancia recorrida por el eje. Desplazamiento + a la derecha, − a la izquierda.
+const absCorta = a => formatoAbscisa(a).replace(/\.000$/, "");
+function leerAbscisa(t) {
+  const x = String(t || "").replace(/,/g, ".").replace(/^\s*k/i, "").trim();
+  const m = x.match(/^(-?)(\d+)\s*\+\s*(\d+(?:\.\d+)?)$/);
+  if (m) return (m[1] ? -1 : 1) * (parseInt(m[2], 10) * 1000 + parseFloat(m[3]));
+  const n = parseFloat(x); return isNaN(n) ? null : n;
+}
+const EJE = {
+  acum: v => { const a = [0]; for (let i = 1; i < v.length; i++) a.push(a[i - 1] + DIB.dist(v[i - 1], v[i])); return a; },
+  // punto del terreno → { abs, desp, dist, fuera }
+  proyectar: (o, p) => {
+    const v = o.v, acum = EJE.acum(v), L = acum[acum.length - 1]; let mejor = null;
+    for (let i = 1; i < v.length; i++) {
+      const a = v[i - 1], b = v[i], len = acum[i] - acum[i - 1]; if (len < 1e-12) continue;
+      const u = { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
+      let t = (p.x - a.x) * u.x + (p.y - a.y) * u.y;
+      const extremo = (i === 1 && t < 0) || (i === v.length - 1 && t > len);
+      if (!extremo) t = Math.max(0, Math.min(len, t));
+      const q = DIB.sum(a, u, t), d = DIB.dist(p, q);
+      if (!mejor || d < mejor.dist - 1e-9) mejor = { s: acum[i - 1] + t, desp: (p.x - a.x) * u.y - (p.y - a.y) * u.x, dist: d, fuera: extremo };
+    }
+    if (!mejor) return null;
+    return { abs: (o.abs0 || 0) + mejor.s, desp: mejor.desp, dist: mejor.dist, fuera: mejor.fuera || mejor.s < -1e-9 || mejor.s > L + 1e-9 };
+  },
+  // abscisa + desplazamiento → punto del terreno (null si queda fuera del eje)
+  punto: (o, abs, desp) => {
+    const v = o.v, acum = EJE.acum(v), s = abs - (o.abs0 || 0), L = acum[acum.length - 1];
+    if (s < -1e-6 || s > L + 1e-6) return null;
+    let i = 1; while (i < v.length - 1 && acum[i] < s) i++;
+    const a = v[i - 1], b = v[i], len = (acum[i] - acum[i - 1]) || 1, u = { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
+    return DIB.sum(DIB.sum(a, u, s - acum[i - 1]), { x: u.y, y: -u.x }, desp || 0);
+  },
+  // marcas en abscisas redondas (cada "paso"), más el inicio y el fin
+  marcas: o => {
+    const v = o.v, acum = EJE.acum(v), L = acum[acum.length - 1], a0 = o.abs0 || 0, paso = o.paso > 0 ? o.paso : 10, r = [];
+    const en = s => { let i = 1; while (i < v.length - 1 && acum[i] < s) i++; const a = v[i - 1], b = v[i], len = (acum[i] - acum[i - 1]) || 1, u = { x: (b.x - a.x) / len, y: (b.y - a.y) / len }; return { p: DIB.sum(a, u, s - acum[i - 1]), u }; };
+    r.push({ s: 0, abs: a0, ...en(0), borde: true });
+    for (let k = Math.floor(a0 / paso + 1e-9) + 1, n = 0; (k * paso - a0) < L - 1e-6 && n < 5000; k++, n++) r.push({ s: k * paso - a0, abs: k * paso, ...en(k * paso - a0) });
+    r.push({ s: L, abs: a0 + L, ...en(L), borde: true });
+    return r;
+  }
+};
+// puntos a lo largo de un objeto (para estacar): distancias desde su inicio
+function recorrido(o) {
+  if (o.t === "ci") return { L: TAU * o.r, en: s => DIB.enCirculo(o.c, o.r, s / o.r) };
+  if (o.t === "ar") return { L: o.r * DIB.barrido(o), en: s => DIB.enCirculo(o.c, o.r, o.a1 + s / o.r) };
+  const v = o.t === "l" ? [o.a, o.b] : o.t === "pl" && o.c ? o.v.concat([o.v[0]]) : o.v, acum = EJE.acum(v);
+  return { L: acum[acum.length - 1], en: s => { let i = 1; while (i < v.length - 1 && acum[i] < s) i++; const t = (s - acum[i - 1]) / ((acum[i] - acum[i - 1]) || 1); return { x: v[i - 1].x + (v[i].x - v[i - 1].x) * t, y: v[i - 1].y + (v[i].y - v[i - 1].y) * t }; } };
+}
 
 // ── primitivas (tramos rectos y arcos) para cruces, recortes y extensiones ──
 function primitivas(o) {
@@ -3639,6 +3692,7 @@ function imanesDibujo(objs, activos, extra) {
     if (o.t === "ar") c.push({ ...DIB.enCirculo(o.c, o.r, o.a1 + DIB.barrido(o) / 2), tipo: "medio" });
   });
   if (activos.centro) objs.forEach(o => { if (o.t === "ci" || o.t === "ar") c.push({ x: o.c.x, y: o.c.y, tipo: "centro" }); });
+  if (activos.abscisa) objs.forEach(o => { if (o.t === "eje") EJE.marcas(o).forEach(m => c.push({ x: m.p.x, y: m.p.y, tipo: "abscisa" })); });
   if (activos.cruce) {
     const P = []; objs.forEach(o => { if (o.t !== "p" && o.t !== "cota" && o.t !== "fh") primitivas(o).forEach(p => P.push({ p, id: o.id })); });
     if (P.length <= 600)
@@ -3655,7 +3709,7 @@ function transformar(o, f, dAng) {
   switch (o.t) {
     case "p": { const q = f(o); return { ...o, x: q.x, y: q.y }; }
     case "l": return { ...o, a: f(o.a), b: f(o.b) };
-    case "pl": case "fh": return { ...o, v: o.v.map(f) };
+    case "pl": case "fh": case "eje": return { ...o, v: o.v.map(f) };
     case "cota": return { ...o, a: f(o.a), b: f(o.b) };
     case "ci": return { ...o, c: f(o.c) };
     case "ar": return { ...o, c: f(o.c), a1: o.a1 + (dAng || 0), a2: o.a2 + (dAng || 0) };
@@ -3666,6 +3720,7 @@ const girarPunto = (c, ang) => p => { const dx = p.x - c.x, dy = p.y - c.y, co =
 
 // ── paralela a una distancia, hacia el lado del punto "lado" ──
 function paralela(o, d, lado) {
+  if (o.t === "eje") return paralela({ id: o.id, t: "pl", v: o.v, c: false }, d, lado);   // bordes de vía, cunetas…
   if (o.t === "ci" || o.t === "ar") {
     const r = DIB.dist(lado, o.c) > o.r ? o.r + d : o.r - d;
     return r > 1e-9 ? { ...o, r } : null;
@@ -3835,8 +3890,9 @@ function crearDXF(dib) {
   g(0, "LAYER"); g(2, "TOPOVIAS"); g(70, 0); g(62, 7); g(6, "CONTINUOUS");
   g(0, "ENDTAB"); g(0, "ENDSEC");
   g(0, "SECTION"); g(2, "ENTITIES");
-  const COLOR = { PUNTOS: 1, LINEAS: 256, COTAS: 3, TEXTOS: 2, SOMBRA: 5, PLUMA: 1 };   // 256 = color de la capa
-  const capa_ = tipo => { g(8, "TOPOVIAS"); if (COLOR[tipo] !== 256) g(62, COLOR[tipo]); };
+  const COLOR = { PUNTOS: 1, LINEAS: 256, COTAS: 3, TEXTOS: 2, SOMBRA: 5, PLUMA: 1, EJE: 6 };   // 256 = color de la capa
+  let colObj = null;   // color escogido para el objeto que se está escribiendo (si tiene)
+  const capa_ = tipo => { g(8, "TOPOVIAS"); const c = colObj !== null ? colObj : COLOR[tipo]; if (c !== 256) g(62, c); };
   const linea = (a, b, capa) => { g(0, "LINE"); capa_(capa); g(10, n(a.x)); g(20, n(a.y)); g(30, 0); g(11, n(b.x)); g(21, n(b.y)); g(31, 0); };
   const texto = (p, s, alto, rot, capa) => { g(0, "TEXT"); capa_(capa); g(10, n(p.x)); g(20, n(p.y)); g(30, 0); g(40, n(alto)); g(1, dxfTexto(s)); if (rot) g(50, n(rot)); };
   const polilinea = (v, cerrada, capa) => {
@@ -3851,10 +3907,16 @@ function crearDXF(dib) {
     else lineasRayado(v, h * 1.2).forEach(([a, b]) => linea(a, b, "SOMBRA"));
   };
   dib.objs.forEach(o => {
+    colObj = o.col ? aciDe(o.col) : null;
     if (o.t === "p") { g(0, "POINT"); capa_("PUNTOS"); g(10, n(o.x)); g(20, n(o.y)); g(30, 0); if (o.nom) texto({ x: o.x + h * 0.6, y: o.y + h * 0.6 }, o.nom, h, 0, "TEXTOS"); }
     else if (o.t === "l") linea(o.a, o.b, "LINEAS");
     else if (o.t === "pl") { sombra(o); polilinea(o.v, o.c, "LINEAS"); }
     else if (o.t === "fh") polilinea(o.v, false, "PLUMA");
+    else if (o.t === "eje") {
+      polilinea(o.v, false, "EJE");
+      EJE.marcas(o).forEach(m => { const nn = { x: m.u.y, y: -m.u.x };   // a la derecha del eje linea(DIB.sum(m.p, nn, h * 0.8), DIB.sum(m.p, nn, -h * 0.8), "EJE");
+        texto(DIB.sum(m.p, nn, h * 1.1), absCorta(m.abs), h * 0.8, Math.atan2(nn.y, nn.x) * 180 / Math.PI, "EJE"); });
+    }
     else if (o.t === "ci") { sombra(o); g(0, "CIRCLE"); capa_("LINEAS"); g(10, n(o.c.x)); g(20, n(o.c.y)); g(30, 0); g(40, n(o.r)); }
     else if (o.t === "ar") { g(0, "ARC"); capa_("LINEAS"); g(10, n(o.c.x)); g(20, n(o.c.y)); g(30, 0); g(40, n(o.r)); g(50, n(normA(o.a1) * 180 / Math.PI)); g(51, n(normA(o.a2) * 180 / Math.PI)); }
     else if (o.t === "cota") {
@@ -3872,18 +3934,24 @@ function crearDXF(dib) {
   return L.join("\r\n") + "\r\n";
 }
 
+// Colores que se pueden poner a cualquier objeto, con su número de color de AutoCAD (ACI)
+const DIB_COLORES = [["#0F172A", "Negro", 7], ["#DC2626", "Rojo", 1], ["#EA580C", "Naranja", 30], ["#CA8A04", "Amarillo", 2], ["#16A34A", "Verde", 3],
+  ["#0891B2", "Cian", 4], ["#2563EB", "Azul", 5], ["#7C3AED", "Morado", 200], ["#DB2777", "Rosado", 6], ["#92400E", "Café", 34], ["#64748B", "Gris", 8]];
+const aciDe = col => { const c = DIB_COLORES.find(x => x[0] === col); return c ? c[2] : null; };
+const conAlfa = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
 const DIB_GRUPOS = [
   { id: "dibujar", label: "Dibujar", icono: "pencil", herr: [["punto", "Punto N,E", "circle-dot"], ["linea", "Línea", "slash"], ["polilinea", "Polilínea", "spline"],
     ["rect", "Rectángulo", "rectangle-horizontal"], ["cuadrado", "Cuadrado", "square"], ["triangulo", "Triángulo", "triangle"], ["circulo", "Círculo", "circle"], ["arco", "Arco", "rainbow"],
-    ["sombrear", "Sombrear", "paint-bucket"], ["pluma", "Pluma libre", "pen-line"], ["paralela", "Paralela", "between-vertical-start"]] },
-  { id: "medir", label: "Medir", icono: "ruler", herr: [["distancia", "Distancia y azimut", "ruler"], ["area", "Área y perímetro", "pentagon"], ["angulo", "Ángulo", "triangle-right"], ["radio", "Radio y cuerda", "circle-dot-dashed"], ["acotar", "Acotar", "move-horizontal"]] },
+    ["sombrear", "Sombrear", "paint-bucket"], ["pluma", "Pluma libre", "pen-line"], ["paralela", "Paralela", "between-vertical-start"],
+    ["@eje", "Eje de la vía", "signpost"], ["estacar", "Dividir / estacar", "milestone"]] },
+  { id: "medir", label: "Medir", icono: "ruler", herr: [["distancia", "Distancia y azimut", "ruler"], ["area", "Área y perímetro", "pentagon"], ["angulo", "Ángulo", "triangle-right"], ["radio", "Radio y cuerda", "circle-dot-dashed"], ["abscisa", "Abscisa y desplaz.", "locate-fixed"], ["acotar", "Acotar", "move-horizontal"]] },
   { id: "editar", label: "Editar", icono: "scissors", herr: [["elegir", "Elegir y editar", "mouse-pointer-2"], ["mover", "Mover", "move"], ["copiar", "Copiar", "copy"], ["girar", "Girar", "rotate-ccw"], ["recortar", "Recortar", "scissors"], ["extender", "Extender", "move-up-right"], ["borrar", "Borrar", "trash-2"], ["@deshacer", "Deshacer", "undo-2"], ["@rehacer", "Rehacer", "redo-2"]] },
   { id: "ver", label: "Ver", icono: "search", herr: [["@todo", "Ver todo", "scan"], ["@buscar", "Buscar punto", "map-pin"], ["@imanes", "Imanes", "magnet"], ["@cuadricula", "Cuadrícula", "grid-3x3"]] }
 ];
 const DIB_NOMBRE = { punto: "PUNTO", linea: "LÍNEA", polilinea: "POLILÍNEA", rect: "RECTÁNGULO", cuadrado: "CUADRADO", triangulo: "TRIÁNGULO", circulo: "CÍRCULO", arco: "ARCO", sombrear: "SOMBREAR", pluma: "PLUMA LIBRE", paralela: "PARALELA",
-  distancia: "DISTANCIA", area: "ÁREA", angulo: "ÁNGULO", radio: "RADIO Y CUERDA", acotar: "ACOTAR", elegir: "ELEGIR", mover: "MOVER", copiar: "COPIAR", girar: "GIRAR", recortar: "RECORTAR", extender: "EXTENDER", borrar: "BORRAR" };
+  estacar: "DIVIDIR / ESTACAR", abscisa: "ABSCISA", distancia: "DISTANCIA", area: "ÁREA", angulo: "ÁNGULO", radio: "RADIO Y CUERDA", acotar: "ACOTAR", elegir: "ELEGIR", mover: "MOVER", copiar: "COPIAR", girar: "GIRAR", recortar: "RECORTAR", extender: "EXTENDER", borrar: "BORRAR" };
 // herramientas que piden puntos (con imanes y "Escribir")
-const DIB_PIDE_PUNTO = ["punto", "linea", "polilinea", "rect", "cuadrado", "triangulo", "circulo", "arco", "distancia", "area", "acotar"];
+const DIB_PIDE_PUNTO = ["punto", "linea", "polilinea", "rect", "cuadrado", "triangulo", "circulo", "arco", "distancia", "area", "acotar", "abscisa"];
 const DIB_SELECCION = ["mover", "copiar", "girar"];
 
 function TabDibujo({ proy, onChange, onArchivo }) {
@@ -3896,7 +3964,8 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   const objs = dib ? dib.objs : [];
   const cambiarDib = cambio => onChange(dibujos.map(d => d.id === dib.id ? { ...d, ...(typeof cambio === "function" ? cambio(d) : cambio) } : d));
   const nuevoId = () => Date.now() + Math.random();
-  const agregar = (nuevos, extraDib) => cambiarDib(d => ({ objs: d.objs.concat(nuevos.map(o => ({ ...o, id: nuevoId() }))), ...(extraDib ? extraDib(d) : {}) }));
+  const colorRef = React.useRef(null);
+  const agregar = (nuevos, extraDib) => cambiarDib(d => ({ objs: d.objs.concat(nuevos.map(o => ({ ...o, ...(colorRef.current && !("col" in o) ? { col: colorRef.current } : {}), id: nuevoId() }))), ...(extraDib ? extraDib(d) : {}) }));
   const reemplazar = (id, nuevos) => cambiarDib(d => {
     const i = d.objs.findIndex(x => x.id === id); if (i < 0) return {};
     const lista = d.objs.slice(); lista.splice(i, 1, ...nuevos.map(o => ({ ...o, id: o.id || nuevoId() }))); return { objs: lista };
@@ -3951,7 +4020,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   const [teclado, setTeclado] = React.useState(null);  // campos para escribir un punto o una medida
   const [buscar, setBuscar] = React.useState(null);    // texto de búsqueda (null = cerrado)
   const [marca, setMarca] = React.useState(null);      // punto encontrado (anillo)
-  const [im, setIm] = React.useState({ extremo: true, medio: true, centro: true, cruce: true });
+  const [im, setIm] = React.useState({ extremo: true, medio: true, centro: true, cruce: true, abscisa: true });
   const [verImanes, setVerImanes] = React.useState(false);
   const [cuadricula, setCuadricula] = React.useState(true);
   const [selSet, setSelSet] = React.useState([]);      // objetos para mover / copiar / girar
@@ -3962,6 +4031,13 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   const [giroTxt, setGiroTxt] = React.useState("");    // ángulo escrito para girar
   const [estiloSom, setEstiloSom] = React.useState("rayado");
   const [trazo, setTrazo] = React.useState(null);      // pluma libre en curso
+  const [colorNuevo, setColorNuevoR] = React.useState(() => { try { return localStorage.getItem(TV_KEY + "_dibColor") || null; } catch (_) { return null; } });
+  const setColorNuevo = c => { setColorNuevoR(c); try { if (c) localStorage.setItem(TV_KEY + "_dibColor", c); else localStorage.removeItem(TV_KEY + "_dibColor"); } catch (_) {} };
+  const [verPaleta, setVerPaleta] = React.useState(false);
+  colorRef.current = colorNuevo;
+  const [estModo, setEstModo] = React.useState("cada");  // estacar: "cada" X metros o en N "partes"
+  const [estVal, setEstVal] = React.useState("5");
+  const eje = objs.find(o => o.t === "eje");
   const setHerr = x => { setHerrR(x); setTemp([]); setRes(null); setSel(null); setGrupo(null); setTeclado(null); setSelSet([]); setSelListo(false); setObjA(null); };
   const cancelar = () => { setTemp([]); setTeclado(null); setGrupo(null); setBuscar(null); setSelSet([]); setSelListo(false); setObjA(null); setTrazo(null); };
   const aviso = t => { try { window.dispatchEvent(new CustomEvent("tv-aviso", { detail: t })); } catch (_) {} };
@@ -4041,13 +4117,21 @@ function TabDibujo({ proy, onChange, onArchivo }) {
       const d = ((q.x - a.x) * -(b.y - a.y) + (q.y - a.y) * (b.x - a.x)) / L;
       agregar([{ t: "cota", a, b, d }]); setTemp([]); return;
     }
+    if (herr === "abscisa") {
+      const pr = eje && EJE.proyectar(eje, q);
+      if (!pr) { aviso("Primero pon el eje: Dibujar → Eje de la vía."); return; }
+      setRes({ tipo: "abscisa", p: q, pr, rows: [["Abscisa", formatoAbscisa(pr.abs) + (pr.fuera ? "  (fuera del eje)" : "")],
+        ["Desplazamiento", Math.abs(pr.desp) < 0.0005 ? "0.000 m (sobre el eje)" : f3(Math.abs(pr.desp)) + " m a la " + (pr.desp > 0 ? "derecha" : "izquierda")],
+        ["Norte", f3(q.y)], ["Este", f3(q.x)]] });
+      return;
+    }
     if (DIB_SELECCION.includes(herr) && selListo) {
       if (!temp.length) { setTemp([q]); return; }
       const base = temp[0], elegidos = objs.filter(o => selSet.includes(o.id));
       if (herr === "girar") { aplicarGiro(DIB.ang(base, q)); return; }
       const f = x => ({ x: x.x + q.x - base.x, y: x.y + q.y - base.y });
       if (herr === "mover") { cambiarDib(d => ({ objs: d.objs.map(o => selSet.includes(o.id) ? transformar(o, f, 0) : o) })); terminarSeleccion(); }
-      else agregar(elegidos.map(o => transformar(o, f, 0)));   // copiar: se queda listo para otra copia
+      else agregar(elegidos.map(o => ({ col: undefined, ...transformar(o, f, 0) })));   // copiar (con el color del original): se queda listo para otra copia
     }
   };
   const aplicarGiro = ang => {
@@ -4106,14 +4190,36 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     if (herr === "paralela") {
       const d = parseFloat(paraD);
       if (!objA) {
-        const o = tocarObjeto(X, Y, o => ["l", "pl", "ci", "ar"].includes(o.t));
-        if (!o) return aviso("Toca la línea, polilínea, círculo o arco de la que sale la paralela.");
+        const o = tocarObjeto(X, Y, o => ["l", "pl", "ci", "ar", "eje"].includes(o.t));
+        if (!o) return aviso("Toca la línea, polilínea, eje, círculo o arco de la que sale la paralela.");
         if (!(d > 0)) return aviso("Escribe la distancia de la paralela en la barra.");
         setObjA(o); return;
       }
       const nuevo = paralela(objA, d, pM);
       if (nuevo) agregar([{ ...nuevo, som: undefined }]); else aviso("Con esa distancia no se puede (el radio quedaría en cero).");
       setObjA(null); return;
+    }
+    if (herr === "estacar") {
+      const o = tocarObjeto(X, Y, o => ["l", "pl", "ci", "ar", "eje"].includes(o.t));
+      if (!o) return aviso("Toca la línea, polilínea, arco, círculo o eje que quieres dividir.");
+      const val = parseFloat(String(estVal).replace(",", "."));
+      if (!(val > 0)) return aviso(estModo === "cada" ? "Escribe cada cuántos metros." : "Escribe en cuántas partes.");
+      const R = recorrido(o), cerrado = o.t === "ci" || (o.t === "pl" && o.c);
+      let ss = [];
+      if (o.t === "eje" && estModo === "cada") {   // en el eje: abscisas redondas, más inicio y fin
+        const a0 = o.abs0 || 0; ss.push(0);
+        for (let k = Math.floor(a0 / val + 1e-9) + 1, n = 0; k * val - a0 < R.L - 1e-6 && n < 2000; k++, n++) ss.push(k * val - a0);
+        ss.push(R.L);
+      } else if (estModo === "cada") { for (let x = 0, n = 0; x < R.L - 1e-6 && n < 2000; x += val, n++) ss.push(x); if (!cerrado) ss.push(R.L); }
+      else { const nP = Math.round(val); if (nP < 2 || nP > 2000) return aviso("Escribe entre 2 y 2000 partes."); for (let i = 0; i < nP; i++) ss.push(R.L * i / nP); if (!cerrado) ss.push(R.L); }
+      const existentes = objs.filter(x => x.t === "p");
+      let sig = dib.sigE || 1;
+      const nuevos = ss.map(s => ({ s, p: R.en(s) })).filter(({ p }) => !existentes.some(e => DIB.dist(e, p) < 0.0005))
+        .map(({ s, p }) => ({ t: "p", x: p.x, y: p.y, nom: o.t === "eje" ? absCorta((o.abs0 || 0) + s) : "E" + (sig++) }));
+      if (!nuevos.length) return aviso("Esos puntos ya estaban.");
+      agregar(nuevos, () => ({ sigE: sig }));
+      aviso(nuevos.length + " puntos marcados" + (estModo === "cada" ? " cada " + f3(val).replace(/\.?0+$/, "") + " m" : " (" + Math.round(val) + " partes de " + f3(R.L / Math.round(val)) + " m)"));
+      return;
     }
     if (herr === "recortar") {
       const o = tocarObjeto(X, Y, o => ["l", "pl", "ci", "ar"].includes(o.t)); if (!o) return;
@@ -4252,7 +4358,17 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     if (id === "@buscar") { setGrupo(null); return setBuscar(""); }
     if (id === "@imanes") { setGrupo(null); return setVerImanes(true); }
     if (id === "@cuadricula") { setGrupo(null); return setCuadricula(!cuadricula); }
+    if (id === "@eje") return traerEje();
     setHerr(id);
+  };
+  // trae al dibujo los PI que se escribieron en la vía (Vía → Distancias por coordenadas)
+  const traerEje = () => {
+    setGrupo(null);
+    const v = (proy.coordsEje || []).map(p => ({ x: parseFloat(p.este), y: parseFloat(p.norte) })).filter(p => !isNaN(p.x) && !isNaN(p.y));
+    if (v.length < 2) { alert("Esta vía todavía no tiene coordenadas de los PI.\n\nEscríbelas en la pestaña Vía → \"Distancias por coordenadas\" (Norte y Este de cada PI), o dibuja el eje como polilínea, tócalo con Elegir y usa \"Usar como eje\"."); return; }
+    const nuevo = { t: "eje", v, abs0: parseFloat(proy.absInicio) || 0, paso: 10, nom: proy.nombre || "Eje" };
+    agregar([nuevo]); setTimeout(() => verTodo(objs.concat([nuevo])), 60);
+    aviso("Eje traído: " + v.length + " PI, de " + absCorta(nuevo.abs0) + " a " + absCorta(nuevo.abs0 + DIB.largo(v)));
   };
   // desde el panel de un objeto elegido: moverlo, copiarlo o girarlo
   const accionSobre = (id, herr2) => { setHerrR(herr2); setTemp([]); setRes(null); setSel(null); setGrupo(null); setTeclado(null); setObjA(null); setSelSet([id]); setSelListo(true); };
@@ -4261,27 +4377,41 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   const els = [];
   let paso = 1;
   { const objetivo = 45 / vista.k, e10 = Math.pow(10, Math.floor(Math.log10(objetivo))); paso = [1, 2, 5, 10].map(m => m * e10).find(s => s >= objetivo) || 10 * e10; }
-  els.push(h("defs", { key: "defs" }, h("pattern", { id: "tv-rayado", width: 9, height: 9, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, h("line", { x1: 0, y1: 0, x2: 0, y2: 9, stroke: "#0284C7", strokeWidth: 1.3 }))));
+  const rayado = (id, col) => h("pattern", { key: id, id, width: 9, height: 9, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, h("line", { x1: 0, y1: 0, x2: 0, y2: 9, stroke: col, strokeWidth: 1.3 }));
+  els.push(h("defs", { key: "defs" }, rayado("tv-rayado", "#0284C7"), DIB_COLORES.map(([c]) => rayado("tv-rayado-" + c.slice(1), c))));
   if (cuadricula) {
     const p0 = aM(0, H, vista), p1 = aM(W, 0, vista);
     for (let x = Math.ceil(p0.x / paso) * paso, n = 0; x <= p1.x && n < 200; x += paso, n++) { const X = aP({ x, y: 0 }).X; els.push(h("line", { key: "gx" + n, x1: X, y1: 0, x2: X, y2: H, stroke: Math.abs(x / paso / 5 - Math.round(x / paso / 5)) < 1e-6 ? "#CBD5E1" : "#EEF2F6" })); }
     for (let y = Math.ceil(p0.y / paso) * paso, n = 0; y <= p1.y && n < 200; y += paso, n++) { const Y = aP({ x: 0, y }).Y; els.push(h("line", { key: "gy" + n, x1: 0, y1: Y, x2: W, y2: Y, stroke: Math.abs(y / paso / 5 - Math.round(y / paso / 5)) < 1e-6 ? "#CBD5E1" : "#EEF2F6" })); }
   }
-  const rellenoDe = o => o.som === "rayado" ? "url(#tv-rayado)" : o.som === "relleno" ? "rgba(2,132,199,0.32)" : o.t === "pl" && o.c ? "rgba(2,132,199,0.06)" : "none";
+  const rellenoDe = o => o.som === "rayado" ? (o.col ? `url(#tv-rayado-${o.col.slice(1)})` : "url(#tv-rayado)") : o.som === "relleno" ? (o.col ? conAlfa(o.col, 0.32) : "rgba(2,132,199,0.32)") : o.t === "pl" && o.c ? (o.col ? conAlfa(o.col, 0.06) : "rgba(2,132,199,0.06)") : "none";
   const pathArco = (o, extra) => {
     const S = aP(DIB.enCirculo(o.c, o.r, o.a1)), E = aP(DIB.enCirculo(o.c, o.r, o.a2)), B = DIB.barrido(o), rs = o.r * vista.k;
     // contra reloj en el terreno = contra reloj en pantalla (bandera de barrido 0, porque la Y de la pantalla va hacia abajo)
     return h("path", { d: `M${S.X},${S.Y} A${rs},${rs} 0 ${B > Math.PI ? 1 : 0} 0 ${E.X},${E.Y}`, fill: "none", ...extra });
   };
   const dibujarObj = (o, key, estilo) => {
-    const col = estilo && estilo.col, ancho = estilo && estilo.ancho, guion = estilo && estilo.guion;
+    const col = (estilo && estilo.col) || o.col, ancho = estilo && estilo.ancho, guion = estilo && estilo.guion;
     if (o.t === "l") { const a = aP(o.a), b = aP(o.b); return h("line", { key, x1: a.X, y1: a.Y, x2: b.X, y2: b.Y, stroke: col || "#0F172A", strokeWidth: ancho || 2, strokeLinecap: "round", strokeDasharray: guion }); }
     if (o.t === "pl" || o.t === "fh") { const pts = o.v.map(p => { const s = aP(p); return s.X + "," + s.Y; }).join(" ");
       return h(o.t === "pl" && o.c ? "polygon" : "polyline", { key, points: pts, fill: o.t === "pl" && !estilo ? rellenoDe(o) : "none", stroke: col || (o.t === "fh" ? "#DC2626" : "#0284C7"), strokeWidth: ancho || (o.t === "fh" ? 2.5 : 2), strokeLinejoin: "round", strokeLinecap: "round", strokeDasharray: guion }); }
     if (o.t === "ci") { const s = aP(o.c); return h("circle", { key, cx: s.X, cy: s.Y, r: o.r * vista.k, fill: estilo ? "none" : rellenoDe(o), stroke: col || "#7C3AED", strokeWidth: ancho || 2, strokeDasharray: guion }); }
     if (o.t === "ar") return pathArco(o, { key, stroke: col || "#7C3AED", strokeWidth: ancho || 2, strokeDasharray: guion });
+    if (o.t === "eje") {
+      const pts = o.v.map(p => { const s = aP(p); return s.X + "," + s.Y; }).join(" "), c = col || "#BE185D";
+      const marcas = EJE.marcas(o), sepPx = (o.paso || 10) * vista.k, cada = sepPx >= 55 ? 1 : sepPx >= 22 ? 5 : sepPx >= 5 ? 10 : 50;
+      return h("g", { key }, h("polyline", { points: pts, fill: "none", stroke: c, strokeWidth: ancho || 2.2, strokeDasharray: guion || "14 4 3 4", strokeLinejoin: "round" }),
+        !estilo && marcas.map((m, i) => {
+          const S = aP(m.p), nx = m.u.y, ny = m.u.x;   // perpendicular a la derecha del eje, en pantalla (Y hacia abajo); los nombres de los puntos van arriba
+          const etiqueta = m.borde || Math.round(m.abs / (o.paso || 10)) % cada === 0;
+          if (!etiqueta && cada > 1 && sepPx < 5) return null;
+          let ang = Math.atan2(ny, nx) * 180 / Math.PI; if (ang > 90) ang -= 180; if (ang < -90) ang += 180;
+          return h("g", { key: i }, h("line", { x1: S.X - nx * 7, y1: S.Y - ny * 7, x2: S.X + nx * 7, y2: S.Y + ny * 7, stroke: c, strokeWidth: m.borde ? 2.4 : 1.5 }),
+            etiqueta && h("text", { x: S.X + nx * 11, y: S.Y + ny * 11 + 4, fontSize: 10.5, fontWeight: 700, fill: c, textAnchor: nx >= 0 ? "start" : "end", style: { fontFamily: "'JetBrains Mono', monospace", paintOrder: "stroke", stroke: "#fff", strokeWidth: 3 } }, absCorta(m.abs)));
+        }));
+    }
     if (o.t === "p") { const s = aP(o);
-      return h("g", { key }, h("circle", { cx: s.X, cy: s.Y, r: col ? 6 : 4.5, fill: col || "#DC2626" }),
+      return h("g", { key }, h("circle", { cx: s.X, cy: s.Y, r: estilo ? 6 : 4.5, fill: col || "#DC2626" }),
         o.nom && h("text", { x: s.X + 8, y: s.Y - 7, fontSize: 12, fontWeight: 700, fill: col || "#B91C1C", style: { fontFamily: "'JetBrains Mono', monospace" } }, o.nom)); }
     if (o.t === "cota") {
       const [a2, b2] = DIB.cotaLinea(o), A = aP(o.a), B = aP(o.b), A2 = aP(a2), B2 = aP(b2), c = col || "#334155";
@@ -4328,6 +4458,10 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   if (res && res.tipo === "distancia") { const A = aP(res.a), B = aP(res.b); els.push(h("line", { key: "rd", x1: A.X, y1: A.Y, x2: B.X, y2: B.Y, stroke: "#059669", strokeWidth: 3 })); }
   if (res && res.tipo === "area") els.push(h("polygon", { key: "ra", points: res.v.map(p => { const s = aP(p); return s.X + "," + s.Y; }).join(" "), fill: "rgba(5,150,105,0.18)", stroke: "#059669", strokeWidth: 2.5 }));
   if (res && res.tipo === "circulo") els.push(dibujarObj(res.obj, "rc", { col: "#059669", ancho: 3.5 }));
+  if (res && res.tipo === "abscisa" && eje) {   // perpendicular desde el punto hasta el eje
+    const pie = EJE.punto(eje, res.pr.abs, 0);
+    if (pie) { const A = aP(res.p), B = aP(pie); els.push(h("line", { key: "rab", x1: A.X, y1: A.Y, x2: B.X, y2: B.Y, stroke: "#059669", strokeWidth: 2.5, strokeDasharray: "5 3" }), h("circle", { key: "rab2", cx: B.X, cy: B.Y, r: 4, fill: "#059669" })); }
+  }
   if (res && res.tipo === "angulo") res.segs.forEach((s, i) => { const A = aP(s[0]), B = aP(s[1]); els.push(h("line", { key: "rg" + i, x1: A.X, y1: A.Y, x2: B.X, y2: B.Y, stroke: "#059669", strokeWidth: 4 })); });
   if (objA && objA.length === 2) { const A = aP(objA[0]), B = aP(objA[1]); els.push(h("line", { key: "oa", x1: A.X, y1: A.Y, x2: B.X, y2: B.Y, stroke: "#F59E0B", strokeWidth: 4 })); }
   // marca del imán
@@ -4335,6 +4469,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     const s = aP(cursor), c = "#F59E0B";
     if (cursor.tipo === "extremo") els.push(h("rect", { key: "im", x: s.X - 7, y: s.Y - 7, width: 14, height: 14, fill: "none", stroke: c, strokeWidth: 2.5 }));
     else if (cursor.tipo === "medio") els.push(h("polygon", { key: "im", points: `${s.X},${s.Y - 9} ${s.X - 8},${s.Y + 6} ${s.X + 8},${s.Y + 6}`, fill: "none", stroke: "#059669", strokeWidth: 2.5 }));
+    else if (cursor.tipo === "abscisa") els.push(h("polygon", { key: "im", points: `${s.X},${s.Y - 9} ${s.X + 9},${s.Y} ${s.X},${s.Y + 9} ${s.X - 9},${s.Y}`, fill: "none", stroke: "#BE185D", strokeWidth: 2.5 }));
     else if (cursor.tipo === "centro") els.push(h("circle", { key: "im", cx: s.X, cy: s.Y, r: 8, fill: "none", stroke: "#7C3AED", strokeWidth: 2.5 }));
     else if (cursor.tipo === "cruce") els.push(h("g", { key: "im" }, h("line", { x1: s.X - 8, y1: s.Y - 8, x2: s.X + 8, y2: s.Y + 8, stroke: c, strokeWidth: 3 }), h("line", { x1: s.X + 8, y1: s.Y - 8, x2: s.X - 8, y2: s.Y + 8, stroke: c, strokeWidth: 3 })));
     else els.push(h("g", { key: "im" }, h("line", { x1: s.X - 12, y1: s.Y, x2: s.X + 12, y2: s.Y, stroke: "#64748B" }), h("line", { x1: s.X, y1: s.Y - 12, x2: s.X, y2: s.Y + 12, stroke: "#64748B" })));
@@ -4362,7 +4497,9 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     arco: temp.length === 0 ? "inicio del arco" : temp.length === 1 ? "un punto del arco" : "fin del arco",
     sombrear: "elige el estilo y toca una figura cerrada",
     pluma: "dibuja con el dedo",
-    paralela: objA ? "toca hacia qué lado va la paralela" : "toca la línea, polilínea o círculo",
+    paralela: objA ? "toca hacia qué lado va la paralela" : "toca la línea, polilínea, eje o círculo",
+    estacar: "toca la línea, arco o eje para marcar los puntos",
+    abscisa: eje ? "toca un punto: te digo su abscisa y desplazamiento" : "primero pon el eje (Dibujar → Eje de la vía)",
     distancia: temp.length ? "segundo punto" : "primer punto",
     area: temp.length ? `vértice ${temp.length + 1} · Calcular` : "toca una figura cerrada o marca los vértices",
     angulo: objA ? "toca la segunda línea" : "toca la primera línea",
@@ -4415,6 +4552,10 @@ function TabDibujo({ proy, onChange, onArchivo }) {
       .concat(resCirculo(o).rows.filter(([t]) => !["Radio", "Centro"].includes(t)).map(([a, b]) => filaInfo(a, b)));
     if (o.t === "cota") return [filaInfo("Cota", f3(DIB.dist(o.a, o.b)) + " m"), campoNum("Separación (m)", f3(o.d), v => num(v) !== null && set({ d: num(v) }))];
     if (o.t === "fh") return [filaInfo("Largo del trazo", f3(DIB.largo(o.v)) + " m")];
+    if (o.t === "eje") return [campoNum("Nombre", o.nom || "", v => set({ nom: v.trim() }), "texto"),
+      campoNum("Abscisa inicial", formatoAbscisa(o.abs0 || 0), v => { const a = leerAbscisa(v); if (a !== null) set({ abs0: a }); }, "texto"),
+      campoNum("Marcas cada (m)", String(o.paso || 10), v => { const x = num(v); if (x > 0) set({ paso: x }); }),
+      filaInfo("Abscisa final", formatoAbscisa((o.abs0 || 0) + DIB.largo(o.v))), filaInfo("Largo", f3(DIB.largo(o.v)) + " m"), filaInfo("PI", String(o.v.length))];
     return [];
   };
   const panel = (titulo, filas, botones, cerrar) => h("div", { className: "tv-dib-panel", style: { position: "absolute", top: 50, right: 8, left: W < 520 ? 8 : "auto", width: W < 520 ? "auto" : 330, maxHeight: "62%", overflowY: "auto", background: "#fff", borderRadius: 12, boxShadow: "0 6px 20px rgba(0,0,0,0.18)", padding: "10px 12px", fontSize: 12.5, fontFamily: "'JetBrains Mono', monospace", zIndex: 3 } },
@@ -4422,6 +4563,10 @@ function TabDibujo({ proy, onChange, onArchivo }) {
       h("button", { onClick: cerrar, style: { border: "none", background: "none", cursor: "pointer", padding: 2 } }, h(Icono, { n: "x", size: 16 }))),
     filas, botones && h("div", { style: { display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", fontFamily: "'Plus Jakarta Sans', sans-serif" } }, botones));
 
+  // fila de colores: "Auto" (el de siempre) y la paleta
+  const paleta = (actual, elegir) => h("div", { className: "tv-dib-paleta", style: { display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" } },
+    h("button", { onClick: () => elegir(null), "data-color": "auto", style: { height: 26, padding: "0 9px", borderRadius: 999, border: `2px solid ${!actual ? "#F59E0B" : C.border}`, background: "#fff", fontSize: 11.5, fontWeight: 800, cursor: "pointer", color: C.text } }, "Auto"),
+    DIB_COLORES.map(([c, n]) => h("button", { key: c, title: n, "data-color": c, onClick: () => elegir(c), style: { width: 26, height: 26, borderRadius: "50%", background: c, cursor: "pointer", border: actual === c ? "3px solid #F59E0B" : "2px solid #fff", boxShadow: "0 0 0 1px #CBD5E1" } })));
   const btnBarra = (txt, onClick, color, icono) => h("button", { onClick, className: "tv-dib-btn", style: { background: color || "#1E293B", color: "#fff", border: "none", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap", flex: "0 0 auto" } }, icono && h(Icono, { n: icono, size: 14 }), txt);
   const campoBarra = (valor, set, ph, ancho) => h("input", { value: valor, onChange: e => set(e.target.value), placeholder: ph, inputMode: "decimal", className: "tv-dib-campo",
     style: { width: ancho || 78, flex: "0 0 auto", background: "#1E293B", border: "1px solid #334155", color: "#fff", borderRadius: 8, padding: "5px 8px", fontFamily: "monospace", fontSize: 12.5 } });
@@ -4429,7 +4574,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   const puntosLista = objs.filter(o => o.t === "p");
   const ultimo = temp[temp.length - 1];
   const angosto = W < 560;
-  const nombreSel = { p: "PUNTO", l: "LÍNEA", pl: "POLILÍNEA", ci: "CÍRCULO", ar: "ARCO", fh: "TRAZO A MANO", cota: "COTA" };
+  const nombreSel = { p: "PUNTO", l: "LÍNEA", pl: "POLILÍNEA", ci: "CÍRCULO", ar: "ARCO", fh: "TRAZO A MANO", cota: "COTA", eje: "EJE" };
   const titObj = o => o.t === "pl" ? (o.forma === "rect" ? "RECTÁNGULO" : o.forma === "cuadrado" ? "CUADRADO" : o.forma === "tri" ? "TRIÁNGULO" : o.c ? "POLILÍNEA CERRADA" : "POLILÍNEA") : nombreSel[o.t];
   // modos del teclado según la herramienta
   const modosTeclado = () => {
@@ -4438,9 +4583,9 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     if (herr === "rect" && temp.length === 1) return [["rect", "Ancho y alto"], ["ne", "Esquina N,E"], ["dd", "ΔN, ΔE"]];
     if (herr === "cuadrado" && temp.length === 1) return [["lado", "Lado y azimut"], ["ne", "Fin N,E"], ["az", "Distancia y azimut"]];
     if (herr === "triangulo" && temp.length === 1) return [["tri", "Los 3 lados"], ["ne", "Norte, Este"], ["az", "Distancia y azimut"]];
-    return [["ne", "Norte, Este"]].concat(ultimo ? [["az", "Distancia y azimut"], ["dd", "ΔN, ΔE"]] : []);
+    return [["ne", "Norte, Este"]].concat(ultimo ? [["az", "Distancia y azimut"], ["dd", "ΔN, ΔE"]] : []).concat(eje ? [["abs", "Abscisa y desplaz."]] : []);
   };
-  const abrirTeclado = () => setTeclado({ modo: modosTeclado()[0][0], N: "", E: "", D: "", AZ: "", DN: "", DE: "", nom: "", R: "", AN: "", AL: "", AZR: "90", LA: "", B: "", L2: "", L3: "" });
+  const abrirTeclado = () => setTeclado({ modo: modosTeclado()[0][0], N: "", E: "", D: "", AZ: "", DN: "", DE: "", nom: "", R: "", AN: "", AL: "", AZR: "90", LA: "", B: "", L2: "", L3: "", ABS: "", DESP: "" });
 
   return h("div", { className: "tv-dibujo" },
     // barra de dibujos
@@ -4451,6 +4596,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
       h(Btn, { small: true, color: "#475569", onClick: renombrar, title: "Renombrar" }, "✎"),
       h(Btn, { small: true, color: "#475569", onClick: duplicar, title: "Duplicar" }, h(Icono, { n: "copy", size: 14 })),
       h(Btn, { small: true, color: C.danger, onClick: borrarDibujo, title: "Borrar dibujo" }, h(Icono, { n: "trash-2", size: 14 })),
+      h(Btn, { small: true, color: "#475569", onClick: () => setVerPaleta(!verPaleta), title: "Color de lo que dibujes" }, h("span", { className: "tv-dib-coloractual", style: { width: 14, height: 14, borderRadius: "50%", display: "inline-block", border: "2px solid #fff", background: colorNuevo || "conic-gradient(#DC2626, #CA8A04, #16A34A, #2563EB, #7C3AED, #DC2626)" } }), h("span", { className: "tv-dib-txt" }, "Color")),
       h(Btn, { small: true, color: C.success, onClick: exportarDXF, title: "Exportar a AutoCAD" }, h(Icono, { n: "download", size: 14 }), "DXF")),
     // lienzo
     h("div", { ref: cajaRef, style: { position: "relative", height: alto, borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, background: "#fff", display: "flex", flexDirection: "column" } },
@@ -4459,6 +4605,8 @@ function TabDibujo({ proy, onChange, onArchivo }) {
         h("span", { style: { flex: angosto ? "0 0 auto" : "1 1 auto", minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: "20px" } }, h("b", { style: { color: "#FBBF24" } }, DIB_NOMBRE[herr]), " · ", pasoTxt),
         h("div", { style: { display: "flex", gap: 6, overflowX: "auto", flex: "0 0 auto", justifyContent: angosto ? "flex-start" : "flex-end", scrollbarWidth: "none", alignItems: "center" } },
           herr === "paralela" && [h("span", { key: "t", style: { whiteSpace: "nowrap" } }, "Dist."), h(React.Fragment, { key: "c" }, campoBarra(paraD, setParaD, "1.000")), h("span", { key: "m" }, "m")],
+          herr === "estacar" && [h(React.Fragment, { key: "a" }, btnBarra("Cada", () => setEstModo("cada"), estModo === "cada" ? C.accent : "#334155")), h(React.Fragment, { key: "b" }, btnBarra("Partes", () => setEstModo("partes"), estModo === "partes" ? C.accent : "#334155")),
+            h(React.Fragment, { key: "c" }, campoBarra(estVal, setEstVal, estModo === "cada" ? "5" : "4", 64)), h("span", { key: "m" }, estModo === "cada" ? "m" : "partes")],
           herr === "extender" && [h("span", { key: "t", style: { whiteSpace: "nowrap" } }, "Medida"), h(React.Fragment, { key: "c" }, campoBarra(extD, setExtD, "hasta línea", 96))],
           herr === "sombrear" && [["rayado", "Rayado"], ["relleno", "Relleno"], ["quitar", "Quitar"]].map(([k, t]) => h(React.Fragment, { key: k }, btnBarra(t, () => setEstiloSom(k), estiloSom === k ? C.accent : "#334155"))),
           enSel && !selListo && selSet.length > 0 && btnBarra("Siguiente (" + selSet.length + ")", () => setSelListo(true), C.accent, "check"),
@@ -4479,15 +4627,20 @@ function TabDibujo({ proy, onChange, onArchivo }) {
           h("span", { style: { display: "inline-block", width: paso * vista.k, borderBottom: "2px solid #334155", marginRight: 6, verticalAlign: "middle" } }), (paso >= 1 ? paso : paso.toPrecision(1)) + " m",
           (cursor || hover) && "  ·  N " + f3((cursor || hover).y) + "  E " + f3((cursor || hover).x)),
         // resultado de medir
-        res && panel({ area: "ÁREA Y PERÍMETRO", distancia: "DISTANCIA Y AZIMUT", circulo: res.obj && res.obj.t === "ar" ? "ARCO" : "CÍRCULO", angulo: "ÁNGULO ENTRE LÍNEAS" }[res.tipo], res.rows.map(([a, b], i) => filaInfo(a, b, i)),
-          res.tipo === "distancia" && h(Btn, { small: true, color: "#334155", onClick: () => { const L = DIB.dist(res.a, res.b); agregar([{ t: "cota", a: res.a, b: res.b, d: Math.max(L * 0.08, 12 / vista.k) }]); setRes(null); } }, "📐 Dejar como cota"),
+        res && panel({ abscisa: "ABSCISA Y DESPLAZAMIENTO", area: "ÁREA Y PERÍMETRO", distancia: "DISTANCIA Y AZIMUT", circulo: res.obj && res.obj.t === "ar" ? "ARCO" : "CÍRCULO", angulo: "ÁNGULO ENTRE LÍNEAS" }[res.tipo], res.rows.map(([a, b], i) => filaInfo(a, b, i)),
+          [res.tipo === "abscisa" && h(Btn, { small: true, color: "#334155", onClick: () => { agregar([{ t: "p", x: res.p.x, y: res.p.y, nom: absCorta(res.pr.abs) + (Math.abs(res.pr.desp) >= 0.0005 ? (res.pr.desp > 0 ? " D" : " I") + f3(Math.abs(res.pr.desp)) : "") }]); setRes(null); } }, "📍 Dejar punto"),
+          res.tipo === "distancia" && h(Btn, { small: true, color: "#334155", onClick: () => { const L = DIB.dist(res.a, res.b); agregar([{ t: "cota", a: res.a, b: res.b, d: Math.max(L * 0.08, 12 / vista.k) }]); setRes(null); } }, "📐 Dejar como cota")].filter(Boolean).map((el, i) => React.cloneElement(el, { key: i })),
           () => setRes(null)),
         // objeto elegido: sus medidas se pueden cambiar escribiendo
-        selObj && !res && panel(titObj(selObj), editorSel(selObj),
+        selObj && !res && panel(titObj(selObj), [h("div", { key: "color", style: { padding: "4px 0 8px", borderBottom: `1px solid ${C.border}`, marginBottom: 6 } }, paleta(selObj.col || null, c => actualizar(sel, { col: c || undefined })))].concat(editorSel(selObj)),
           [h(Btn, { key: "m", small: true, color: "#334155", onClick: () => accionSobre(selObj.id, "mover") }, "Mover"),
            h(Btn, { key: "co", small: true, color: "#334155", onClick: () => accionSobre(selObj.id, "copiar") }, "Copiar"),
            h(Btn, { key: "g", small: true, color: "#334155", onClick: () => accionSobre(selObj.id, "girar") }, "Girar"),
            selObj.t === "pl" && selObj.v.length >= 3 && h(Btn, { key: "c", small: true, color: C.accent, onClick: () => actualizar(sel, { c: !selObj.c }) }, selObj.c ? "Abrir" : "Cerrar figura"),
+           selObj.t === "pl" && !selObj.c && h(Btn, { key: "e", small: true, color: "#9D174D", onClick: () => {
+             const a = prompt("Abscisa del primer punto de este eje (ej. 0+000 o 125.5)", formatoAbscisa(parseFloat(proy.absInicio) || 0)); if (a === null) return;
+             const a0 = leerAbscisa(a); if (a0 === null) return alert("Abscisa no válida.");
+             reemplazar(sel, [{ id: sel, t: "eje", v: selObj.v, abs0: a0, paso: 10, nom: proy.nombre || "Eje" }]); } }, "Usar como eje"),
            h(Btn, { key: "b", small: true, color: C.danger, onClick: () => { cambiarDib(d => ({ objs: d.objs.filter(x => x.id !== sel) })); setSel(null); } }, h(Icono, { n: "trash-2", size: 13 }), "Borrar")],
           () => setSel(null)),
         // teclado: punto o medida exacta
@@ -4496,8 +4649,8 @@ function TabDibujo({ proy, onChange, onArchivo }) {
             modosTeclado().map(([m, t]) =>
               h("button", { key: m, onClick: () => setTeclado({ ...teclado, modo: m }), style: { padding: "6px 11px", borderRadius: 999, border: `1.5px solid ${teclado.modo === m ? C.accent : C.border}`, background: teclado.modo === m ? C.accent : "#fff", color: teclado.modo === m ? "#fff" : C.text, fontSize: 12, fontWeight: 700, cursor: "pointer" } }, t))),
           (() => {
-            const primero = { ne: "N", az: "D", dd: "DN", radio: "R", rect: "AN", lado: "LA", tri: "B" }[teclado.modo];
-            const campo = (k, t, ph) => h("div", { key: k, style: { flex: "1 1 110px" } }, h(Label, null, t), h(Input, { value: teclado[k], placeholder: ph, inputMode: k === "AZ" || k === "AZR" || k === "nom" ? "text" : "decimal", autoFocus: k === primero, style: { fontFamily: "monospace" }, onChange: e => setTeclado({ ...teclado, [k]: e.target.value }) }));
+            const primero = { ne: "N", az: "D", dd: "DN", radio: "R", rect: "AN", lado: "LA", tri: "B", abs: "ABS" }[teclado.modo];
+            const campo = (k, t, ph) => h("div", { key: k, style: { flex: "1 1 110px" } }, h(Label, null, t), h(Input, { value: teclado[k], placeholder: ph, inputMode: k === "AZ" || k === "AZR" || k === "nom" || k === "ABS" ? "text" : "decimal", autoFocus: k === primero, style: { fontFamily: "monospace" }, onChange: e => setTeclado({ ...teclado, [k]: e.target.value }) }));
             const base = enSel ? temp[0] : ultimo;
             const n_ = k => parseFloat(teclado[k]);
             // lo que se va a crear: un punto (para la herramienta) o una figura completa
@@ -4507,6 +4660,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
               if (m === "az") { const D = n_("D"), A = leerAzimut(teclado.AZ); if (isNaN(D) || A === null || !base) return null; return { p: DIB.sum(base, DIB.dirAz(A), D) }; }
               if (m === "dd") { const dN = n_("DN"), dE = n_("DE"); return isNaN(dN) || isNaN(dE) || !base ? null : { p: { x: base.x + dE, y: base.y + dN } }; }
               if (m === "radio") { const R = n_("R"); return R > 0 && base ? { fig: { t: "ci", c: base, r: R } } : null; }
+              if (m === "abs") { const A = leerAbscisa(teclado.ABS), D = teclado.DESP.trim() === "" ? 0 : parseFloat(teclado.DESP); if (A === null || isNaN(D) || !eje) return null; const q = EJE.punto(eje, A, D); return q ? { p: q } : null; }
               const azR = leerAzimut(teclado.AZR); if (azR === null || !base) return null;
               if (m === "rect") { const a = n_("AN"), b = n_("AL"); return a > 0 && b > 0 ? { fig: { t: "pl", c: true, forma: "rect", v: rectAzimut(base, a, b, azR) } } : null; }
               if (m === "lado") { const a = n_("LA"); return a > 0 ? { fig: { t: "pl", c: true, forma: "cuadrado", v: rectAzimut(base, a, a, azR) } } : null; }
@@ -4525,14 +4679,16 @@ function TabDibujo({ proy, onChange, onArchivo }) {
               : m === "az" ? [campo("D", "Distancia (m)", "50.000"), campo("AZ", "Azimut", "53 07 48.4")]
               : m === "dd" ? [campo("DN", "ΔN (m)", "30.000"), campo("DE", "ΔE (m)", "40.000")]
               : m === "radio" ? [campo("R", "Radio (m)", "5.000")]
+              : m === "abs" ? [campo("ABS", "Abscisa", "0+045.320"), campo("DESP", "Desplaz. (+der / −izq)", "3.150")]
               : m === "rect" ? [campo("AN", "Ancho (m)", "17.000"), campo("AL", "Alto (m)", "11.000"), campo("AZR", "Azimut del ancho", "90")]
               : m === "lado" ? [campo("LA", "Lado (m)", "10.000"), campo("AZR", "Azimut del lado", "90")]
               : [campo("B", "Base (m)", "5.000"), campo("L2", "Lado 2 (m)", "4.000"), campo("L3", "Lado 3 (m)", "3.000"), campo("AZR", "Azimut base", "90")];
-            const ayuda = m === "rect" ? "El ancho va con ese azimut (90 = hacia el Este) y el alto a su izquierda." : m === "lado" ? "El cuadrado se arma a la izquierda del lado." : m === "tri" ? "La base sale con ese azimut; el lado 2 sale del primer punto y el lado 3 del final de la base." : null;
+            const ayuda = m === "abs" ? "Sobre el eje " + (eje.nom || "") + " (" + absCorta(eje.abs0 || 0) + " a " + absCorta((eje.abs0 || 0) + DIB.largo(eje.v)) + "). Desplazamiento positivo a la derecha, negativo a la izquierda." : m === "rect" ? "El ancho va con ese azimut (90 = hacia el Este) y el alto a su izquierda." : m === "lado" ? "El cuadrado se arma a la izquierda del lado." : m === "tri" ? "La base sale con ese azimut; el lado 2 sale del primer punto y el lado 3 del final de la base." : null;
             return h("form", { onSubmit: e => { e.preventDefault(); aplicar(); } },
               h("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } }, campos, herr === "punto" && campo("nom", "Nombre (opcional)", "P" + (dib.sig || 1))),
               m !== "ne" && base && h("div", { style: { fontSize: 11.5, color: C.muted, marginTop: 6, fontFamily: "monospace" } }, "Desde N " + f3(base.y) + "  E " + f3(base.x)),
               ayuda && h("div", { style: { fontSize: 11.5, color: C.muted, marginTop: 4 } }, ayuda),
+              m === "abs" && !r && leerAbscisa(teclado.ABS) !== null && h("div", { style: { fontSize: 11.5, color: C.danger, marginTop: 4, fontWeight: 700 } }, "Esa abscisa queda fuera del eje."),
               m === "tri" && !r && n_("B") > 0 && n_("L2") > 0 && n_("L3") > 0 && h("div", { style: { fontSize: 11.5, color: C.danger, marginTop: 4, fontWeight: 700 } }, "Con esos lados no se cierra un triángulo (cada lado debe ser menor que la suma de los otros dos)."),
               h("div", { style: { display: "flex", gap: 8, marginTop: 10, alignItems: "center", flexWrap: "wrap" } },
                 h("button", { type: "submit", disabled: !r, className: "tv-btn", style: { background: r ? C.accent : "#94A3B8", color: "#fff", border: "none", borderRadius: 9, padding: "8px 14px", fontWeight: 700, cursor: r ? "pointer" : "default" } }, r && r.fig ? "Dibujar" : "Poner punto"),
@@ -4549,10 +4705,15 @@ function TabDibujo({ proy, onChange, onArchivo }) {
             h("div", { key: o.id, className: "tv-dib-pt", style: { display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: `1px solid ${C.border}`, fontSize: 12.5, fontFamily: "monospace" } },
               h("strong", { style: { color: "#B91C1C", minWidth: 34 } }, o.nom), h("span", { style: { flex: 1 } }, "N " + f3(o.y) + "  E " + f3(o.x)),
               h(Btn, { small: true, color: C.accent, onClick: () => { setVista({ ...vistaRef.current, cx: o.x, cy: o.y, k: Math.max(vistaRef.current.k, 8) }); setMarca(o); setTimeout(() => setMarca(m => m === o ? null : m), 3500); setBuscar(null); } }, "Ir")))),
+        // color para lo que se dibuje desde ahora
+        verPaleta && h("div", { className: "tv-dib-colores", style: { position: "absolute", top: 8, right: 8, left: W < 520 ? 8 : "auto", maxWidth: 360, background: "#fff", borderRadius: 12, boxShadow: "0 6px 24px rgba(0,0,0,0.22)", padding: 12, zIndex: 4 } },
+          h("div", { style: { fontWeight: 800, fontSize: 13, marginBottom: 4 } }, "🎨 Color de lo que dibujes"),
+          h("div", { style: { fontSize: 11.5, color: C.muted, marginBottom: 8 } }, "Para cambiar algo ya dibujado: Editar → Elegir y tócalo."),
+          paleta(colorNuevo, c => { setColorNuevo(c); setVerPaleta(false); })),
         // imanes
         verImanes && h("div", { style: { position: "absolute", top: 8, left: 8, background: "#fff", borderRadius: 12, boxShadow: "0 6px 24px rgba(0,0,0,0.22)", padding: 12, zIndex: 4, fontSize: 13 } },
           h("div", { style: { fontWeight: 800, marginBottom: 8 } }, "🧲 Imanes"),
-          [["extremo", "□ Extremo"], ["medio", "△ Punto medio"], ["centro", "○ Centro"], ["cruce", "✕ Intersección"]].map(([k, t]) => h("label", { key: k, style: { display: "flex", gap: 8, alignItems: "center", padding: "5px 0", cursor: "pointer" } },
+          [["extremo", "□ Extremo"], ["medio", "△ Punto medio"], ["centro", "○ Centro"], ["cruce", "✕ Intersección"], ["abscisa", "◇ Abscisa del eje"]].map(([k, t]) => h("label", { key: k, style: { display: "flex", gap: 8, alignItems: "center", padding: "5px 0", cursor: "pointer" } },
             h("input", { type: "checkbox", checked: im[k], onChange: e => setIm({ ...im, [k]: e.target.checked }), style: { width: 18, height: 18 } }), t)),
           h(Btn, { small: true, color: C.accent, onClick: () => setVerImanes(false) }, "Listo"))),
       // menú del apartado abierto
