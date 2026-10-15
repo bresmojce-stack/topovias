@@ -1334,7 +1334,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "39";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "40";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -4182,14 +4182,14 @@ const DIB_GRUPOS = [
     ["rect", "Rectángulo", "rectangle-horizontal"], ["cuadrado", "Cuadrado", "square"], ["triangulo", "Triángulo", "triangle"], ["circulo", "Círculo", "circle"], ["arco", "Arco", "rainbow"],
     ["sombrear", "Sombrear", "paint-bucket"], ["pluma", "Pluma libre", "pen-line"], ["paralela", "Paralela", "between-vertical-start"], ["desfase", "Desfase (sobreancho)", "expand"],
     ["@eje", "Eje de la vía", "signpost"], ["estacar", "Dividir / estacar", "milestone"]] },
-  { id: "medir", label: "Medir", icono: "ruler", herr: [["distancia", "Distancia y azimut", "ruler"], ["area", "Área y perímetro", "pentagon"], ["angulo", "Ángulo", "triangle-right"], ["radio", "Radio y cuerda", "circle-dot-dashed"], ["abscisa", "Abscisa y desplaz.", "locate-fixed"], ["acotar", "Acotar", "move-horizontal"]] },
+  { id: "medir", label: "Medir", icono: "ruler", herr: [["idcoord", "ID coordenada", "map-pin"], ["distancia", "Distancia y azimut", "ruler"], ["area", "Área y perímetro", "pentagon"], ["angulo", "Ángulo", "triangle-right"], ["radio", "Radio y cuerda", "circle-dot-dashed"], ["abscisa", "Abscisa y desplaz.", "locate-fixed"], ["acotar", "Acotar", "move-horizontal"]] },
   { id: "editar", label: "Editar", icono: "scissors", herr: [["elegir", "Elegir y editar", "mouse-pointer-2"], ["mover", "Mover", "move"], ["copiar", "Copiar", "copy"], ["girar", "Girar", "rotate-ccw"], ["recortar", "Recortar", "scissors"], ["extender", "Extender", "move-up-right"], ["unir", "Unir en una figura", "combine"], ["borrar", "Borrar", "trash-2"], ["@deshacer", "Deshacer", "undo-2"], ["@rehacer", "Rehacer", "redo-2"]] },
   { id: "ver", label: "Ver", icono: "search", herr: [["@todo", "Ver todo", "scan"], ["@buscar", "Buscar punto", "map-pin"], ["@imanes", "Imanes", "magnet"], ["@cuadricula", "Cuadrícula", "grid-3x3"]] }
 ];
 const DIB_NOMBRE = { punto: "PUNTO", linea: "LÍNEA", polilinea: "POLILÍNEA", rect: "RECTÁNGULO", cuadrado: "CUADRADO", triangulo: "TRIÁNGULO", circulo: "CÍRCULO", arco: "ARCO", sombrear: "SOMBREAR", pluma: "PLUMA LIBRE", paralela: "PARALELA",
-  estacar: "DIVIDIR / ESTACAR", desfase: "DESFASE", unir: "UNIR", abscisa: "ABSCISA", distancia: "DISTANCIA", area: "ÁREA", angulo: "ÁNGULO", radio: "RADIO Y CUERDA", acotar: "ACOTAR", elegir: "ELEGIR", mover: "MOVER", copiar: "COPIAR", girar: "GIRAR", recortar: "RECORTAR", extender: "EXTENDER", borrar: "BORRAR" };
+  estacar: "DIVIDIR / ESTACAR", desfase: "DESFASE", unir: "UNIR", abscisa: "ABSCISA", distancia: "DISTANCIA", area: "ÁREA", angulo: "ÁNGULO", radio: "RADIO Y CUERDA", acotar: "ACOTAR", idcoord: "ID COORDENADA", elegir: "ELEGIR", mover: "MOVER", copiar: "COPIAR", girar: "GIRAR", recortar: "RECORTAR", extender: "EXTENDER", borrar: "BORRAR" };
 // herramientas que piden puntos (con imanes y "Escribir")
-const DIB_PIDE_PUNTO = ["punto", "linea", "polilinea", "rect", "cuadrado", "triangulo", "circulo", "arco", "distancia", "area", "acotar", "abscisa"];
+const DIB_PIDE_PUNTO = ["punto", "linea", "polilinea", "rect", "cuadrado", "triangulo", "circulo", "arco", "distancia", "area", "acotar", "abscisa", "idcoord"];
 const DIB_SELECCION = ["mover", "copiar", "girar"];
 const DIB_UNIBLES = ["l", "pl", "ar"];
 
@@ -4383,6 +4383,13 @@ function TabDibujo({ proy, onChange, onArchivo }) {
       const [a, b] = temp, L = DIB.dist(a, b); if (L < 1e-9) { setTemp([]); return; }
       const d = ((q.x - a.x) * -(b.y - a.y) + (q.y - a.y) * (b.x - a.x)) / L;
       agregar([{ t: "cota", a, b, d }]); setTemp([]); return;
+    }
+    if (herr === "idcoord") {
+      // ID: coordenada del punto tocado (con imán), y su abscisa si hay eje
+      const pr = eje && EJE.proyectar(eje, q);
+      setRes({ tipo: "coord", p: q, rows: [["Norte", f3(q.y)], ["Este", f3(q.x)]].concat(pr ? [["Abscisa", formatoAbscisa(pr.abs) + (pr.fuera ? "  (fuera del eje)" : "")],
+        ["Desplazamiento", Math.abs(pr.desp) < 0.0005 ? "0.000 m (sobre el eje)" : f3(Math.abs(pr.desp)) + " m a la " + (pr.desp > 0 ? "derecha" : "izquierda")]] : []) });
+      return;
     }
     if (herr === "abscisa") {
       const pr = eje && EJE.proyectar(eje, q);
@@ -4796,6 +4803,10 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   if (res && res.tipo === "distancia") { const A = aP(res.a), B = aP(res.b); els.push(h("line", { key: "rd", x1: A.X, y1: A.Y, x2: B.X, y2: B.Y, stroke: "#059669", strokeWidth: 3 })); }
   if (res && res.tipo === "area") els.push(h("polygon", { key: "ra", points: res.v.map(p => { const s = aP(p); return s.X + "," + s.Y; }).join(" "), fill: "rgba(5,150,105,0.18)", stroke: "#059669", strokeWidth: 2.5 }));
   if (res && res.tipo === "circulo") els.push(dibujarObj(res.obj, "rc", { col: "#059669", ancho: 3.5 }));
+  if (res && res.tipo === "coord") { const A = aP(res.p);   // marca del punto consultado
+    els.push(h("circle", { key: "rco", cx: A.X, cy: A.Y, r: 9, fill: "none", stroke: "#059669", strokeWidth: 2.5 }),
+      h("line", { key: "rco1", x1: A.X - 14, y1: A.Y, x2: A.X + 14, y2: A.Y, stroke: "#059669", strokeWidth: 2 }),
+      h("line", { key: "rco2", x1: A.X, y1: A.Y - 14, x2: A.X, y2: A.Y + 14, stroke: "#059669", strokeWidth: 2 })); }
   if (res && res.tipo === "abscisa" && eje) {   // perpendicular desde el punto hasta el eje
     const pie = EJE.punto(eje, res.pr.abs, 0);
     if (pie) { const A = aP(res.p), B = aP(pie); els.push(h("line", { key: "rab", x1: A.X, y1: A.Y, x2: B.X, y2: B.Y, stroke: "#059669", strokeWidth: 2.5, strokeDasharray: "5 3" }), h("circle", { key: "rab2", cx: B.X, cy: B.Y, r: 4, fill: "#059669" })); }
@@ -4847,6 +4858,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     estacar: "toca la línea, arco o eje para marcar los puntos",
     desfase: "escribe la medida, elige el lado y toca la figura",
     unir: `toca las líneas a unir (${selSet.length}) y luego Unir`,
+    idcoord: "toca un punto: te digo su Norte y Este",
     abscisa: eje ? "toca un punto: te digo su abscisa y desplazamiento" : "primero pon el eje (Dibujar → Eje de la vía)",
     distancia: temp.length ? "segundo punto" : "primer punto",
     area: temp.length ? `vértice ${temp.length + 1} · Calcular` : "toca una figura cerrada o marca los vértices",
@@ -5002,8 +5014,11 @@ function TabDibujo({ proy, onChange, onArchivo }) {
           h("div", null, h("span", { style: { display: "inline-block", width: paso * vista.k, borderBottom: "2px solid #334155", marginRight: 6, verticalAlign: "middle" } }), (paso >= 1 ? paso : paso.toPrecision(1)) + " m"),
           (cursor || hover) && h("div", { style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, "N " + f3((cursor || hover).y) + "  E " + f3((cursor || hover).x))),
         // resultado de medir
-        res && panel({ abscisa: "ABSCISA Y DESPLAZAMIENTO", area: "ÁREA Y PERÍMETRO", distancia: "DISTANCIA Y AZIMUT", circulo: res.obj && res.obj.t === "ar" ? "ARCO" : "CÍRCULO", angulo: "ÁNGULO ENTRE LÍNEAS" }[res.tipo], res.rows.map(([a, b], i) => filaInfo(a, b, i)),
-          [res.tipo === "abscisa" && h(Btn, { small: true, color: "#334155", onClick: () => { agregar([{ t: "p", x: res.p.x, y: res.p.y, nom: absCorta(res.pr.abs) + (Math.abs(res.pr.desp) >= 0.0005 ? (res.pr.desp > 0 ? " D" : " I") + f3(Math.abs(res.pr.desp)) : "") }]); setRes(null); } }, "📍 Dejar punto"),
+        res && panel({ coord: "COORDENADA DEL PUNTO", abscisa: "ABSCISA Y DESPLAZAMIENTO", area: "ÁREA Y PERÍMETRO", distancia: "DISTANCIA Y AZIMUT", circulo: res.obj && res.obj.t === "ar" ? "ARCO" : "CÍRCULO", angulo: "ÁNGULO ENTRE LÍNEAS" }[res.tipo], res.rows.map(([a, b], i) => filaInfo(a, b, i)),
+          [res.tipo === "coord" && h(Btn, { small: true, color: "#334155", onClick: () => { agregar([{ t: "p", x: res.p.x, y: res.p.y, nom: "N " + f3(res.p.y) + "  E " + f3(res.p.x) }]); setRes(null); } }, "📍 Anotar en el dibujo"),
+           res.tipo === "coord" && h(Btn, { small: true, color: "#334155", onClick: () => { const t = "N " + f3(res.p.y) + "  E " + f3(res.p.x);
+             try { navigator.clipboard.writeText(t).then(() => aviso("Copiado: " + t), () => aviso(t)); } catch (e) { aviso(t); } } }, "📋 Copiar"),
+           res.tipo === "abscisa" && h(Btn, { small: true, color: "#334155", onClick: () => { agregar([{ t: "p", x: res.p.x, y: res.p.y, nom: absCorta(res.pr.abs) + (Math.abs(res.pr.desp) >= 0.0005 ? (res.pr.desp > 0 ? " D" : " I") + f3(Math.abs(res.pr.desp)) : "") }]); setRes(null); } }, "📍 Dejar punto"),
           res.tipo === "distancia" && h(Btn, { small: true, color: "#334155", onClick: () => { const L = DIB.dist(res.a, res.b); agregar([{ t: "cota", a: res.a, b: res.b, d: Math.max(L * 0.08, 12 / vista.k) }]); setRes(null); } }, "📐 Dejar como cota")].filter(Boolean).map((el, i) => React.cloneElement(el, { key: i })),
           () => setRes(null)),
         // objeto elegido: sus medidas se pueden cambiar escribiendo
