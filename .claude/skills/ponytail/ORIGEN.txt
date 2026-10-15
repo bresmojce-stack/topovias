@@ -1,0 +1,2 @@
+Ponytail 5.2.0 (MIT), copiado de https://github.com/DietrichGebert/ponytail (commit 84740e3).
+Solo las skills (instrucciones); sin hooks ni scripts.
