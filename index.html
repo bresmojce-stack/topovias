@@ -1225,7 +1225,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "25";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "26";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -3603,20 +3603,22 @@ function crearDXF(dib) {
   g(0, "SECTION"); g(2, "HEADER"); g(9, "$ACADVER"); g(1, "AC1009"); g(9, "$INSUNITS"); g(70, 6); g(0, "ENDSEC");
   g(0, "SECTION"); g(2, "TABLES");
   g(0, "TABLE"); g(2, "LTYPE"); g(70, 1); g(0, "LTYPE"); g(2, "CONTINUOUS"); g(70, 0); g(3, "Solid line"); g(72, 65); g(73, 0); g(40, "0.0"); g(0, "ENDTAB");
-  const capas = [["PUNTOS", 1], ["LINEAS", 7], ["COTAS", 3], ["TEXTOS", 2]];
-  g(0, "TABLE"); g(2, "LAYER"); g(70, capas.length);
-  capas.forEach(([nom, col]) => { g(0, "LAYER"); g(2, nom); g(70, 0); g(62, col); g(6, "CONTINUOUS"); });
+  // Todo en una sola capa; cada tipo lleva su color (puntos rojos, cotas verdes, textos amarillos)
+  g(0, "TABLE"); g(2, "LAYER"); g(70, 1);
+  g(0, "LAYER"); g(2, "TOPOVIAS"); g(70, 0); g(62, 7); g(6, "CONTINUOUS");
   g(0, "ENDTAB"); g(0, "ENDSEC");
   g(0, "SECTION"); g(2, "ENTITIES");
-  const linea = (a, b, capa) => { g(0, "LINE"); g(8, capa); g(10, n(a.x)); g(20, n(a.y)); g(30, 0); g(11, n(b.x)); g(21, n(b.y)); g(31, 0); };
-  const texto = (p, s, alto, rot, capa) => { g(0, "TEXT"); g(8, capa); g(10, n(p.x)); g(20, n(p.y)); g(30, 0); g(40, n(alto)); g(1, dxfTexto(s)); if (rot) g(50, n(rot)); };
+  const COLOR = { PUNTOS: 1, LINEAS: 256, COTAS: 3, TEXTOS: 2 };   // 256 = color de la capa
+  const capa_ = tipo => { g(8, "TOPOVIAS"); if (COLOR[tipo] !== 256) g(62, COLOR[tipo]); };
+  const linea = (a, b, capa) => { g(0, "LINE"); capa_(capa); g(10, n(a.x)); g(20, n(a.y)); g(30, 0); g(11, n(b.x)); g(21, n(b.y)); g(31, 0); };
+  const texto = (p, s, alto, rot, capa) => { g(0, "TEXT"); capa_(capa); g(10, n(p.x)); g(20, n(p.y)); g(30, 0); g(40, n(alto)); g(1, dxfTexto(s)); if (rot) g(50, n(rot)); };
   dib.objs.forEach(o => {
-    if (o.t === "p") { g(0, "POINT"); g(8, "PUNTOS"); g(10, n(o.x)); g(20, n(o.y)); g(30, 0); if (o.nom) texto({ x: o.x + h * 0.6, y: o.y + h * 0.6 }, o.nom, h, 0, "TEXTOS"); }
+    if (o.t === "p") { g(0, "POINT"); capa_("PUNTOS"); g(10, n(o.x)); g(20, n(o.y)); g(30, 0); if (o.nom) texto({ x: o.x + h * 0.6, y: o.y + h * 0.6 }, o.nom, h, 0, "TEXTOS"); }
     else if (o.t === "l") linea(o.a, o.b, "LINEAS");
     else if (o.t === "pl") {
-      g(0, "POLYLINE"); g(8, "LINEAS"); g(66, 1); g(10, 0); g(20, 0); g(30, 0); g(70, o.c ? 1 : 0);
-      o.v.forEach(p => { g(0, "VERTEX"); g(8, "LINEAS"); g(10, n(p.x)); g(20, n(p.y)); g(30, 0); });
-      g(0, "SEQEND"); g(8, "LINEAS");
+      g(0, "POLYLINE"); capa_("LINEAS"); g(66, 1); g(10, 0); g(20, 0); g(30, 0); g(70, o.c ? 1 : 0);
+      o.v.forEach(p => { g(0, "VERTEX"); capa_("LINEAS"); g(10, n(p.x)); g(20, n(p.y)); g(30, 0); });
+      g(0, "SEQEND"); capa_("LINEAS");
     } else if (o.t === "cota") {
       const [a2, b2, nn] = DIB.cotaLinea(o), s = Math.sign(o.d) || 1, ex = { x: nn.x * s * h * 0.5, y: nn.y * s * h * 0.5 };
       linea(o.a, { x: a2.x + ex.x, y: a2.y + ex.y }, "COTAS"); linea(o.b, { x: b2.x + ex.x, y: b2.y + ex.y }, "COTAS"); linea(a2, b2, "COTAS");
