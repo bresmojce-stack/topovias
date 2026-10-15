@@ -662,8 +662,51 @@ function espesorAntesDe(cs, nombre) {
   return i < 0 ? null : espesorTotal(cs.slice(0, i));
 }
 
+// ─── PARQUEADERO DE CABECERA ──────────────────────────────────────────────────
+// Un parqueadero "de cabecera" queda detrás del inicio de la vía (abscisas negativas, ej. −0+005 a
+// 0+000) o después del fin, con los cupos de frente. Se ubica con su fondo y con el desplazamiento
+// desde/hasta el eje; aquí se convierte en abscisas y ancho para que el resto del cálculo lo trate
+// igual que un parqueadero lateral. Distancias, anchos y áreas siempre en valor absoluto.
+const esCabecera = p => !!p && (p.ubicacion === "inicio" || p.ubicacion === "fin");
+function rangoVia(proy) {
+  const ini = r3(parseFloat(proy.absInicio) || 0);
+  let fin = ini;
+  resolverTodos(proy.tramos || []).forEach(rt => { fin = r3(fin + (rt.distancia || 0)); });
+  return { ini, fin };
+}
+function datosCabecera(p) {
+  const fondo = Math.abs(parseFloat(p.fondo)), d = Math.abs(parseFloat(p.desde) || 0), h = Math.abs(parseFloat(p.hasta));
+  const ok = !isNaN(fondo) && fondo > 0 && !isNaN(h) && Math.abs(h - d) > 0.0005;
+  return { ok, fondo: ok ? r3(fondo) : 0, desde: r3(Math.min(d, isNaN(h) ? d : h)), hasta: isNaN(h) ? null : r3(Math.max(d, h)), ancho: ok ? r3(Math.abs(h - d)) : 0 };
+}
+// filas de la tabla que son de la vía (sin las de cabecera) y su largo
+const filasVia = t => (t || []).filter(r => !r.fueraVia);
+const largoVia = t => { const f = filasVia(t); return f.length > 1 ? r3(Math.abs(f[f.length - 1].abs - f[0].abs)) : 0; };
+const cacheCalc = new WeakMap();
+function proyCalc(proy) {
+  if (!proy || proy.__calc) return proy;
+  const c = cacheCalc.get(proy);
+  if (c) return c;
+  const ps = proy.parqueaderos || [];
+  let out = proy;
+  if (ps.some(esCabecera)) {
+    const rv = rangoVia(proy);
+    out = { ...proy, __calc: true, parqueaderos: ps.map(p => {
+      if (!esCabecera(p)) return p;
+      const k = datosCabecera(p);
+      if (!k.ok) return { ...p, absInicio: "", absFin: "", ancho: "" };
+      const borde = p.ubicacion === "inicio" ? rv.ini : rv.fin;
+      const a = p.ubicacion === "inicio" ? r3(borde - k.fondo) : borde, b = p.ubicacion === "inicio" ? borde : r3(borde + k.fondo);
+      return { ...p, absInicio: String(a), absFin: String(b), ancho: String(k.ancho), borde };
+    }) };
+  }
+  cacheCalc.set(proy, out);
+  return out;
+}
+
 // ─── GENERADOR DE TABLA ───────────────────────────────────────────────────────
 function generarTabla(proyecto) {
+  proyecto = proyCalc(proyecto);
   const {
     absInicio,
     tramos,
@@ -690,13 +733,17 @@ function generarTabla(proyecto) {
     });
   });
   const tabla = [];
+  const rv = rangoVia(proyecto);
   for (const abs of abscisas) {
-    const esPI = pisSet.has(abs);
+    // fuera de la vía: solo el parqueadero de cabecera (la vía no existe ahí)
+    const fueraVia = abs < rv.ini - 0.0005 || abs > rv.fin + 0.0005;
+    const esPI = !fueraVia && pisSet.has(abs);
     const rtTramo = tramoParaAbscisa(tramosR, absIni, abs);
-    const pend = rtTramo?.pendiente ?? 0;
-    const cotaEje = calcCotaEnAbscisa(tramosR, absIni, abs);
+    const pend = fueraVia ? 0 : rtTramo?.pendiente ?? 0;
+    const cotaEjeEn = a => calcCotaEnAbscisa(tramosR, absIni, a);
+    const cotaEje = fueraVia ? null : cotaEjeEn(abs);
     const absFormato = formatoAbscisa(abs);
-    const resolverLateralCota = lat => {
+    const resolverLateralCota = (lat, abs, cotaEje) => {
       if (!lat.ancho) return null;
       if (lat.modo === "transversal") {
         if (lat.modoT === "diferencia") {
@@ -716,8 +763,8 @@ function generarTabla(proyecto) {
         return calcCotaEnAbscisa(latR, latAbsIni, abs);
       }
     };
-    const cotaLatDer = resolverLateralCota(lateralDer);
-    const cotaLatIzq = resolverLateralCota(lateralIzq);
+    const cotaLatDer = fueraVia ? null : resolverLateralCota(lateralDer, abs, cotaEje);
+    const cotaLatIzq = fueraVia ? null : resolverLateralCota(lateralIzq, abs, cotaEje);
 
     // ─ PARQUEADEROS: nacen del LATERAL, no del eje ─
     let parqDerCota = null;
@@ -725,14 +772,23 @@ function generarTabla(proyecto) {
     let parqDerP = null;
     let parqIzqP = null;
     let esParq = false;
-    (parqueaderos || []).forEach(p => {
+    // los laterales van de último: en el borde de la vía mandan sobre uno de cabecera del mismo lado
+    [...(parqueaderos || []).filter(esCabecera), ...(parqueaderos || []).filter(p => !esCabecera(p))].forEach(p => {
       const pi = parseFloat(p.absInicio);
       const pf = parseFloat(p.absFin);
       if (isNaN(pi) || isNaN(pf)) return;
       if (abs < pi - 0.001 || abs > pf + 0.001) return;
       esParq = true;
       let cotaParq = null;
-      if (p.modo === "diferencia") {
+      if (esCabecera(p) && p.modo === "diferencia") {
+        // cabecera: cota del lateral de su lado en el borde de la vía + diferencia,
+        // y si se pidió, la pendiente hacia el fondo (siempre sobre la distancia positiva)
+        const eB = cotaEjeEn(p.borde);
+        const latB = resolverLateralCota(p.lado === "izquierdo" ? lateralIzq : lateralDer, p.borde, eB);
+        const base = latB !== null ? latB : eB;
+        const pf2 = parseFloat(p.pendienteFondo) || 0;
+        cotaParq = base !== null ? r3(base + (parseFloat(p.diferencia) || 0) + pf2 / 100 * Math.abs(abs - p.borde)) : null;
+      } else if (p.modo === "diferencia") {
         // B: cota del lateral correspondiente + diferencia fija
         const cotaLatBase = p.lado === "izquierdo" ? cotaLatIzq : cotaLatDer;
         const diff = parseFloat(p.diferencia) || 0;
@@ -796,6 +852,7 @@ function generarTabla(proyecto) {
     tabla.push({
       abs,
       absFormato,
+      fueraVia,
       pendiente: pend,
       cotaEje,
       cotaLatDer,
@@ -1050,6 +1107,8 @@ const parqVacio = () => ({
   id: Math.random(),
   nombre: "Parqueadero",
   modo: "diferencia",
+  ubicacion: "lateral",
+  // "lateral" | "inicio" | "fin" (de cabecera: desde, hasta, fondo, pendienteFondo)
   lado: "derecho",
   absInicio: "",
   absFin: "",
@@ -1245,7 +1304,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "36";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "37";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -1371,8 +1430,9 @@ function useLocalObras() {
 // ─── CANTIDADES DE LA VÍA ─────────────────────────────────────────────────────
 // Áreas en planta: vía (largo × ancho de laterales) y cada parqueadero ((fin − inicio) × (ancho + sobreancho))
 function calcAreas(proy, tabla) {
+  proy = proyCalc(proy);
   const { anchoIzq, anchoDer } = anchosProyecto(proy);
-  const largo = tabla && tabla.length > 1 ? r3(tabla[tabla.length - 1].abs - tabla[0].abs) : 0;
+  const largo = largoVia(tabla);
   const ancho = r3(anchoIzq + anchoDer);                 // ancho del plano
   const sg = sobreanchoGeneral(proy);
   const anchoConf = r3(ancho + sg.izq + sg.der);        // ancho de conformación (con sobreancho general)
@@ -1384,7 +1444,8 @@ function calcAreas(proy, tabla) {
     const largoC = r3(largoP + 2 * extremos);
     const anchoC = r3(anchoP + ext);
     // en este tramo el borde de trabajo es el del parqueadero: no se suma el sobreancho de la vía de ese lado
-    const saViaLado = p.lado === "izquierdo" ? sg.izq : sg.der;
+    // (uno de cabecera no queda al lado de la vía: no descuenta nada)
+    const saViaLado = esCabecera(p) ? 0 : p.lado === "izquierdo" ? sg.izq : sg.der;
     return { p, nombre: p.nombre || "Parqueadero", lado: p.lado, largo: largoP, anchoPlano: anchoP, ext, extremos, largoC, ancho: anchoC,
       area: r3(largoC * anchoC), areaPlano: r3(largoP * anchoP), descuentoVia: r3(largoP * saViaLado), saViaLado };
   });
@@ -1442,7 +1503,7 @@ function calcCantidades(proy, tabla) {
     capasVia.forEach(c => {
       const sc = sobreanchoCapa(proy, c.nombre);
       const anchoC = r3(areas.ancho + sc.izq + sc.der);
-      const desc = areas.parqs.reduce((s, x) => s + x.largo * (x.lado === "izquierdo" ? sc.izq : sc.der), 0);
+      const desc = areas.parqs.filter(x => !esCabecera(x.p)).reduce((s, x) => s + x.largo * (x.lado === "izquierdo" ? sc.izq : sc.der), 0);
       usarCapa(c, areas.largo * anchoC - desc, `vía ${areas.largo.toFixed(3)} m × ${anchoC.toFixed(3)} m${desc ? " − " + desc.toFixed(3) + " m² (sobreancho donde hay parqueadero)" : ""} = `);
     });
     areas.parqs.forEach(pq => {
@@ -1704,7 +1765,7 @@ function svgPerfil(d) {
 
 function svgPlanta(d) {
   const proy = d.proy, A = anchosProyecto(proy), sg = sobreanchoGeneral(proy);
-  const parqs = (proy.parqueaderos || []).map(p => ({ p, ini: parseFloat(p.absInicio), fin: parseFloat(p.absFin), ancho: parseFloat(p.ancho) || 0 })).filter(x => !isNaN(x.ini) && !isNaN(x.fin));
+  const parqs = (proy.parqueaderos || []).filter(p => !esCabecera(p)).map(p => ({ p, ini: parseFloat(p.absInicio), fin: parseFloat(p.absFin), ancho: parseFloat(p.ancho) || 0 })).filter(x => !isNaN(x.ini) && !isNaN(x.fin));
   const pIzq = Math.max(0, ...parqs.filter(x => x.p.lado === "izquierdo").map(x => x.ancho)), pDer = Math.max(0, ...parqs.filter(x => x.p.lado !== "izquierdo").map(x => x.ancho));
   const W = 1100, PL = 74, PR = 30;
   const xsPI = d.PI.map(p => PL + (p.abs - d.absMin) / ((d.absMax - d.absMin) || 1) * (W - PL - PR));
@@ -2209,7 +2270,7 @@ function TablaResultado({
         color: C.muted,
         background: piRowBg || "#FAFAFA"
       }
-    }, row.pendiente.toFixed(3), "%"), cell(row.parqDerCota, false, C.parq, "#FAFAFA"), cell(row.cotaLatDer, false, C.accent2, "#FAFAFA"), cell(row.cotaEje, true, "#0F172A", "#FAFAFA"), cell(row.cotaLatIzq, false, C.accent2, "#FAFAFA"), cell(row.parqIzqCota, false, C.parq, "#FAFAFA"), row.capas.filter(c => !c.esOculta).flatMap((c, ci) => {
+    }, row.fueraVia ? "—" : row.pendiente.toFixed(3) + "%"), cell(row.parqDerCota, false, C.parq, "#FAFAFA"), cell(row.cotaLatDer, false, C.accent2, "#FAFAFA"), cell(row.cotaEje, true, "#0F172A", "#FAFAFA"), cell(row.cotaLatIzq, false, C.accent2, "#FAFAFA"), cell(row.parqIzqCota, false, C.parq, "#FAFAFA"), row.capas.filter(c => !c.esOculta).flatMap((c, ci) => {
       const idxReal = ci + 1;
       const pal = c.esExcavacion ? EXCAVACION_PASTEL : PALETA_TABLA_PASTEL[idxReal % PALETA_TABLA_PASTEL.length];
       return [cell(c.parqDer, false, pal.text, pal.pastel), cell(c.der, false, pal.text, pal.pastel), cell(c.eje, true, pal.text, pal.pastel), cell(c.izq, false, pal.text, pal.pastel), cell(c.parqIzq, false, pal.text, pal.pastel)];
@@ -2534,7 +2595,7 @@ function getSerie(fuenteId, proyecto, tabla) {
   return [];
 }
 function anchosProyecto(proyecto) {
-  const parq = lado => (proyecto.parqueaderos || []).find(p => p.lado === lado);
+  const parq = lado => (proyecto.parqueaderos || []).find(p => p.lado === lado && !esCabecera(p));
   return {
     anchoIzq: parseFloat(proyecto.lateralIzq && proyecto.lateralIzq.ancho) || 0,
     anchoDer: parseFloat(proyecto.lateralDer && proyecto.lateralDer.ancho) || 0,
@@ -2581,11 +2642,11 @@ function sobreanchoCapaParq(proy, pq, nombre) {
   return 0;
 }
 // Parqueadero de un lado que cubre la abscisa (para el ancho de cada sección de volumen)
-function parqEn(proy, lado, abs) {
-  return (proy.parqueaderos || []).find(p => {
-    const a = parseFloat(p.absInicio), b = parseFloat(p.absFin);
-    return p.lado === lado && !isNaN(a) && !isNaN(b) && abs >= Math.min(a, b) - 0.001 && abs <= Math.max(a, b) + 0.001;
-  }) || (proy.parqueaderos || []).find(p => p.lado === lado);
+// cab: true = solo de cabecera, false = solo laterales, undefined = cualquiera (laterales primero)
+function parqEn(proy, lado, abs, cab) {
+  const ps = (proyCalc(proy).parqueaderos || []).filter(p => p.lado === lado && (cab === undefined || esCabecera(p) === cab));
+  const cubre = p => { const a = parseFloat(p.absInicio), b = parseFloat(p.absFin); return !isNaN(a) && !isNaN(b) && abs >= Math.min(a, b) - 0.001 && abs <= Math.max(a, b) + 0.001; };
+  return ps.find(p => !esCabecera(p) && cubre(p)) || ps.find(cubre) || ps.find(p => !esCabecera(p)) || ps[0];
 }
 
 // Sobreancho de un volumen: si no se escribe, se toma de la capa de diseño contra la que se
@@ -2615,6 +2676,7 @@ function sobreanchoVolumen(vol, proy) {
 // Método de áreas promedio. Cada fila trae: dist (con sobreancho en los extremos),
 // extra (volumen adicional por sobreancho de parqueaderos) y vol.
 function calcVolumen(vol, proyecto, tabla) {
+  proyecto = proyCalc(proyecto);
   const S = sobreanchoVolumen(vol, proyecto);
   const saLados = r3(S.izq + S.der);               // se suma al ancho de la vía
   const sa = S.longitudinal ? r3(saLados / 2) : 0; // se suma al inicio y fin (si se pidió)
@@ -2628,6 +2690,9 @@ function calcVolumen(vol, proyecto, tabla) {
   // si las dos son medidas, guía la superior.
   const guiaEsInf = !vol.fuenteSup.startsWith("nivel__") && vol.fuenteInf.startsWith("nivel__");
   const guia = guiaEsInf ? serInf : serSup, otra = guiaEsInf ? serSup : serInf;
+  const rv = rangoVia(proyecto);
+  // con signo (ej. sobre-excavación): negativo = faltó llegar a la cota teórica
+  const pos = v => vol.conSigno ? v : Math.max(0, v);
   const marcadas = guia.map(pG => {
     const igual = otra.filter(p => Math.abs(p.abs - pG.abs) < 0.0005);
     const pO = igual.find(p => (p.sub || 0) === (pG.sub || 0)) || igual[igual.length - 1] ||
@@ -2635,28 +2700,63 @@ function calcVolumen(vol, proyecto, tabla) {
     if (!pO || Math.abs(pO.abs - pG.abs) > 1.0) return null;
     const pSup = guiaEsInf ? { ...pO, abs: pG.abs, absFormato: pG.absFormato, sub: pG.sub } : pG, pInf = guiaEsInf ? pG : pO;
     const diff = k => pSup[k] !== null && pInf[k] !== null ? r3(pSup[k] - pInf[k]) : null;
-    const dParqDer = diff("parqDer"), dDer = diff("der"), dEje = diff("eje"), dIzq = diff("izq"), dParqIzq = diff("parqIzq");
-    const pts = [dParqDer, dDer, dEje, dIzq, dParqIzq].filter(v => v !== null);
-    if (!pts.length) return null;
-    const p = prom(pts);
-    // ANCHO: vía + a cada lado: si hay parqueadero, su ancho + su sobreancho exterior;
-    //        si no, el sobreancho de la vía de ese lado.
-    const ladoAncho = (lado, dParq, saVia, escrito) => {
-      if (dParq === null) return saVia;
-      const pq = parqEn(proyecto, lado, pSup.abs);
-      const anchoP = parseFloat(pq && pq.ancho) || 0;
-      const saP = escrito ? saVia : (S.capa ? sobreanchoCapaParq(proyecto, pq, S.capa) : 0);
-      return anchoP + saP;
+    const abs = pSup.abs, fuera = abs < rv.ini - 0.0005 || abs > rv.fin + 0.0005;
+    const D = { parqDer: diff("parqDer"), der: diff("der"), eje: diff("eje"), izq: diff("izq"), parqIzq: diff("parqIzq") };
+    // de qué tipo es el parqueadero de cada lado en esta abscisa
+    const cubre = (lado, cab) => { const pq = parqEn(proyecto, lado, abs, cab); if (!pq) return null; const a = parseFloat(pq.absInicio), b = parseFloat(pq.absFin);
+      return !isNaN(a) && !isNaN(b) && abs >= Math.min(a, b) - 0.001 && abs <= Math.max(a, b) + 0.001 ? pq : null; };
+    const cabD = D.parqDer !== null && cubre("derecho", true), cabI = D.parqIzq !== null && cubre("izquierdo", true);
+    const latD = D.parqDer !== null && cubre("derecho", false), latI = D.parqIzq !== null && cubre("izquierdo", false);
+    const filas = [];
+    const via = () => {
+      // sección de la vía (con sus parqueaderos laterales)
+      const dParqDer = latD ? D.parqDer : null, dParqIzq = latI ? D.parqIzq : null, dDer = D.der, dEje = D.eje, dIzq = D.izq;
+      const pts = [dParqDer, dDer, dEje, dIzq, dParqIzq].filter(v => v !== null);
+      if (!pts.length) return null;
+      const p = prom(pts);
+      // ANCHO: vía + a cada lado: si hay parqueadero, su ancho + su sobreancho exterior;
+      //        si no, el sobreancho de la vía de ese lado.
+      const ladoAncho = (lado, dParq, saVia, escrito) => {
+        if (dParq === null) return saVia;
+        const pq = parqEn(proyecto, lado, abs, false);
+        const anchoP = parseFloat(pq && pq.ancho) || 0;
+        const saP = escrito ? saVia : (S.capa ? sobreanchoCapaParq(proyecto, pq, S.capa) : 0);
+        return anchoP + saP;
+      };
+      const ancho = r3(anchoVia + ladoAncho("izquierdo", dParqIzq, S.izq, S.escritoIzq) + ladoAncho("derecho", dParqDer, S.der, S.escritoDer));
+      const area = r3(pos(p * ancho));
+      const ptsVia = [dDer, dEje, dIzq].filter(v => v !== null);
+      const areaVia = r3(pos((ptsVia.length ? prom(ptsVia) : p) * (anchoVia + saLados)));
+      return { abs, absFormato: pSup.absFormato, dParqDer, dDer, dEje, dIzq, dParqIzq, prom: p, ancho, area,
+        areaParqOnly: r3(pos(area - areaVia)), tieneParqDer: dParqDer !== null, tieneParqIzq: dParqIzq !== null, sub: pSup.sub || 0 };
     };
-    const ancho = r3(anchoVia + ladoAncho("izquierdo", dParqIzq, S.izq, S.escritoIzq) + ladoAncho("derecho", dParqDer, S.der, S.escritoDer));
-    // con signo (ej. sobre-excavación): negativo = faltó llegar a la cota teórica
-    const pos = v => vol.conSigno ? v : Math.max(0, v);
-    const area = r3(pos(p * ancho));
-    const ptsVia = [dDer, dEje, dIzq].filter(v => v !== null);
-    const areaVia = r3(pos((ptsVia.length ? prom(ptsVia) : p) * (anchoVia + saLados)));
-    return { abs: pSup.abs, absFormato: pSup.absFormato, dParqDer, dDer, dEje, dIzq, dParqIzq, prom: p, ancho, area,
-      areaParqOnly: r3(pos(area - areaVia)), tieneParqDer: dParqDer !== null, tieneParqIzq: dParqIzq !== null, sub: pSup.sub || 0 };
-  });
+    const cab = () => {
+      // sección del parqueadero de cabecera: solo sus cupos (la vía no existe ahí)
+      const dParqDer = cabD ? D.parqDer : null, dParqIzq = cabI ? D.parqIzq : null;
+      const pts = [dParqDer, dParqIzq].filter(v => v !== null);
+      if (!pts.length) return null;
+      const p = prom(pts);
+      const ladoAncho = (lado, dParq, escrito, saVia) => {
+        if (dParq === null) return 0;
+        const pq = parqEn(proyecto, lado, abs, true);
+        const anchoP = parseFloat(pq && pq.ancho) || 0;
+        return anchoP + (escrito ? saVia : (S.capa ? sobreanchoCapaParq(proyecto, pq, S.capa) : 0));
+      };
+      const ancho = r3(ladoAncho("izquierdo", dParqIzq, S.escritoIzq, S.izq) + ladoAncho("derecho", dParqDer, S.escritoDer, S.der));
+      const area = r3(pos(p * ancho));
+      return { abs, absFormato: pSup.absFormato, dParqDer, dDer: null, dEje: null, dIzq: null, dParqIzq, prom: p, ancho, area,
+        areaParqOnly: area, tieneParqDer: dParqDer !== null, tieneParqIzq: dParqIzq !== null, sub: pSup.sub || 0, cab: true };
+    };
+    if (fuera) { const c = cab(); if (c) filas.push(c); }
+    else if (cabD || cabI) {
+      // borde de la vía: dos secciones en la misma abscisa (distancia 0 entre ellas), así el
+      // parqueadero de cabecera y la vía no se mezclan en el promedio de áreas
+      const c = cab(), v = via();
+      const par = Math.abs(abs - rv.ini) < 0.0005 ? [c, v] : [v, c];
+      par.filter(Boolean).forEach(f => filas.push(c && v ? { ...f, partida: true } : f));
+    } else { const v = via(); if (v) filas.push(v); }
+    return filas.length ? filas : null;
+  }).reduce((acc, x) => acc.concat(x === null ? [null] : x), []);
   // Solo se calcula volumen entre secciones consecutivas que tienen datos: si en medio hay
   // una sección sin nivelar, el tramo se corta (no se inventa terreno donde no se midió).
   const filas = [];
@@ -2766,6 +2866,7 @@ const PAL = {
 };
 
 function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
+    proyecto = proyCalc(proyecto);
     // ── ayudas ─────────────────────────────────────────────────
     const ref = (c, r) => colLetra(c) + (r + 1);           // fila/columna desde 0 → "A1"
     const abs$ = (c, r) => "$" + colLetra(c) + "$" + (r + 1);
@@ -2817,9 +2918,10 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
     filaDato("VÍA:", proyecto.nombre || "", "FECHA:", fechaHoy);
     const anchos = anchosProyecto(proyecto);
     const rAncho = filaDato("ANCHO VÍA (m):", r3(anchos.anchoIzq + anchos.anchoDer), "ELABORADO:", "");
-    const rAbs = filaDato("ABS INICIO (m):", ABS(tabla[0].abs), "ABS FIN (m):", ABS(tabla[tabla.length - 1].abs));
+    const tv = filasVia(tabla).length ? filasVia(tabla) : tabla;
+    const rAbs = filaDato("ABS INICIO (m):", ABS(tv[0].abs), "ABS FIN (m):", ABS(tv[tv.length - 1].abs));
     const sgen = sobreanchoGeneral(proyecto);
-    const rLargo = filaDato("LARGO (m):", F(`${ref(5, rAbs)}-${ref(1, rAbs)}`, r3(tabla[tabla.length - 1].abs - tabla[0].abs)), "SOBREANCHO IZQ (m):", sgen.izq);
+    const rLargo = filaDato("LARGO (m):", F(`${ref(5, rAbs)}-${ref(1, rAbs)}`, largoVia(tabla)), "SOBREANCHO IZQ (m):", sgen.izq);
     const rSD = filaDato("", "", "SOBREANCHO DER (m):", sgen.der);
     // celdas que usan las fórmulas de cotas y cantidades
     const R = { L: ref(1, rLargo), A: ref(1, rAncho), SI: ref(5, rLargo), SD: ref(5, rSD), esp: {}, saI: {}, saD: {}, parq: {} };
@@ -2869,7 +2971,7 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
       headerRows.add(pushRow(["PARQUEADERO", "ABS INICIO", "ABS FIN", "ANCHO (m)", "SOBREANCHO EXTERIOR (m)", "SOBREANCHO EXTREMOS (m)"]));
       parqsX.forEach(pq => {
         const r = row;
-        pushRow([(pq.nombre || "Parqueadero") + (pq.lado === "izquierdo" ? " (IZQ)" : " (DER)"), ABS(parseFloat(pq.absInicio)), ABS(parseFloat(pq.absFin)),
+        pushRow([(pq.nombre || "Parqueadero") + (pq.lado === "izquierdo" ? " (IZQ" : " (DER") + (esCabecera(pq) ? ", CABECERA " + (pq.ubicacion === "inicio" ? "INICIO" : "FIN") + ")" : ")"), ABS(parseFloat(pq.absInicio)), ABS(parseFloat(pq.absFin)),
           parseFloat(pq.ancho) || 0, sobreanchoParq(pq), sobreanchoExtremosParq(pq)]);
         R.parq[pq.id] = { pq, L: `ABS(${ref(2, r)}-${ref(1, r)})`, A: ref(3, r), EXT: ref(4, r), EXTR: ref(5, r), esp: {}, sa: {} };
       });
@@ -3078,7 +3180,7 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
         const formulaAncho = f => {
           const lado = (nombreLado, tiene, saVia, pSaVia, escrito) => {
             if (!tiene) return { f: pSaVia, v: saVia };
-            const pq = parqEn(proyecto, nombreLado, f.abs), P = pq && R.parq[pq.id];
+            const pq = parqEn(proyecto, nombreLado, f.abs, !!f.cab), P = pq && R.parq[pq.id];
             if (!P) return null;
             const anchoP = parseFloat(pq.ancho) || 0;
             if (escrito) return { f: `${P.A}+${pSaVia}`, v: anchoP + saVia };
@@ -3094,6 +3196,13 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
             }
             return null;
           };
+          if (f.cab) {
+            // cabecera: solo los parqueaderos que tiene (sin la vía ni su sobreancho)
+            const ps = [lado("izquierdo", f.tieneParqIzq, res.saIzq, pSI, SV.escritoIzq), lado("derecho", f.tieneParqDer, res.saDer, pSD, SV.escritoDer)];
+            const usados = [f.tieneParqIzq ? ps[0] : null, f.tieneParqDer ? ps[1] : null].filter(x => x !== null);
+            if (ps.some((x, i) => x === null && (i ? f.tieneParqDer : f.tieneParqIzq)) || !usados.length || !igual(r3(usados.reduce((a, x) => a + x.v, 0)), f.ancho)) return f.ancho;
+            return F(usados.map(x => x.f).join("+"), f.ancho);
+          }
           const iz = lado("izquierdo", f.tieneParqIzq, res.saIzq, pSI, SV.escritoIzq);
           const de = lado("derecho", f.tieneParqDer, res.saDer, pSD, SV.escritoDer);
           if (!iz || !de || !igual(r3(res.anchoVia + iz.v + de.v), f.ancho)) return f.ancho;
@@ -3104,6 +3213,7 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
         const filaR = {};   // índice de fila en res.filas → fila de la hoja
         const areaParqFormula = (fi) => {
           const f = res.filas[fi], r = filaR[fi];
+          if (f.cab) return ref(cAr, r);   // en la cabecera toda el área es del parqueadero
           const via = ["der", "eje", "izq"].filter(k => Kv.includes(k) && f[{ der: "dDer", eje: "dEje", izq: "dIzq" }[k]] !== null);
           const promVia = via.length ? `ROUND(AVERAGE(${via.map(k => ref(cC + Kv.indexOf(k), r)).join(",")}),3)` : ref(cP, r);
           const areaVia = parte.conSigno ? `ROUND(${promVia}*(${pAV}+${pSI}+${pSD}),3)` : `ROUND(MAX(0,${promVia}*(${pAV}+${pSI}+${pSD})),3)`;
@@ -3153,8 +3263,10 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
             const vs = pS ? pS[k] : null, vi = pI ? pI[k] : null;
             const rs = vs != null ? celdaSuperficie(parte.fuenteSup, f.abs, f.sub, k) : null;
             const ri = vi != null ? celdaSuperficie(parte.fuenteInf, f.abs, f.sub, k) : null;
-            fila[cS + j] = vs == null ? "" : rs ? F(rs, vs) : vs;
-            fila[cI + j] = vi == null ? "" : ri ? F(ri, vi) : vi;
+            // sección partida en el borde de la vía: cada fila muestra solo sus puntos
+            const fuera = (f.cab || f.partida) && dif[k] == null;
+            fila[cS + j] = vs == null || fuera ? "" : rs ? F(rs, vs) : vs;
+            fila[cI + j] = vi == null || fuera ? "" : ri ? F(ri, vi) : vi;
             fila[cC + j] = dif[k] == null || vs == null || vi == null ? "" : F(`${ref(cS + j, r)}-${ref(cI + j, r)}`, dif[k]);
           });
           fila[cP] = F(`ROUND(AVERAGE(${ref(cC, r)}:${ref(cC + n - 1, r)}),3)`, f.prom);
@@ -3217,12 +3329,12 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
     const parqs = Object.values(R.parq);
     const ladoSA = (P, izq, der) => P.pq.lado === "izquierdo" ? izq : der;
     if (!usaManual) P_("área conformada|m²").f.push(`${R.L}*(${R.A}+${R.SI}+${R.SD})`
-      + parqs.map(P => `-${P.L}*${ladoSA(P, R.SI, R.SD)}+(${P.L}+2*${P.EXTR})*(${P.A}+${P.EXT})`).join(""));
+      + parqs.map(P => (esCabecera(P.pq) ? "" : `-${P.L}*${ladoSA(P, R.SI, R.SD)}`) + `+(${P.L}+2*${P.EXTR})*(${P.A}+${P.EXT})`).join(""));
     capasViaX.forEach(c => {
       const k = claveCapa(c.nombre);
       if (excl.includes(k) || R.esp[k] === undefined) return;
       if (usaManual) { P_(k + "|m³").areas.push([areaRef, R.esp[k]]); return; }
-      const desc = parqs.map(P => `-${P.L}*${ladoSA(P, R.saI[k], R.saD[k])}`).join("");
+      const desc = parqs.filter(P => !esCabecera(P.pq)).map(P => `-${P.L}*${ladoSA(P, R.saI[k], R.saD[k])}`).join("");
       P_(k + "|m³").areas.push([`${R.L}*(${R.A}+${R.saI[k]}+${R.saD[k]})${desc}`, R.esp[k]]);
     });
     if (!usaManual) parqs.forEach(P => {
@@ -5529,6 +5641,7 @@ function EstructuraParq({ p, capasVia, onChange }) {
 function EditorParq({
   p,
   capasVia,
+  rango,
   onChange,
   onDelete
 }) {
@@ -5544,9 +5657,17 @@ function EditorParq({
       tramos: t
     });
   };
-  const pi = parseFloat(p.absInicio),
-    pf = parseFloat(p.absFin);
+  // de cabecera: las abscisas y el ancho salen del fondo y del desde/hasta
+  const cab = esCabecera(p), kc = cab ? datosCabecera(p) : null, rv = rango || { ini: 0, fin: 0 };
+  const borde = p.ubicacion === "fin" ? rv.fin : rv.ini;
+  const cabIni = kc && kc.ok ? (p.ubicacion === "inicio" ? r3(borde - kc.fondo) : borde) : NaN;
+  const cabFin = kc && kc.ok ? (p.ubicacion === "inicio" ? borde : r3(borde + kc.fondo)) : NaN;
+  const pi = cab ? cabIni : parseFloat(p.absInicio),
+    pf = cab ? cabFin : parseFloat(p.absFin);
   const distAuto = !isNaN(pi) && !isNaN(pf) && pf > pi ? r3(pf - pi) : null;
+  const anchoP = cab ? kc.ancho : parseFloat(p.ancho) || 0;
+  const campo = (label, k, ph) => React.createElement("div", null, React.createElement(Label, null, label), React.createElement(Input, {
+    value: p[k] || "", onChange: e => upd(k, e.target.value), placeholder: ph, inputMode: "decimal" }));
   return /*#__PURE__*/React.createElement("div", {
     style: {
       border: `2px solid ${C.parq}`,
@@ -5575,7 +5696,7 @@ function EditorParq({
     }
   }, distAuto && /*#__PURE__*/React.createElement(Tag, {
     color: C.parq
-  }, "Dist: ", distAuto.toFixed(3), " m"), /*#__PURE__*/React.createElement(Btn, {
+  }, cab ? "Fondo: " : "Dist: ", distAuto.toFixed(3), " m"), /*#__PURE__*/React.createElement(Btn, {
     small: true,
     color: C.danger,
     onClick: onDelete
@@ -5588,7 +5709,9 @@ function EditorParq({
       color: C.parq,
       marginBottom: 10
     }
-  }, "EJE → LATERAL (", p.lado === "izquierdo" ? "IZQ" : "DER", ") → ", /*#__PURE__*/React.createElement("strong", null, "PARQUEADERO"), " \xA0|\xA0 el parqueadero nace desde el borde de vía (lateral), no desde el eje."), /*#__PURE__*/React.createElement("div", {
+  }, cab ? ["CABECERA AL ", p.ubicacion === "inicio" ? "INICIO" : "FIN", " (", p.lado === "izquierdo" ? "IZQ" : "DER", ") \xA0|\xA0 los cupos quedan de frente, ",
+      p.ubicacion === "inicio" ? "detrás del inicio" : "después del fin", " de la vía. Desde/hasta se miden desde el eje."]
+    : ["EJE → LATERAL (", p.lado === "izquierdo" ? "IZQ" : "DER", ") → ", /*#__PURE__*/React.createElement("strong", { key: "pq" }, "PARQUEADERO"), " \xA0|\xA0 el parqueadero nace desde el borde de vía (lateral), no desde el eje."]), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
       gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
@@ -5598,22 +5721,34 @@ function EditorParq({
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Nombre"), /*#__PURE__*/React.createElement(Input, {
     value: p.nombre,
     onChange: e => upd("nombre", e.target.value)
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Abscisa inicio (m)"), /*#__PURE__*/React.createElement(Input, {
+  })), React.createElement("div", null, React.createElement(Label, null, "Ubicación"), React.createElement(Sel, {
+    value: cab ? p.ubicacion : "lateral",
+    onChange: e => upd("ubicacion", e.target.value)
+  }, React.createElement("option", { value: "lateral" }, "Lateral (a lo largo)"),
+    React.createElement("option", { value: "inicio" }, "Cabecera al inicio"),
+    React.createElement("option", { value: "fin" }, "Cabecera al fin"))),
+  cab && React.createElement("div", null, React.createElement(Label, null, "Lado del eje"), React.createElement(Sel, {
+    value: p.lado, onChange: e => upd("lado", e.target.value)
+  }, React.createElement("option", { value: "derecho" }, "Derecho"), React.createElement("option", { value: "izquierdo" }, "Izquierdo"))),
+  cab && campo("Desde (m del eje)", "desde", "ej. 1.00"),
+  cab && campo("Hasta (m del eje)", "hasta", "ej. 8.50"),
+  cab && campo("Fondo (m)", "fondo", "ej. 5.00"),
+  !cab && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Abscisa inicio (m)"), /*#__PURE__*/React.createElement(Input, {
     value: p.absInicio,
     onChange: e => upd("absInicio", e.target.value),
     placeholder: "ej. 25.73"
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Abscisa fin (m)"), /*#__PURE__*/React.createElement(Input, {
+  })), !cab && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Abscisa fin (m)"), /*#__PURE__*/React.createElement(Input, {
     value: p.absFin,
     onChange: e => upd("absFin", e.target.value),
     placeholder: "ej. 58.5"
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Lado (lateral del que nace)"), /*#__PURE__*/React.createElement(Sel, {
+  })), !cab && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Lado (lateral del que nace)"), /*#__PURE__*/React.createElement(Sel, {
     value: p.lado,
     onChange: e => upd("lado", e.target.value)
   }, /*#__PURE__*/React.createElement("option", {
     value: "derecho"
   }, "Derecho"), /*#__PURE__*/React.createElement("option", {
     value: "izquierdo"
-  }, "Izquierdo"))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Ancho (m)"), /*#__PURE__*/React.createElement(Input, {
+  }, "Izquierdo"))), !cab && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Ancho (m)"), /*#__PURE__*/React.createElement(Input, {
     value: p.ancho,
     onChange: e => upd("ancho", e.target.value),
     placeholder: "ej. 5"
@@ -5629,9 +5764,12 @@ function EditorParq({
     inputMode: "decimal"
   }))), /*#__PURE__*/React.createElement("div", {
     style: { fontSize: 12, color: C.muted, marginBottom: 10, marginTop: -4 }
-  }, "Ancho de trabajo: ", (parseFloat(p.ancho) || 0).toFixed(2), " + ", sobreanchoParq(p).toFixed(2), " = ", /*#__PURE__*/React.createElement("strong", null, r3((parseFloat(p.ancho) || 0) + sobreanchoParq(p)).toFixed(2), " m"),
-    sobreanchoExtremosParq(p) > 0 ? " · largo " + r3((parseFloat(p.absFin) - parseFloat(p.absInicio) || 0) + 2 * sobreanchoExtremosParq(p)).toFixed(2) + " m" : "",
-    ". Donde está el parqueadero no se suma el sobreancho de la vía de ese lado."), /*#__PURE__*/React.createElement("div", {
+  }, cab && (kc.ok ? React.createElement("div", { style: { color: C.parq, fontWeight: 700, marginBottom: 4 } },
+      "Abscisas ", formatoAbscisa(pi), " a ", formatoAbscisa(pf), " · ancho ", kc.ancho.toFixed(2), " m (", kc.desde.toFixed(2), " a ", kc.hasta.toFixed(2), " ", p.lado === "izquierdo" ? "izq." : "der.", ") · área ",
+      r3(kc.ancho * kc.fondo).toFixed(2), " m²") : React.createElement("div", { style: { color: C.warn, fontWeight: 700, marginBottom: 4 } }, "Llena desde, hasta y fondo para ubicarlo.")),
+    "Ancho de trabajo: ", anchoP.toFixed(2), " + ", sobreanchoParq(p).toFixed(2), " = ", /*#__PURE__*/React.createElement("strong", null, r3(anchoP + sobreanchoParq(p)).toFixed(2), " m"),
+    sobreanchoExtremosParq(p) > 0 ? " · largo " + r3((pf - pi || 0) + 2 * sobreanchoExtremosParq(p)).toFixed(2) + " m" : "",
+    cab ? "." : ". Donde está el parqueadero no se suma el sobreancho de la vía de ese lado."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 10
     }
@@ -5661,7 +5799,16 @@ function EditorParq({
       color: C.muted,
       marginTop: 4
     }
-  }, "Cota parqueadero = Cota lateral ", p.lado === "izquierdo" ? "IZQ" : "DER", " + ", p.diferencia || "0", " m")), p.modo === "independiente" && /*#__PURE__*/React.createElement("div", {
+  }, cab && React.createElement("div", { style: { marginTop: 10 } }, React.createElement(Label, null, "Pendiente hacia el fondo (%) — opcional, + sube / − baja"), React.createElement(Input, {
+    value: p.pendienteFondo || "", onChange: e => upd("pendienteFondo", e.target.value), placeholder: "0 = plano", inputMode: "decimal", style: { maxWidth: 220 } })),
+  /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.muted,
+      marginTop: 4
+    }
+  }, "Cota parqueadero = Cota lateral ", p.lado === "izquierdo" ? "IZQ" : "DER", cab ? " en " + formatoAbscisa(borde) : "", " + ", p.diferencia || "0", " m",
+    cab && parseFloat(p.pendienteFondo) ? " " + (parseFloat(p.pendienteFondo) > 0 ? "+ " : "− ") + Math.abs(parseFloat(p.pendienteFondo)) + " % × distancia al borde" : ""))), p.modo === "independiente" && /*#__PURE__*/React.createElement("div", {
     style: {
       background: C.bg,
       borderRadius: 8,
@@ -5701,7 +5848,7 @@ function EditorParq({
     color: C.success,
     onClick: () => upd("tramos", [...p.tramos, tramoVacio()])
   }, "+ Tramo PI")), React.createElement(EstructuraParq, { p: p, capasVia: capasVia, onChange: onChange }), p.modo === "independiente" && React.createElement(CalcCoordenadas, { label: "PARQUEADERO", prefijo: "Tramo", nTramos: p.tramos.length, puntos: p.coords || [], onChange: function(v) { upd("coords", v); }, onAplicar: function(ds) { upd("tramos", aplicarDistancias(p.tramos, ds)); }}),
-  p.modo !== "independiente" && React.createElement(CalcCoordenadas, { label: "PARQUEADERO", prefijo: "Tramo", puntos: p.coords || [], onChange: function(v) { upd("coords", v); },
+  p.modo !== "independiente" && !cab && React.createElement(CalcCoordenadas, { label: "PARQUEADERO", prefijo: "Tramo", puntos: p.coords || [], onChange: function(v) { upd("coords", v); },
     ayuda: "Escribe las coordenadas del inicio (P1) y del fin del parqueadero, siguiendo el borde si quiebra. La suma de las distancias es el largo, y se pasa a la abscisa fin = abscisa inicio + largo.",
     textoBoton: function(total) { return "⬇ Pasar largo " + total.toFixed(3) + " m a la abscisa fin"; },
     aplicarTotal: function(total) {
@@ -6168,7 +6315,7 @@ function TabVolumenes({ proyecto, tabla, onChange }) {
     var hasPD = resultado.filas.some(function(f){return f.tieneParqDer;});
     var hasPI = resultado.filas.some(function(f){return f.tieneParqIzq;});
     var neg = parte.conSigno && resultado.volTotal < 0;
-    var largoVia = r3(tabla[tabla.length-1].abs-tabla[0].abs);
+    var largoV = largoVia(tabla);
     return React.createElement("div",{key:parte.clave,style:{marginBottom:12}},
       titulo && React.createElement("div",{style:{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap",alignItems:"baseline",
         fontWeight:800,color:C.accent,fontSize:13,margin:"6px 0 4px"}},
@@ -6178,7 +6325,7 @@ function TabVolumenes({ proyecto, tabla, onChange }) {
         etiquetaSuperficie(parte.fuenteSup, proyecto, tabla)+" − "+etiquetaSuperficie(parte.fuenteInf, proyecto, tabla)+". ",
         "Calculado donde hay datos: ",
         resultado.tramosTN.map(function(t){ return formatoAbscisa(t.desde)+" a "+formatoAbscisa(t.hasta); }).join(", "),
-        " ("+resultado.largoTN.toFixed(3)+" m de "+largoVia.toFixed(3)+" m de la vía).",
+        " ("+resultado.largoTN.toFixed(3)+" m de "+largoV.toFixed(3)+" m de la vía).",
         neg ? React.createElement("strong",{style:{color:C.danger}}," Negativo: la excavación quedó por encima de la cota teórica (faltó excavar).") : null),
       React.createElement("div",{style:{overflowX:"auto"}},
         React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",fontSize:11}},
@@ -7086,6 +7233,7 @@ function App() {
     key: p.id,
     p: p,
     capasVia: proy.capas,
+    rango: rangoVia(proy),
     onChange: np => {
       const ps = [...proy.parqueaderos];
       ps[i] = np;
@@ -7128,7 +7276,7 @@ function App() {
     color: C.success
   }, {
     label: "Longitud total",
-    val: r3(tabla[tabla.length - 1].abs - tabla[0].abs).toFixed(3) + " m",
+    val: largoVia(tabla).toFixed(3) + " m",
     color: C.accent2
   }, {
     label: "Parqueaderos",
@@ -7223,7 +7371,7 @@ function App() {
       fontSize: 18,
       color: C.accent2
     }
-  }, r3(tabla[tabla.length - 1].abs - tabla[0].abs).toFixed(3), " m")), /*#__PURE__*/React.createElement("div", {
+  }, largoVia(tabla).toFixed(3), " m")), /*#__PURE__*/React.createElement("div", {
     style: {
       background: C.panel,
       border: `1px solid ${C.border}`,
