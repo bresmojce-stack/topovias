@@ -1226,7 +1226,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "29";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "30";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -1271,6 +1271,10 @@ function histMover(desde, hacia, tipo) {
 const deshacer = () => histMover(HIST.atras, HIST.adelante, "deshacer");
 const rehacer = () => histMover(HIST.adelante, HIST.atras, "rehacer");
 
+// Dibujos libres (desde el inicio, sin obra ni vía): se guardan en un registro especial junto a las vías,
+// así tienen guardado automático, deshacer y copia de seguridad, pero no aparecen como vía.
+const LIBRE_ID = "__libre__";
+const libreBase = () => ({ id: LIBRE_ID, obraId: LIBRE_ID, libre: true, nombre: "Dibujos libres", absInicio: "0", coordsEje: [], dibujos: [] });
 // ─── VÍAS BLOQUEADAS ──────────────────────────────────────────────────────────
 // Una vía bloqueada no se puede cambiar ni borrar; solo desbloquear. Cualquier cambio que
 // llegue a una vía bloqueada se descarta aquí (última defensa, además de los avisos en pantalla).
@@ -1301,7 +1305,7 @@ function useLocalProyectos() {
     } catch(e) {}
     // Migración: las vías guardadas antes de existir las obras quedan en la obra "Mis vías"
     var obras = leerObras() || [];
-    var sinObra = lista.filter(function(p){ return !p.obraId || !obras.some(function(o){ return o.id === p.obraId; }); });
+    var sinObra = lista.filter(function(p){ return !p.libre && (!p.obraId || !obras.some(function(o){ return o.id === p.obraId; })); });
     if (sinObra.length) {
       var mis = obras.find(function(o){ return o.nombre === "Mis vías"; });
       if (!mis) { mis = obraNueva("Mis vías"); obras = obras.concat([mis]); guardarObras(obras); }
@@ -1922,7 +1926,7 @@ function PanelDatos({ obras, proyectos, onRestaurar, onArchivo }) {
   const dato = (t, v, color) => React.createElement("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, padding: "5px 0", borderBottom: `1px solid ${C.border}`, fontSize: 13, flexWrap: "wrap" } },
     React.createElement("span", { style: { color: C.muted } }, t), React.createElement("strong", { style: { color: color || C.text } }, v));
   return React.createElement(Card, { title: "📱 Datos en este dispositivo", accent: C.accent2 },
-    dato("Guardado", obras.length + (obras.length === 1 ? " obra" : " obras") + " · " + proyectos.length + (proyectos.length === 1 ? " vía" : " vías")),
+    dato("Guardado", obras.length + (obras.length === 1 ? " obra" : " obras") + " · " + proyectos.filter(p => !p.libre).length + (proyectos.filter(p => !p.libre).length === 1 ? " vía" : " vías")),
     info && info.usado != null && dato("Espacio usado", mb(info.usado) + (info.cuota ? " de " + mb(info.cuota) + " disponibles" : "")),
     info && dato("Espacio reservado", info.persistente ? "Sí, el sistema no lo borrará" : "No (puede borrarse si el equipo se queda sin espacio)", info.persistente ? C.success : C.warn),
     dato("App instalada", appInstalada() ? "Sí" : "No", appInstalada() ? C.success : C.muted),
@@ -1941,8 +1945,16 @@ function PanelDatos({ obras, proyectos, onRestaurar, onArchivo }) {
       "La copia de seguridad es un archivo con todas tus obras y vías. Guárdala o compártela (correo, WhatsApp, Drive) y en otro equipo usa \"Restaurar copia\" para pasarlas."));
 }
 
-function PantallaObras({ obras, proyectos, onAbrir, onNueva, onRestaurar, onArchivo }) {
+function PantallaObras({ obras, proyectos, onAbrir, onNueva, onRestaurar, onArchivo, onHerramienta }) {
+  const herramienta = (id, icono, titulo, texto) => React.createElement("button", { key: id, "data-herramienta": id, onClick: () => onHerramienta(id),
+    style: { ...tarjetaS, display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "flex-start", textAlign: "left", gap: 12, borderLeft: `4px solid ${C.accent2}` } },
+    React.createElement("span", { style: { width: 42, height: 42, borderRadius: 12, background: "#EEF2FF", color: C.accent2, display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" } }, React.createElement(Icono, { n: icono, size: 22 })),
+    React.createElement("span", { style: { textAlign: "left" } }, React.createElement("div", { style: { fontSize: 15.5, fontWeight: 800, color: C.text } }, titulo), React.createElement("div", { style: { fontSize: 12.5, color: C.muted } }, texto)));
   return React.createElement("div", null,
+    React.createElement("div", { style: { fontSize: 12, fontWeight: 800, color: C.muted, letterSpacing: 0.6, margin: "2px 0 8px" } }, "🧰 HERRAMIENTAS RÁPIDAS (sin crear obra ni vía)"),
+    React.createElement("div", { style: { ...gridTarjetas, marginBottom: 18 } },
+      herramienta("calc", "calculator", "Calculadora", "Normal (Pol, Rec, raíces…), cotas, distancias y coordenadas"),
+      herramienta("dibujo", "pencil-ruler", "Dibujo libre", "Croquis con coordenadas, medidas y DXF")),
     React.createElement(Card, { title: "📁 Obras" },
       React.createElement("div", { style: { fontSize: 13, color: C.muted, marginBottom: 12 } },
         "Cada obra es como una carpeta (ej. Carambolo, Tamarindo, Almendros). Dentro van sus vías, una por una."),
@@ -4441,6 +4453,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   const traerEje = () => {
     setGrupo(null);
     const v = (proy.coordsEje || []).map(p => ({ x: parseFloat(p.este), y: parseFloat(p.norte) })).filter(p => !isNaN(p.x) && !isNaN(p.y));
+    if (v.length < 2 && proy.libre) { alert("En el dibujo libre no hay vía de donde traer el eje.\n\nDibuja el eje como polilínea (puedes escribir las coordenadas de cada PI), tócalo con Elegir y usa \"Usar como eje\"."); return; }
     if (v.length < 2) { alert("Esta vía todavía no tiene coordenadas de los PI.\n\nEscríbelas en la pestaña Vía → \"Distancias por coordenadas\" (Norte y Este de cada PI), o dibuja el eje como polilínea, tócalo con Elegir y usa \"Usar como eje\"."); return; }
     const nuevo = { t: "eje", v, abs0: parseFloat(proy.absInicio) || 0, paso: 10, nom: proy.nombre || "Eje" };
     agregar([nuevo]); setTimeout(() => verTodo(objs.concat([nuevo])), 60);
@@ -4833,6 +4846,186 @@ function TabDibujo({ proy, onChange, onArchivo }) {
             h(Icono, { n: g.icono, size: 20 }), g.label); }))));
 }
 
+// ─── CALCULADORA NORMAL (estilo Casio, en grados) ─────────────────────────────
+// + − × ÷ ^ ( ) √ ∛ x² sin cos tan y sus inversas, log, ln, π, Ans, grados°minutos'segundos"
+// Pol(x, y) → r = √(x² + y²), θ = ángulo de (x, y)   (con Pol(ΔN, ΔE): distancia y azimut)
+// Rec(r, θ) → X = r·cos θ, Y = r·sin θ               (con Rec(dist, azimut): ΔN y ΔE)
+// Los paréntesis que falten al final se cierran solos.
+function evaluarExpresion(texto, ans) {
+  const s = String(texto).replace(/×/g, "*").replace(/÷/g, "/").replace(/[−–]/g, "-").replace(/″/g, '"').replace(/[′’]/g, "'").replace(/\s+/g, "");
+  let i = 0, par = null;
+  const rad = g => g * Math.PI / 180, grad = r => r * 180 / Math.PI;
+  const error = m => { throw new Error(m); };
+  const FUN = {
+    sin: x => Math.sin(rad(x)), cos: x => Math.cos(rad(x)), tan: x => { if (Math.abs(((x % 180) + 180) % 180 - 90) < 1e-12) error("tan(90°) no existe"); return Math.tan(rad(x)); },
+    "sin⁻¹": x => grad(Math.asin(x)), "cos⁻¹": x => grad(Math.acos(x)), "tan⁻¹": x => grad(Math.atan(x)), asin: x => grad(Math.asin(x)), acos: x => grad(Math.acos(x)), atan: x => grad(Math.atan(x)),
+    log: Math.log10, ln: Math.log, abs: Math.abs, sqrt: Math.sqrt, "√": Math.sqrt, "∛": Math.cbrt
+  };
+  const esInicio = c => c !== undefined && /[0-9.(πA-Za-z√∛]/.test(c);
+  const numero = () => {
+    const m = /^(\d+\.?\d*|\.\d+)/.exec(s.slice(i)); if (!m) error("Falta un número");
+    i += m[0].length; let v = parseFloat(m[0]);
+    if (s[i] === "°") {   // grados°minutos'segundos"
+      i++; const mm = /^(\d+\.?\d*|\.\d+)'/.exec(s.slice(i)); let min = 0, seg = 0;
+      if (mm) { min = parseFloat(mm[1]); i += mm[0].length; }
+      const ms = /^(\d+\.?\d*|\.\d+)"/.exec(s.slice(i)); if (ms) { seg = parseFloat(ms[1]); i += ms[0].length; }
+      v = v + min / 60 + seg / 3600;
+    }
+    return v;
+  };
+  const argumentos = () => {   // después de "nombre("
+    const a = [expr()]; while (s[i] === ",") { i++; a.push(expr()); }
+    if (s[i] === ")") i++; else if (i < s.length) error("Falta cerrar el paréntesis");
+    return a;
+  };
+  const primario = () => {
+    const c = s[i];
+    if (c === undefined) error("La cuenta está incompleta");
+    if (c === "(") { i++; const v = expr(); if (s[i] === ")") i++; else if (i < s.length) error("Falta cerrar el paréntesis"); return v; }
+    if (c === "π") { i++; return Math.PI; }
+    if (/[0-9.]/.test(c)) return numero();
+    if (c === "√" || c === "∛") { i++; const f = FUN[c]; if (s[i] === "(") { i++; return f(argumentos()[0]); } return f(potencia()); }
+    const m = /^(Ans|Pol|Rec|sin⁻¹|cos⁻¹|tan⁻¹|asin|acos|atan|sin|cos|tan|log|ln|abs|sqrt)/i.exec(s.slice(i));
+    if (!m) error("No entiendo «" + c + "»");
+    const nom = m[1].length > 3 && /⁻¹/.test(m[1]) ? m[1] : m[1].toLowerCase() === "ans" ? "Ans" : m[1].toLowerCase() === "pol" ? "Pol" : m[1].toLowerCase() === "rec" ? "Rec" : m[1].toLowerCase();
+    i += m[0].length;
+    if (nom === "Ans") { if (ans === null || ans === undefined) error("Todavía no hay Ans"); return ans; }
+    if (s[i] !== "(") error("Después de " + nom + " va un paréntesis");
+    i++; const a = argumentos();
+    if (nom === "Pol" || nom === "Rec") {
+      if (a.length !== 2) error(nom + " necesita dos valores: " + nom + "(a, b)");
+      if (nom === "Pol") { const r = Math.hypot(a[0], a[1]), th = grad(Math.atan2(a[1], a[0])); par = { tipo: "Pol", r, th }; return r; }
+      const X = a[0] * Math.cos(rad(a[1])), Y = a[0] * Math.sin(rad(a[1])); par = { tipo: "Rec", X, Y }; return X;
+    }
+    if (a.length !== 1) error(nom + " lleva un solo valor");
+    return FUN[nom](a[0]);
+  };
+  const postfijo = () => { let v = primario(); for (;;) { if (s[i] === "²") { i++; v = v * v; } else if (s[i] === "³") { i++; v = v * v * v; } else if (s[i] === "!") { i++; if (v < 0 || v > 170 || v % 1) error("Factorial solo de enteros de 0 a 170"); let f = 1; for (let k = 2; k <= v; k++) f *= k; v = f; } else return v; } };
+  const potencia = () => { const b = postfijo(); if (s[i] === "^") { i++; return Math.pow(b, unario()); } return b; };
+  const unario = () => { if (s[i] === "-") { i++; return -unario(); } if (s[i] === "+") { i++; return unario(); } return potencia(); };
+  const termino = () => {
+    let v = unario();
+    for (;;) {
+      if (s[i] === "*") { i++; v *= unario(); }
+      else if (s[i] === "/") { i++; const d = unario(); if (d === 0) error("No se puede dividir entre cero"); v /= d; }
+      else if (esInicio(s[i])) v *= unario();   // multiplicación sin signo: 2π, 3(4+1), 2sin(30)
+      else return v;
+    }
+  };
+  const expr = () => { let v = termino(); for (;;) { if (s[i] === "+") { i++; v += termino(); } else if (s[i] === "-") { i++; v -= termino(); } else return v; } };
+  if (!s) error("Escribe una cuenta");
+  const v = expr();
+  if (i < s.length) error(s[i] === ")" ? "Sobra un paréntesis" : "No entiendo «" + s[i] + "»");
+  if (!isFinite(v) || isNaN(v)) error("Resultado no válido");
+  return { v, par };
+}
+function fmtCalc(v, dec) { if (Math.abs(v) < 1e-11) v = 0;   // residuos como 3e-15 de cos(90°)
+  if (dec === null) { const t = Number(v.toPrecision(12)); return String(t); } return v.toFixed(dec); }
+const gmsConSigno = g => (g < 0 ? "-" : "") + gradosAGMS(Math.abs(g));
+
+function CalcNormal() {
+  const h = React.createElement;
+  const [txt, setTxt] = React.useState("");
+  const [ans, setAns] = React.useState(() => { try { const v = parseFloat(localStorage.getItem(TV_KEY + "_calcAns")); return isNaN(v) ? null : v; } catch (_) { return null; } });
+  const [dec, setDecR] = React.useState(() => { try { const v = localStorage.getItem(TV_KEY + "_calcDec"); return v === "todos" ? null : v === null ? 3 : parseInt(v, 10); } catch (_) { return 3; } });
+  const setDec = d => { setDecR(d); try { localStorage.setItem(TV_KEY + "_calcDec", d === null ? "todos" : String(d)); } catch (_) {} };
+  const [hist, setHistR] = React.useState(() => { try { return JSON.parse(localStorage.getItem(TV_KEY + "_calcHist") || "[]"); } catch (_) { return []; } });
+  const setHist = l => { setHistR(l); try { localStorage.setItem(TV_KEY + "_calcHist", JSON.stringify(l)); } catch (_) {} };
+  const [res, setRes] = React.useState(null);     // { v, par } o { error }
+  const [recien, setRecien] = React.useState(false);   // se acaba de pulsar "="
+  const [verGMS, setVerGMS] = React.useState(false);
+  const inRef = React.useRef(null);
+
+  let vista = null; try { if (txt.trim()) vista = evaluarExpresion(txt, ans); } catch (_) {}
+  const insertar = t => {
+    const el = inRef.current;
+    let base = txt, ini = el && el.selectionStart != null ? el.selectionStart : base.length, fin = el && el.selectionEnd != null ? el.selectionEnd : base.length;
+    if (recien) {   // después de "=": un operador sigue con Ans; un número empieza otra cuenta
+      if (/^[+\-−×÷^²³!]/.test(t)) { base = "Ans"; ini = fin = 3; } else { base = ""; ini = fin = 0; }
+      setRecien(false); setRes(null);
+    }
+    const nuevo = base.slice(0, ini) + t + base.slice(fin);
+    setTxt(nuevo);
+    requestAnimationFrame(() => { const e = inRef.current; if (e) { const p = ini + t.length; try { e.setSelectionRange(p, p); } catch (_) {} } });
+  };
+  const gradosKey = () => {   // ° la primera vez, luego ' y luego "
+    const tramo = (recien ? "" : txt).split(/[+\-−×÷^(,]/).pop();
+    insertar(!tramo.includes("°") ? "°" : !tramo.includes("'") ? "'" : '"');
+  };
+  const borrar = () => {
+    const el = inRef.current; if (recien) { setRecien(false); return; }
+    let ini = el ? el.selectionStart : txt.length, fin = el ? el.selectionEnd : txt.length;
+    if (ini === fin) {
+      if (ini === 0) return;
+      const antes = txt.slice(0, ini), m = /(sin⁻¹\(|cos⁻¹\(|tan⁻¹\(|sin\(|cos\(|tan\(|Pol\(|Rec\(|log\(|ln\(|√\(|∛\(|Ans)$/.exec(antes);
+      ini -= m ? m[0].length : 1;
+    }
+    setTxt(txt.slice(0, ini) + txt.slice(fin));
+    requestAnimationFrame(() => { const e = inRef.current; if (e) try { e.setSelectionRange(ini, ini); } catch (_) {} });
+  };
+  const igual = () => {
+    if (!txt.trim()) return;
+    try {
+      const r = evaluarExpresion(txt, ans);
+      setRes(r); setAns(r.v); setRecien(true); setVerGMS(false);
+      try { localStorage.setItem(TV_KEY + "_calcAns", String(r.v)); } catch (_) {}
+      setHist([{ e: txt, v: r.v, par: r.par }].concat(hist.filter(x => x.e !== txt)).slice(0, 25));
+    } catch (e) { setRes({ error: e.message }); }
+  };
+  const limpiar = () => { setTxt(""); setRes(null); setRecien(false); };
+
+  const f = v => fmtCalc(v, dec);
+  const lineasPar = p => p.tipo === "Pol"
+    ? [["r", f(p.r)], ["θ", f(p.th) + "°  (" + gmsConSigno(p.th) + ")"], ["Azimut", gradosAGMS(((p.th % 360) + 360) % 360)]]
+    : [["X", f(p.X)], ["Y", f(p.Y)]];
+  const mostrar = res && !res.error ? res : null;
+
+  const tecla = (t, accion, estilo) => h("button", { key: t, className: "tv-calc-tecla", "data-k": t, onClick: () => { accion ? accion() : insertar(t); },
+    style: { padding: "12px 0", borderRadius: 10, border: "none", fontSize: t.length > 4 ? 13 : 16, fontWeight: 700, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace", background: "#F1F5F9", color: C.text, ...estilo } }, t);
+  const num = { background: "#fff", boxShadow: "inset 0 0 0 1px #E2E8F0", fontSize: 19 };
+  const op = { background: "#E0F2FE", color: "#0369A1", fontSize: 19 };
+  const fn = { background: "#F1F5F9", color: "#334155", fontSize: 13.5 };
+  const filas = [
+    [tecla("sin(", null, fn), tecla("cos(", null, fn), tecla("tan(", null, fn), tecla("Pol(", null, { ...fn, background: "#FEF3C7", color: "#92400E" }), tecla("Rec(", null, { ...fn, background: "#FEF3C7", color: "#92400E" })],
+    [tecla("√(", null, fn), tecla("x²", () => insertar("²"), fn), tecla("^", null, fn), tecla("(", null, fn), tecla(")", null, fn)],
+    [tecla("7", null, num), tecla("8", null, num), tecla("9", null, num), tecla("DEL", borrar, { background: "#FDE68A", color: "#78350F", fontSize: 14 }), tecla("AC", limpiar, { background: "#FECACA", color: "#991B1B", fontSize: 14 })],
+    [tecla("4", null, num), tecla("5", null, num), tecla("6", null, num), tecla("×", null, op), tecla("÷", null, op)],
+    [tecla("1", null, num), tecla("2", null, num), tecla("3", null, num), tecla("+", null, op), tecla("−", null, op)],
+    [tecla("0", null, num), tecla(".", null, num), tecla(",", null, fn), tecla("°'\"", gradosKey, fn), tecla("=", igual, { background: C.accent, color: "#fff", fontSize: 21 })]
+  ];
+  const extras = [["π", "π"], ["Ans", "Ans"], ["∛(", "∛("], ["sin⁻¹(", "sin⁻¹("], ["cos⁻¹(", "cos⁻¹("], ["tan⁻¹(", "tan⁻¹("], ["log(", "log("], ["ln(", "ln("], ["x³", "³"], ["n!", "!"]];
+
+  return h(Card, { title: "🧮 Calculadora" },
+    h("div", { style: { display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 8, fontSize: 12, color: C.muted } },
+      "Grados (DEG) · Decimales:",
+      [0, 1, 2, 3, 4, 6, null].map(d => h("button", { key: String(d), className: "tv-calc-dec", onClick: () => setDec(d), style: { padding: "3px 9px", borderRadius: 999, border: `1.5px solid ${dec === d ? C.accent : C.border}`, background: dec === d ? C.accent : "#fff", color: dec === d ? "#fff" : C.text, fontSize: 11.5, fontWeight: 700, cursor: "pointer" } }, d === null ? "Todos" : d))),
+    // pantalla
+    h("div", { className: "tv-calc-pantalla", style: { background: "#0F172A", borderRadius: 12, padding: "10px 12px", marginBottom: 10 } },
+      h("input", { ref: inRef, value: recien ? txt : txt, inputMode: "none", autoComplete: "off", spellCheck: false, className: "tv-calc-expr",
+        onChange: e => { setTxt(e.target.value); setRecien(false); setRes(null); },
+        onKeyDown: e => { if (e.key === "Enter") { e.preventDefault(); igual(); } if (e.key === "Escape") limpiar(); },
+        placeholder: "ej. Pol(30,40)   ·   2^10   ·   √(2)",
+        style: { width: "100%", background: "transparent", border: "none", outline: "none", color: "#E2E8F0", fontFamily: "'JetBrains Mono', monospace", fontSize: 18, padding: "2px 0" } }),
+      h("div", { className: "tv-calc-res", style: { textAlign: "right", fontFamily: "'JetBrains Mono', monospace", minHeight: 34, marginTop: 4 } },
+        res && res.error ? h("div", { style: { color: "#FCA5A5", fontSize: 14, fontWeight: 700 } }, "⚠ " + res.error)
+        : mostrar && mostrar.par ? lineasPar(mostrar.par).map(([a, b]) => h("div", { key: a, style: { color: "#FBBF24", fontSize: 17, fontWeight: 800 } }, h("span", { style: { color: "#94A3B8", fontWeight: 600, marginRight: 8 } }, a + " ="), b))
+        : mostrar ? h("div", { style: { color: "#FBBF24", fontSize: 26, fontWeight: 800 } }, verGMS ? gmsConSigno(mostrar.v) : f(mostrar.v))
+        : vista ? h("div", { style: { color: "#64748B", fontSize: 18 } }, vista.par ? lineasPar(vista.par).map(x => x[0] + " " + x[1]).join("  ·  ") : f(vista.v)) : null)),
+    h("div", { style: { display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 5, marginBottom: 6 } },
+      extras.map(([t, ins]) => h("button", { key: t, className: "tv-calc-tecla", "data-k": t, onClick: () => insertar(ins), style: { padding: "7px 0", borderRadius: 8, border: "none", background: "#F8FAFC", boxShadow: "inset 0 0 0 1px #E2E8F0", fontSize: 12.5, fontWeight: 700, color: "#475569", cursor: "pointer", fontFamily: "'JetBrains Mono', monospace" } }, t))),
+    h("div", { style: { display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 } }, filas.flat()),
+    mostrar && !mostrar.par && h("div", { style: { marginTop: 8, display: "flex", gap: 8 } },
+      h(Btn, { small: true, color: "#475569", onClick: () => setVerGMS(!verGMS) }, verGMS ? "Ver en decimal" : "Ver en °'\"")),
+    hist.length > 0 && h("div", { style: { marginTop: 14 } },
+      h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 } },
+        h("span", { style: { fontSize: 12, fontWeight: 800, color: C.muted, letterSpacing: 0.5 } }, "HISTORIAL"),
+        h("button", { onClick: () => setHist([]), style: { border: "none", background: "none", color: C.muted, fontSize: 12, fontWeight: 700, cursor: "pointer" } }, "Borrar")),
+      hist.map((x, k) => h("button", { key: k, className: "tv-calc-hist", onClick: () => { setTxt(x.e); setRes(null); setRecien(false); },
+        style: { display: "flex", justifyContent: "space-between", gap: 10, width: "100%", border: "none", borderBottom: `1px solid ${C.border}`, background: "none", padding: "6px 2px", cursor: "pointer", fontFamily: "'JetBrains Mono', monospace", fontSize: 13, textAlign: "left" } },
+        h("span", { style: { color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, x.e),
+        h("strong", { style: { whiteSpace: "nowrap" } }, x.par ? (x.par.tipo === "Pol" ? "r " + f(x.par.r) + " θ " + f(x.par.th) : "X " + f(x.par.X) + " Y " + f(x.par.Y)) : f(x.v))))));
+}
+
 // ─── CALCULADORA DE COORDENADAS ───────────────────────────────────────────────
 // Entre puntos seguidos: distancia horizontal = √(ΔE² + ΔN²), azimut desde el Norte
 // (sentido horario), y con cotas: desnivel, pendiente y distancia inclinada.
@@ -4930,14 +5123,15 @@ function CalcPuntoRadiado() {
 }
 // Pestaña Calculadora: cotas y pendientes, distancia entre coordenadas y punto por azimut
 function Calculadora() {
-  const OPC = [["cotas", "Cotas y pendientes"], ["dist", "Distancia entre coordenadas"], ["punto", "Coordenadas de un punto"]];
-  const [op, setOpR] = React.useState(() => { try { return localStorage.getItem(TV_KEY + "_calcOp") || "cotas"; } catch (_) { return "cotas"; } });
+  const OPC = [["normal", "Calculadora"], ["cotas", "Cotas y pendientes"], ["dist", "Distancia entre coordenadas"], ["punto", "Coordenadas de un punto"]];
+  const [op, setOpR] = React.useState(() => { try { return localStorage.getItem(TV_KEY + "_calcOp") || "normal"; } catch (_) { return "cotas"; } });
   const setOp = x => { setOpR(x); try { localStorage.setItem(TV_KEY + "_calcOp", x); } catch (_) {} };
   return React.createElement(React.Fragment, null,
     React.createElement("div", { className: "tv-calc-opciones", style: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 } },
       OPC.map(([k, t]) => React.createElement("button", { key: k, onClick: () => setOp(k), className: op === k ? "activa" : undefined,
         style: { padding: "9px 16px", borderRadius: 999, border: `1.5px solid ${op === k ? C.accent : C.border}`, background: op === k ? C.accent : "#fff",
           color: op === k ? "#fff" : C.text, fontSize: 13, fontWeight: 700, cursor: "pointer" } }, t))),
+    op === "normal" && React.createElement(CalcNormal, null),
     op === "cotas" && React.createElement(Verificador, null),
     op === "dist" && React.createElement(CalcDistanciaCoords, null),
     op === "punto" && React.createElement(CalcPuntoRadiado, null));
@@ -6111,6 +6305,7 @@ function App() {
       var n = JSON.parse(localStorage.getItem(TV_KEY + '_nav'));
       if (n && n.vista === "via" && proyectos.some(function(p){ return p.id === activoId; })) return n;
       if (n && n.vista === "obra" && obras.some(function(o){ return o.id === n.obraId; })) return { vista: "obra", obraId: n.obraId };
+      if (n && (n.vista === "calc" || n.vista === "dibujo")) return { vista: n.vista, obraId: null };
     } catch(e) {}
     // Si solo hay una obra, se abre directo
     return obras.length === 1 ? { vista: "obra", obraId: obras[0].id } : { vista: "obras", obraId: null };
@@ -6286,7 +6481,14 @@ function App() {
           React.createElement("div", { className: "tv-sub" }, "Calculadora topográfica · 3 decimales · Colombia"))),
         React.createElement("div", { className: "tv-acciones", style: { marginLeft: "auto" } }, React.createElement(EstadoGuardado))),
       React.createElement("main", { className: "tv-main" },
-        obraVista
+        // herramientas rápidas desde el inicio
+        (nav.vista === "calc" || nav.vista === "dibujo") && React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" } },
+          React.createElement(Btn, { small: true, color: "#475569", onClick: () => setNav({ vista: "obras", obraId: null }) }, React.createElement(Icono, { n: "chevron-left", size: 14 }), "Inicio"),
+          React.createElement("div", { style: { fontSize: 18, fontWeight: 900, color: C.accent } }, nav.vista === "calc" ? "🧮 Calculadora" : "✏️ Dibujo libre")),
+        nav.vista === "calc" ? React.createElement(Calculadora, null)
+        : nav.vista === "dibujo" ? React.createElement(TabDibujo, { proy: proyectos.find(p => p.id === LIBRE_ID) || libreBase(), onArchivo: setArchivo,
+            onChange: d => setProyectos(prev => prev.some(p => p.id === LIBRE_ID) ? prev.map(p => p.id === LIBRE_ID ? { ...p, dibujos: d } : p) : prev.concat([{ ...libreBase(), dibujos: d }])) })
+        : obraVista
           ? React.createElement(PantallaObra, {
               obra: obraVista, vias: viasDeObra(obraVista.id),
               onVolver: () => setNav({ vista: "obras", obraId: null }),
@@ -6302,9 +6504,10 @@ function App() {
               onAbrir: abrirObra,
               onNueva: n => abrirObra(crearObra(n).id),
               onArchivo: setArchivo,
-              onRestaurar: restaurarCopia
+              onRestaurar: restaurarCopia,
+              onHerramienta: id => { setNav({ vista: id, obraId: null }); window.scrollTo(0, 0); }
             })),
-      archivo && React.createElement(VentanaArchivo, { archivo: archivo, onClose: () => setArchivo(null) }), avisoGenerando, avisoCorto, barraDeshacer);
+      archivo && React.createElement(VentanaArchivo, { archivo: archivo, onClose: () => setArchivo(null) }), avisoGenerando, avisoCorto, nav.vista !== "dibujo" && barraDeshacer);
   }
 
   const tramosIncompletos = resolverTodos(proy.tramos).map((r, i) => r.completo ? null : i + 1).filter(Boolean);
