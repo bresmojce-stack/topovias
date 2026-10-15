@@ -52,6 +52,7 @@
   .tv-card { box-shadow: 0 1px 2px rgba(15,23,42,0.05), 0 1px 3px rgba(15,23,42,0.04); }
   .tv-acciones button { white-space: nowrap; }
   @media (max-width: 640px) { .tv-dib-txt { display: none; } }
+  .tv-dib-lupa * { vector-effect: non-scaling-stroke; }
   .tv-dib-marca { animation: tvPulso 1s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
   @keyframes tvPulso { 50% { opacity: 0.35; } }
   .tv-guardado { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: #94A3B8; white-space: nowrap; }
@@ -472,7 +473,7 @@ const C = {
   row2: "#F8FAFC"
 };
 // Íconos (lucide, licencia ISC) dibujados como SVG: no necesitan internet
-const ICONOS = {"compass":[["path",{"d":"m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z"}],["circle",{"cx":"12","cy":"12","r":"10"}]],"ruler":[["path",{"d":"M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"}],["path",{"d":"m14.5 12.5 2-2"}],["path",{"d":"m11.5 9.5 2-2"}],["path",{"d":"m8.5 6.5 2-2"}],["path",{"d":"m17.5 15.5 2-2"}]],"car":[["path",{"d":"M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"}],["circle",{"cx":"7","cy":"17","r":"2"}],["path",{"d":"M9 17h6"}],["circle",{"cx":"17","cy":"17","r":"2"}]],"table":[["path",{"d":"M12 3v18"}],["rect",{"width":"18","height":"18","x":"3","y":"3","rx":"2"}],["path",{"d":"M3 9h18"}],["path",{"d":"M3 15h18"}]],"map":[["path",{"d":"M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"}],["path",{"d":"M15 5.764v15"}],["path",{"d":"M9 3.236v15"}]],"chart-column":[["path",{"d":"M3 3v16a2 2 0 0 0 2 2h16"}],["path",{"d":"M18 17V9"}],["path",{"d":"M13 17V5"}],["path",{"d":"M8 17v-3"}]],"trending-up":[["path",{"d":"M16 7h6v6"}],["path",{"d":"m22 7-8.5 8.5-5-5L2 17"}]],"calculator":[["rect",{"width":"16","height":"20","x":"4","y":"2","rx":"2"}],["line",{"x1":"8","x2":"16","y1":"6","y2":"6"}],["line",{"x1":"16","x2":"16","y1":"14","y2":"18"}],["path",{"d":"M16 10h.01"}],["path",{"d":"M12 10h.01"}],["path",{"d":"M8 10h.01"}],["path",{"d":"M12 14h.01"}],["path",{"d":"M8 14h.01"}],["path",{"d":"M12 18h.01"}],["path",{"d":"M8 18h.01"}]],"shield-check":[["path",{"d":"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"}],["path",{"d":"m9 12 2 2 4-4"}]],"folder-open":[["path",{"d":"m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"}]],"file-spreadsheet":[["path",{"d":"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"}],["path",{"d":"M14 2v4a2 2 0 0 0 2 2h4"}],["path",{"d":"M8 13h2"}],["path",{"d":"M14 13h2"}],["path",{"d":"M8 17h2"}],["path",{"d":"M14 17h2"}]],"zap":[["path",{"d":"M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"}]],"plus":[["path",{"d":"M5 12h14"}],["path",{"d":"M12 5v14"}]],"chevron-left":[["path",{"d":"m15 18-6-6 6-6"}]],"layers":[["path",{"d":"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"}],["path",{"d":"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"}],["path",{"d":"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"}]],"undo-2":[["path",{"d":"M9 14 4 9l5-5"}],["path",{"d":"M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"}]],"redo-2":[["path",{"d":"m15 14 5-5-5-5"}],["path",{"d":"M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"}]],"route":[["circle",{"cx":"6","cy":"19","r":"3"}],["path",{"d":"M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"}],["circle",{"cx":"18","cy":"5","r":"3"}]],"save":[["path",{"d":"M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"}],["path",{"d":"M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"}],["path",{"d":"M7 3v4a1 1 0 0 0 1 1h7"}]],"upload":[["path",{"d":"M12 3v12"}],["path",{"d":"m17 8-5-5-5 5"}],["path",{"d":"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}]],"share-2":[["circle",{"cx":"18","cy":"5","r":"3"}],["circle",{"cx":"6","cy":"12","r":"3"}],["circle",{"cx":"18","cy":"19","r":"3"}],["line",{"x1":"8.59","x2":"15.42","y1":"13.51","y2":"17.49"}],["line",{"x1":"15.41","x2":"8.59","y1":"6.51","y2":"10.49"}]],"trash-2":[["path",{"d":"M10 11v6"}],["path",{"d":"M14 11v6"}],["path",{"d":"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"}],["path",{"d":"M3 6h18"}],["path",{"d":"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"}]],"copy":[["rect",{"width":"14","height":"14","x":"8","y":"8","rx":"2","ry":"2"}],["path",{"d":"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"}]],"x":[["path",{"d":"M18 6 6 18"}],["path",{"d":"m6 6 12 12"}]],"folder":[["path",{"d":"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"}]],"download":[["path",{"d":"M12 15V3"}],["path",{"d":"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}],["path",{"d":"m7 10 5 5 5-5"}]],"lock":[["rect",{"width":"18","height":"11","x":"3","y":"11","rx":"2","ry":"2"}],["path",{"d":"M7 11V7a5 5 0 0 1 10 0v4"}]],"lock-open":[["rect",{"width":"18","height":"11","x":"3","y":"11","rx":"2","ry":"2"}],["path",{"d":"M7 11V7a5 5 0 0 1 9.9-1"}]],"cloud-check":[["path",{"d":"m17 15-5.5 5.5L9 18"}],["path",{"d":"M5 17.743A7 7 0 1 1 15.71 10h1.79a4.5 4.5 0 0 1 1.5 8.742"}]],"history":[["path",{"d":"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"}],["path",{"d":"M3 3v5h5"}],["path",{"d":"M12 7v5l4 2"}]],"cloud-alert":[["path",{"d":"M12 12v4"}],["path",{"d":"M12 20h.01"}],["path",{"d":"M17 18h.5a1 1 0 0 0 0-9h-1.79A7 7 0 1 0 7 17.708"}]],"clipboard-list":[["rect",{"width":"8","height":"4","x":"8","y":"2","rx":"1","ry":"1"}],["path",{"d":"M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"}],["path",{"d":"M12 11h4"}],["path",{"d":"M12 16h4"}],["path",{"d":"M8 11h.01"}],["path",{"d":"M8 16h.01"}]],"pencil-ruler":[["path",{"d":"M13 7 8.7 2.7a2.41 2.41 0 0 0-3.4 0L2.7 5.3a2.41 2.41 0 0 0 0 3.4L7 13"}],["path",{"d":"m8 6 2-2"}],["path",{"d":"m18 16 2-2"}],["path",{"d":"m17 11 4.3 4.3c.94.94.94 2.46 0 3.4l-2.6 2.6c-.94.94-2.46.94-3.4 0L11 17"}],["path",{"d":"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"}],["path",{"d":"m15 5 4 4"}]],"pencil":[["path",{"d":"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"}],["path",{"d":"m15 5 4 4"}]],"slash":[["path",{"d":"M22 2 2 22"}]],"spline":[["circle",{"cx":"19","cy":"5","r":"2"}],["circle",{"cx":"5","cy":"19","r":"2"}],["path",{"d":"M5 17A12 12 0 0 1 17 5"}]],"circle-dot":[["circle",{"cx":"12","cy":"12","r":"10"}],["circle",{"cx":"12","cy":"12","r":"1"}]],"pentagon":[["path",{"d":"M10.83 2.38a2 2 0 0 1 2.34 0l8 5.74a2 2 0 0 1 .73 2.25l-3.04 9.26a2 2 0 0 1-1.9 1.37H7.04a2 2 0 0 1-1.9-1.37L2.1 10.37a2 2 0 0 1 .73-2.25z"}]],"move-horizontal":[["path",{"d":"m18 8 4 4-4 4"}],["path",{"d":"M2 12h20"}],["path",{"d":"m6 8-4 4 4 4"}]],"mouse-pointer-2":[["path",{"d":"M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"}]],"scan":[["path",{"d":"M3 7V5a2 2 0 0 1 2-2h2"}],["path",{"d":"M17 3h2a2 2 0 0 1 2 2v2"}],["path",{"d":"M21 17v2a2 2 0 0 1-2 2h-2"}],["path",{"d":"M7 21H5a2 2 0 0 1-2-2v-2"}]],"map-pin":[["path",{"d":"M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"}],["circle",{"cx":"12","cy":"10","r":"3"}]],"magnet":[["path",{"d":"m12 15 4 4"}],["path",{"d":"M2.352 10.648a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l6.029-6.029a1 1 0 1 1 3 3l-6.029 6.029a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l6.365-6.367A1 1 0 0 0 8.716 4.282z"}],["path",{"d":"m5 8 4 4"}]],"grid-3x3":[["rect",{"width":"18","height":"18","x":"3","y":"3","rx":"2"}],["path",{"d":"M3 9h18"}],["path",{"d":"M3 15h18"}],["path",{"d":"M9 3v18"}],["path",{"d":"M15 3v18"}]],"keyboard":[["path",{"d":"M10 8h.01"}],["path",{"d":"M12 12h.01"}],["path",{"d":"M14 8h.01"}],["path",{"d":"M16 12h.01"}],["path",{"d":"M18 8h.01"}],["path",{"d":"M6 8h.01"}],["path",{"d":"M7 16h10"}],["path",{"d":"M8 12h.01"}],["rect",{"width":"20","height":"16","x":"2","y":"4","rx":"2"}]],"check":[["path",{"d":"M20 6 9 17l-5-5"}]],"scissors":[["circle",{"cx":"6","cy":"6","r":"3"}],["path",{"d":"M8.12 8.12 12 12"}],["path",{"d":"M20 4 8.12 15.88"}],["circle",{"cx":"6","cy":"18","r":"3"}],["path",{"d":"M14.8 14.8 20 20"}]],"search":[["path",{"d":"m21 21-4.34-4.34"}],["circle",{"cx":"11","cy":"11","r":"8"}]],"square-dashed-mouse-pointer":[["path",{"d":"M12.034 12.681a.498.498 0 0 1 .647-.647l9 3.5a.5.5 0 0 1-.033.943l-3.444 1.068a1 1 0 0 0-.66.66l-1.067 3.443a.5.5 0 0 1-.943.033z"}],["path",{"d":"M5 3a2 2 0 0 0-2 2"}],["path",{"d":"M19 3a2 2 0 0 1 2 2"}],["path",{"d":"M5 21a2 2 0 0 1-2-2"}],["path",{"d":"M9 3h1"}],["path",{"d":"M9 21h2"}],["path",{"d":"M14 3h1"}],["path",{"d":"M3 9v1"}],["path",{"d":"M21 9v2"}],["path",{"d":"M3 14v1"}]],"pen-line":[["path",{"d":"M13 21h8"}],["path",{"d":"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"}]],"rectangle-horizontal":[["rect",{"width":"20","height":"12","x":"2","y":"6","rx":"2"}]],"square":[["rect",{"width":"18","height":"18","x":"3","y":"3","rx":"2"}]],"triangle":[["path",{"d":"M13.73 4a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"}]],"circle":[["circle",{"cx":"12","cy":"12","r":"10"}]],"rainbow":[["path",{"d":"M22 17a10 10 0 0 0-20 0"}],["path",{"d":"M6 17a6 6 0 0 1 12 0"}],["path",{"d":"M10 17a2 2 0 0 1 4 0"}]],"paint-bucket":[["path",{"d":"m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z"}],["path",{"d":"m5 2 5 5"}],["path",{"d":"M2 13h15"}],["path",{"d":"M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z"}]],"between-vertical-start":[["rect",{"width":"7","height":"13","x":"3","y":"8","rx":"1"}],["path",{"d":"m15 2-3 3-3-3"}],["rect",{"width":"7","height":"13","x":"14","y":"8","rx":"1"}]],"triangle-right":[["path",{"d":"M22 18a2 2 0 0 1-2 2H3c-1.1 0-1.3-.6-.4-1.3L20.4 4.3c.9-.7 1.6-.4 1.6.7Z"}]],"circle-dot-dashed":[["path",{"d":"M10.1 2.18a9.93 9.93 0 0 1 3.8 0"}],["path",{"d":"M17.6 3.71a9.95 9.95 0 0 1 2.69 2.7"}],["path",{"d":"M21.82 10.1a9.93 9.93 0 0 1 0 3.8"}],["path",{"d":"M20.29 17.6a9.95 9.95 0 0 1-2.7 2.69"}],["path",{"d":"M13.9 21.82a9.94 9.94 0 0 1-3.8 0"}],["path",{"d":"M6.4 20.29a9.95 9.95 0 0 1-2.69-2.7"}],["path",{"d":"M2.18 13.9a9.93 9.93 0 0 1 0-3.8"}],["path",{"d":"M3.71 6.4a9.95 9.95 0 0 1 2.7-2.69"}],["circle",{"cx":"12","cy":"12","r":"1"}]],"move":[["path",{"d":"M12 2v20"}],["path",{"d":"m15 19-3 3-3-3"}],["path",{"d":"m19 9 3 3-3 3"}],["path",{"d":"M2 12h20"}],["path",{"d":"m5 9-3 3 3 3"}],["path",{"d":"m9 5 3-3 3 3"}]],"rotate-ccw":[["path",{"d":"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"}],["path",{"d":"M3 3v5h5"}]],"move-up-right":[["path",{"d":"M13 5H19V11"}],["path",{"d":"M19 5L5 19"}]],"milestone":[["path",{"d":"M12 13v8"}],["path",{"d":"M12 3v3"}],["path",{"d":"M4 6a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h13a2 2 0 0 0 1.152-.365l3.424-2.317a1 1 0 0 0 0-1.635l-3.424-2.318A2 2 0 0 0 17 6z"}]],"locate-fixed":[["line",{"x1":"2","x2":"5","y1":"12","y2":"12"}],["line",{"x1":"19","x2":"22","y1":"12","y2":"12"}],["line",{"x1":"12","x2":"12","y1":"2","y2":"5"}],["line",{"x1":"12","x2":"12","y1":"19","y2":"22"}],["circle",{"cx":"12","cy":"12","r":"7"}],["circle",{"cx":"12","cy":"12","r":"3"}]],"signpost":[["path",{"d":"M12 13v8"}],["path",{"d":"M12 3v3"}],["path",{"d":"M18 6a2 2 0 0 1 1.387.56l2.307 2.22a1 1 0 0 1 0 1.44l-2.307 2.22A2 2 0 0 1 18 13H6a2 2 0 0 1-1.387-.56l-2.306-2.22a1 1 0 0 1 0-1.44l2.306-2.22A2 2 0 0 1 6 6z"}]]};
+const ICONOS = {"compass":[["path",{"d":"m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z"}],["circle",{"cx":"12","cy":"12","r":"10"}]],"ruler":[["path",{"d":"M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"}],["path",{"d":"m14.5 12.5 2-2"}],["path",{"d":"m11.5 9.5 2-2"}],["path",{"d":"m8.5 6.5 2-2"}],["path",{"d":"m17.5 15.5 2-2"}]],"car":[["path",{"d":"M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"}],["circle",{"cx":"7","cy":"17","r":"2"}],["path",{"d":"M9 17h6"}],["circle",{"cx":"17","cy":"17","r":"2"}]],"table":[["path",{"d":"M12 3v18"}],["rect",{"width":"18","height":"18","x":"3","y":"3","rx":"2"}],["path",{"d":"M3 9h18"}],["path",{"d":"M3 15h18"}]],"map":[["path",{"d":"M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"}],["path",{"d":"M15 5.764v15"}],["path",{"d":"M9 3.236v15"}]],"chart-column":[["path",{"d":"M3 3v16a2 2 0 0 0 2 2h16"}],["path",{"d":"M18 17V9"}],["path",{"d":"M13 17V5"}],["path",{"d":"M8 17v-3"}]],"trending-up":[["path",{"d":"M16 7h6v6"}],["path",{"d":"m22 7-8.5 8.5-5-5L2 17"}]],"calculator":[["rect",{"width":"16","height":"20","x":"4","y":"2","rx":"2"}],["line",{"x1":"8","x2":"16","y1":"6","y2":"6"}],["line",{"x1":"16","x2":"16","y1":"14","y2":"18"}],["path",{"d":"M16 10h.01"}],["path",{"d":"M12 10h.01"}],["path",{"d":"M8 10h.01"}],["path",{"d":"M12 14h.01"}],["path",{"d":"M8 14h.01"}],["path",{"d":"M12 18h.01"}],["path",{"d":"M8 18h.01"}]],"shield-check":[["path",{"d":"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"}],["path",{"d":"m9 12 2 2 4-4"}]],"folder-open":[["path",{"d":"m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"}]],"file-spreadsheet":[["path",{"d":"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"}],["path",{"d":"M14 2v4a2 2 0 0 0 2 2h4"}],["path",{"d":"M8 13h2"}],["path",{"d":"M14 13h2"}],["path",{"d":"M8 17h2"}],["path",{"d":"M14 17h2"}]],"zap":[["path",{"d":"M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"}]],"plus":[["path",{"d":"M5 12h14"}],["path",{"d":"M12 5v14"}]],"chevron-left":[["path",{"d":"m15 18-6-6 6-6"}]],"layers":[["path",{"d":"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"}],["path",{"d":"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"}],["path",{"d":"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"}]],"undo-2":[["path",{"d":"M9 14 4 9l5-5"}],["path",{"d":"M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"}]],"redo-2":[["path",{"d":"m15 14 5-5-5-5"}],["path",{"d":"M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"}]],"route":[["circle",{"cx":"6","cy":"19","r":"3"}],["path",{"d":"M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"}],["circle",{"cx":"18","cy":"5","r":"3"}]],"save":[["path",{"d":"M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"}],["path",{"d":"M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"}],["path",{"d":"M7 3v4a1 1 0 0 0 1 1h7"}]],"upload":[["path",{"d":"M12 3v12"}],["path",{"d":"m17 8-5-5-5 5"}],["path",{"d":"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}]],"share-2":[["circle",{"cx":"18","cy":"5","r":"3"}],["circle",{"cx":"6","cy":"12","r":"3"}],["circle",{"cx":"18","cy":"19","r":"3"}],["line",{"x1":"8.59","x2":"15.42","y1":"13.51","y2":"17.49"}],["line",{"x1":"15.41","x2":"8.59","y1":"6.51","y2":"10.49"}]],"trash-2":[["path",{"d":"M10 11v6"}],["path",{"d":"M14 11v6"}],["path",{"d":"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"}],["path",{"d":"M3 6h18"}],["path",{"d":"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"}]],"copy":[["rect",{"width":"14","height":"14","x":"8","y":"8","rx":"2","ry":"2"}],["path",{"d":"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"}]],"x":[["path",{"d":"M18 6 6 18"}],["path",{"d":"m6 6 12 12"}]],"folder":[["path",{"d":"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"}]],"download":[["path",{"d":"M12 15V3"}],["path",{"d":"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}],["path",{"d":"m7 10 5 5 5-5"}]],"lock":[["rect",{"width":"18","height":"11","x":"3","y":"11","rx":"2","ry":"2"}],["path",{"d":"M7 11V7a5 5 0 0 1 10 0v4"}]],"lock-open":[["rect",{"width":"18","height":"11","x":"3","y":"11","rx":"2","ry":"2"}],["path",{"d":"M7 11V7a5 5 0 0 1 9.9-1"}]],"cloud-check":[["path",{"d":"m17 15-5.5 5.5L9 18"}],["path",{"d":"M5 17.743A7 7 0 1 1 15.71 10h1.79a4.5 4.5 0 0 1 1.5 8.742"}]],"history":[["path",{"d":"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"}],["path",{"d":"M3 3v5h5"}],["path",{"d":"M12 7v5l4 2"}]],"cloud-alert":[["path",{"d":"M12 12v4"}],["path",{"d":"M12 20h.01"}],["path",{"d":"M17 18h.5a1 1 0 0 0 0-9h-1.79A7 7 0 1 0 7 17.708"}]],"clipboard-list":[["rect",{"width":"8","height":"4","x":"8","y":"2","rx":"1","ry":"1"}],["path",{"d":"M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"}],["path",{"d":"M12 11h4"}],["path",{"d":"M12 16h4"}],["path",{"d":"M8 11h.01"}],["path",{"d":"M8 16h.01"}]],"pencil-ruler":[["path",{"d":"M13 7 8.7 2.7a2.41 2.41 0 0 0-3.4 0L2.7 5.3a2.41 2.41 0 0 0 0 3.4L7 13"}],["path",{"d":"m8 6 2-2"}],["path",{"d":"m18 16 2-2"}],["path",{"d":"m17 11 4.3 4.3c.94.94.94 2.46 0 3.4l-2.6 2.6c-.94.94-2.46.94-3.4 0L11 17"}],["path",{"d":"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"}],["path",{"d":"m15 5 4 4"}]],"pencil":[["path",{"d":"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"}],["path",{"d":"m15 5 4 4"}]],"slash":[["path",{"d":"M22 2 2 22"}]],"spline":[["circle",{"cx":"19","cy":"5","r":"2"}],["circle",{"cx":"5","cy":"19","r":"2"}],["path",{"d":"M5 17A12 12 0 0 1 17 5"}]],"circle-dot":[["circle",{"cx":"12","cy":"12","r":"10"}],["circle",{"cx":"12","cy":"12","r":"1"}]],"pentagon":[["path",{"d":"M10.83 2.38a2 2 0 0 1 2.34 0l8 5.74a2 2 0 0 1 .73 2.25l-3.04 9.26a2 2 0 0 1-1.9 1.37H7.04a2 2 0 0 1-1.9-1.37L2.1 10.37a2 2 0 0 1 .73-2.25z"}]],"move-horizontal":[["path",{"d":"m18 8 4 4-4 4"}],["path",{"d":"M2 12h20"}],["path",{"d":"m6 8-4 4 4 4"}]],"mouse-pointer-2":[["path",{"d":"M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"}]],"scan":[["path",{"d":"M3 7V5a2 2 0 0 1 2-2h2"}],["path",{"d":"M17 3h2a2 2 0 0 1 2 2v2"}],["path",{"d":"M21 17v2a2 2 0 0 1-2 2h-2"}],["path",{"d":"M7 21H5a2 2 0 0 1-2-2v-2"}]],"map-pin":[["path",{"d":"M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"}],["circle",{"cx":"12","cy":"10","r":"3"}]],"magnet":[["path",{"d":"m12 15 4 4"}],["path",{"d":"M2.352 10.648a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l6.029-6.029a1 1 0 1 1 3 3l-6.029 6.029a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l6.365-6.367A1 1 0 0 0 8.716 4.282z"}],["path",{"d":"m5 8 4 4"}]],"grid-3x3":[["rect",{"width":"18","height":"18","x":"3","y":"3","rx":"2"}],["path",{"d":"M3 9h18"}],["path",{"d":"M3 15h18"}],["path",{"d":"M9 3v18"}],["path",{"d":"M15 3v18"}]],"keyboard":[["path",{"d":"M10 8h.01"}],["path",{"d":"M12 12h.01"}],["path",{"d":"M14 8h.01"}],["path",{"d":"M16 12h.01"}],["path",{"d":"M18 8h.01"}],["path",{"d":"M6 8h.01"}],["path",{"d":"M7 16h10"}],["path",{"d":"M8 12h.01"}],["rect",{"width":"20","height":"16","x":"2","y":"4","rx":"2"}]],"check":[["path",{"d":"M20 6 9 17l-5-5"}]],"scissors":[["circle",{"cx":"6","cy":"6","r":"3"}],["path",{"d":"M8.12 8.12 12 12"}],["path",{"d":"M20 4 8.12 15.88"}],["circle",{"cx":"6","cy":"18","r":"3"}],["path",{"d":"M14.8 14.8 20 20"}]],"search":[["path",{"d":"m21 21-4.34-4.34"}],["circle",{"cx":"11","cy":"11","r":"8"}]],"square-dashed-mouse-pointer":[["path",{"d":"M12.034 12.681a.498.498 0 0 1 .647-.647l9 3.5a.5.5 0 0 1-.033.943l-3.444 1.068a1 1 0 0 0-.66.66l-1.067 3.443a.5.5 0 0 1-.943.033z"}],["path",{"d":"M5 3a2 2 0 0 0-2 2"}],["path",{"d":"M19 3a2 2 0 0 1 2 2"}],["path",{"d":"M5 21a2 2 0 0 1-2-2"}],["path",{"d":"M9 3h1"}],["path",{"d":"M9 21h2"}],["path",{"d":"M14 3h1"}],["path",{"d":"M3 9v1"}],["path",{"d":"M21 9v2"}],["path",{"d":"M3 14v1"}]],"pen-line":[["path",{"d":"M13 21h8"}],["path",{"d":"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"}]],"rectangle-horizontal":[["rect",{"width":"20","height":"12","x":"2","y":"6","rx":"2"}]],"square":[["rect",{"width":"18","height":"18","x":"3","y":"3","rx":"2"}]],"triangle":[["path",{"d":"M13.73 4a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"}]],"circle":[["circle",{"cx":"12","cy":"12","r":"10"}]],"rainbow":[["path",{"d":"M22 17a10 10 0 0 0-20 0"}],["path",{"d":"M6 17a6 6 0 0 1 12 0"}],["path",{"d":"M10 17a2 2 0 0 1 4 0"}]],"paint-bucket":[["path",{"d":"m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z"}],["path",{"d":"m5 2 5 5"}],["path",{"d":"M2 13h15"}],["path",{"d":"M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z"}]],"between-vertical-start":[["rect",{"width":"7","height":"13","x":"3","y":"8","rx":"1"}],["path",{"d":"m15 2-3 3-3-3"}],["rect",{"width":"7","height":"13","x":"14","y":"8","rx":"1"}]],"triangle-right":[["path",{"d":"M22 18a2 2 0 0 1-2 2H3c-1.1 0-1.3-.6-.4-1.3L20.4 4.3c.9-.7 1.6-.4 1.6.7Z"}]],"circle-dot-dashed":[["path",{"d":"M10.1 2.18a9.93 9.93 0 0 1 3.8 0"}],["path",{"d":"M17.6 3.71a9.95 9.95 0 0 1 2.69 2.7"}],["path",{"d":"M21.82 10.1a9.93 9.93 0 0 1 0 3.8"}],["path",{"d":"M20.29 17.6a9.95 9.95 0 0 1-2.7 2.69"}],["path",{"d":"M13.9 21.82a9.94 9.94 0 0 1-3.8 0"}],["path",{"d":"M6.4 20.29a9.95 9.95 0 0 1-2.69-2.7"}],["path",{"d":"M2.18 13.9a9.93 9.93 0 0 1 0-3.8"}],["path",{"d":"M3.71 6.4a9.95 9.95 0 0 1 2.7-2.69"}],["circle",{"cx":"12","cy":"12","r":"1"}]],"move":[["path",{"d":"M12 2v20"}],["path",{"d":"m15 19-3 3-3-3"}],["path",{"d":"m19 9 3 3-3 3"}],["path",{"d":"M2 12h20"}],["path",{"d":"m5 9-3 3 3 3"}],["path",{"d":"m9 5 3-3 3 3"}]],"rotate-ccw":[["path",{"d":"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"}],["path",{"d":"M3 3v5h5"}]],"move-up-right":[["path",{"d":"M13 5H19V11"}],["path",{"d":"M19 5L5 19"}]],"milestone":[["path",{"d":"M12 13v8"}],["path",{"d":"M12 3v3"}],["path",{"d":"M4 6a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h13a2 2 0 0 0 1.152-.365l3.424-2.317a1 1 0 0 0 0-1.635l-3.424-2.318A2 2 0 0 0 17 6z"}]],"locate-fixed":[["line",{"x1":"2","x2":"5","y1":"12","y2":"12"}],["line",{"x1":"19","x2":"22","y1":"12","y2":"12"}],["line",{"x1":"12","x2":"12","y1":"2","y2":"5"}],["line",{"x1":"12","x2":"12","y1":"19","y2":"22"}],["circle",{"cx":"12","cy":"12","r":"7"}],["circle",{"cx":"12","cy":"12","r":"3"}]],"signpost":[["path",{"d":"M12 13v8"}],["path",{"d":"M12 3v3"}],["path",{"d":"M18 6a2 2 0 0 1 1.387.56l2.307 2.22a1 1 0 0 1 0 1.44l-2.307 2.22A2 2 0 0 1 18 13H6a2 2 0 0 1-1.387-.56l-2.306-2.22a1 1 0 0 1 0-1.44l2.306-2.22A2 2 0 0 1 6 6z"}]],"expand":[["path",{"d":"m15 15 6 6"}],["path",{"d":"m15 9 6-6"}],["path",{"d":"M21 16v5h-5"}],["path",{"d":"M21 8V3h-5"}],["path",{"d":"M3 16v5h5"}],["path",{"d":"m3 21 6-6"}],["path",{"d":"M3 8V3h5"}],["path",{"d":"M9 9 3 3"}]],"combine":[["path",{"d":"M14 3a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1"}],["path",{"d":"M19 3a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1"}],["path",{"d":"m7 15 3 3"}],["path",{"d":"m7 21 3-3H5a2 2 0 0 1-2-2v-2"}],["rect",{"x":"14","y":"14","width":"7","height":"7","rx":"1"}],["rect",{"x":"3","y":"3","width":"7","height":"7","rx":"1"}]]};
 function Icono({ n, size, color, style }) {
   const nodos = ICONOS[n];
   if (!nodos) return null;
@@ -1225,7 +1226,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "28";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "29";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -3563,7 +3564,7 @@ const DIB = {
   enArco: (a, a1, a2) => normA(a - a1) <= normA(a2 - a1) + 1e-9,
   barrido: o => normA(o.a2 - o.a1) || TAU,
   // dirección de un azimut (grados) y su perpendicular a la izquierda
-  dirAz: az => ({ x: Math.sin(az * Math.PI / 180), y: Math.cos(az * Math.PI / 180) }),
+  dirAz: az => { const r = az * Math.PI / 180, q = v => Math.round(v * 1e12) / 1e12; return { x: q(Math.sin(r)), y: q(Math.cos(r)) }; },   // sin residuos como 6e-16 en 90°
   izq: u => ({ x: -u.y, y: u.x }),
   sum: (p, u, k) => ({ x: p.x + u.x * k, y: p.y + u.y * k }),
   dSeg: (p, a, b) => {
@@ -3749,6 +3750,49 @@ function paralela(o, d, lado) {
     return { ...o, v, forma: undefined };
   }
   return null;
+}
+
+// ── desfase: copia corrida d metros a la izquierda del sentido (d negativo = a la derecha) ──
+function desfaseIzq(o, d) {
+  if (o.t === "l") { const L = DIB.dist(o.a, o.b); if (L < 1e-12) return null; const n = DIB.izq({ x: (o.b.x - o.a.x) / L, y: (o.b.y - o.a.y) / L }); return { ...o, a: DIB.sum(o.a, n, d), b: DIB.sum(o.b, n, d) }; }
+  if (o.t === "pl" || o.t === "eje") {
+    const base = { id: o.id, t: "pl", v: o.v, c: o.t === "pl" && o.c, col: o.col };
+    const segs = DIB.segmentos(base); if (!segs.length) return null;
+    // el punto de referencia queda a la izquierda del primer tramo
+    const [a, b] = segs[0], L = DIB.dist(a, b) || 1, n = DIB.izq({ x: (b.x - a.x) / L, y: (b.y - a.y) / L });
+    const r = paralela(base, Math.abs(d), DIB.sum(DIB.medio(a, b), n, d >= 0 ? 1e-3 : -1e-3));
+    return r ? { ...r, t: "pl", c: base.c, forma: undefined, som: undefined } : null;
+  }
+  return null;
+}
+// Afuera / adentro de una figura cerrada; en líneas abiertas: afuera = derecha, adentro = izquierda
+function desfasar(o, d, lado) {
+  if (o.t === "ci" || o.t === "ar") { const r = o.r + (lado === "afuera" ? d : -d); return r > 1e-9 ? { ...o, r, som: undefined } : null; }
+  const cerrada = o.t === "pl" && o.c && o.v.length > 2;
+  const ccw = cerrada && DIB.areaSigno(o.v) > 0;   // en una figura contra reloj, la izquierda es adentro
+  const izq = cerrada ? (lado === "afuera" ? !ccw : ccw) : lado === "adentro";
+  const r = desfaseIzq(o, izq ? d : -d);
+  return r && cerrada && r.v.length > 2 && DIB.areaSigno(r.v) * DIB.areaSigno(o.v) < 0 ? null : r;   // adentro no puede voltearse
+}
+// unir líneas, polilíneas y arcos en una sola polilínea (los arcos se vuelven tramos cortos)
+function unirObjetos(lista) {
+  const trozos = lista.map(o => o.t === "l" ? [o.a, o.b] : o.t === "ar" ? (() => { const B = DIB.barrido(o), n = Math.max(4, Math.ceil(B / (Math.PI / 90))); return Array.from({ length: n + 1 }, (_, i) => DIB.enCirculo(o.c, o.r, o.a1 + B * i / n)); })() : o.c ? o.v.concat([o.v[0]]) : o.v.slice());
+  let cadena = trozos.shift(), hueco = 0;
+  while (trozos.length) {
+    let mejor = null;
+    trozos.forEach((t, i) => {
+      [[cadena[cadena.length - 1], t[0], "fin", false], [cadena[cadena.length - 1], t[t.length - 1], "fin", true], [cadena[0], t[t.length - 1], "ini", false], [cadena[0], t[0], "ini", true]]
+        .forEach(([p, q, donde, voltear]) => { const d = DIB.dist(p, q); if (!mejor || d < mejor.d) mejor = { d, i, donde, voltear }; });
+    });
+    let t = trozos.splice(mejor.i, 1)[0]; if (mejor.voltear) t = t.slice().reverse();
+    hueco = Math.max(hueco, mejor.d);
+    const pegado = mejor.d < 1e-4;
+    cadena = mejor.donde === "fin" ? cadena.concat(pegado ? t.slice(1) : t) : (pegado ? t.slice(0, -1) : t).concat(cadena);
+  }
+  const cierre = DIB.dist(cadena[0], cadena[cadena.length - 1]);
+  const cerrada = cadena.length > 3 && cierre < 0.01;
+  if (cerrada) cadena = cadena.slice(0, -1);
+  return { v: cadena, c: cerrada, hueco, cierre };
 }
 
 // ── recortar: quita el tramo tocado entre los dos cruces más cercanos ──
@@ -3942,17 +3986,18 @@ const conAlfa = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba
 const DIB_GRUPOS = [
   { id: "dibujar", label: "Dibujar", icono: "pencil", herr: [["punto", "Punto N,E", "circle-dot"], ["linea", "Línea", "slash"], ["polilinea", "Polilínea", "spline"],
     ["rect", "Rectángulo", "rectangle-horizontal"], ["cuadrado", "Cuadrado", "square"], ["triangulo", "Triángulo", "triangle"], ["circulo", "Círculo", "circle"], ["arco", "Arco", "rainbow"],
-    ["sombrear", "Sombrear", "paint-bucket"], ["pluma", "Pluma libre", "pen-line"], ["paralela", "Paralela", "between-vertical-start"],
+    ["sombrear", "Sombrear", "paint-bucket"], ["pluma", "Pluma libre", "pen-line"], ["paralela", "Paralela", "between-vertical-start"], ["desfase", "Desfase (sobreancho)", "expand"],
     ["@eje", "Eje de la vía", "signpost"], ["estacar", "Dividir / estacar", "milestone"]] },
   { id: "medir", label: "Medir", icono: "ruler", herr: [["distancia", "Distancia y azimut", "ruler"], ["area", "Área y perímetro", "pentagon"], ["angulo", "Ángulo", "triangle-right"], ["radio", "Radio y cuerda", "circle-dot-dashed"], ["abscisa", "Abscisa y desplaz.", "locate-fixed"], ["acotar", "Acotar", "move-horizontal"]] },
-  { id: "editar", label: "Editar", icono: "scissors", herr: [["elegir", "Elegir y editar", "mouse-pointer-2"], ["mover", "Mover", "move"], ["copiar", "Copiar", "copy"], ["girar", "Girar", "rotate-ccw"], ["recortar", "Recortar", "scissors"], ["extender", "Extender", "move-up-right"], ["borrar", "Borrar", "trash-2"], ["@deshacer", "Deshacer", "undo-2"], ["@rehacer", "Rehacer", "redo-2"]] },
+  { id: "editar", label: "Editar", icono: "scissors", herr: [["elegir", "Elegir y editar", "mouse-pointer-2"], ["mover", "Mover", "move"], ["copiar", "Copiar", "copy"], ["girar", "Girar", "rotate-ccw"], ["recortar", "Recortar", "scissors"], ["extender", "Extender", "move-up-right"], ["unir", "Unir en una figura", "combine"], ["borrar", "Borrar", "trash-2"], ["@deshacer", "Deshacer", "undo-2"], ["@rehacer", "Rehacer", "redo-2"]] },
   { id: "ver", label: "Ver", icono: "search", herr: [["@todo", "Ver todo", "scan"], ["@buscar", "Buscar punto", "map-pin"], ["@imanes", "Imanes", "magnet"], ["@cuadricula", "Cuadrícula", "grid-3x3"]] }
 ];
 const DIB_NOMBRE = { punto: "PUNTO", linea: "LÍNEA", polilinea: "POLILÍNEA", rect: "RECTÁNGULO", cuadrado: "CUADRADO", triangulo: "TRIÁNGULO", circulo: "CÍRCULO", arco: "ARCO", sombrear: "SOMBREAR", pluma: "PLUMA LIBRE", paralela: "PARALELA",
-  estacar: "DIVIDIR / ESTACAR", abscisa: "ABSCISA", distancia: "DISTANCIA", area: "ÁREA", angulo: "ÁNGULO", radio: "RADIO Y CUERDA", acotar: "ACOTAR", elegir: "ELEGIR", mover: "MOVER", copiar: "COPIAR", girar: "GIRAR", recortar: "RECORTAR", extender: "EXTENDER", borrar: "BORRAR" };
+  estacar: "DIVIDIR / ESTACAR", desfase: "DESFASE", unir: "UNIR", abscisa: "ABSCISA", distancia: "DISTANCIA", area: "ÁREA", angulo: "ÁNGULO", radio: "RADIO Y CUERDA", acotar: "ACOTAR", elegir: "ELEGIR", mover: "MOVER", copiar: "COPIAR", girar: "GIRAR", recortar: "RECORTAR", extender: "EXTENDER", borrar: "BORRAR" };
 // herramientas que piden puntos (con imanes y "Escribir")
 const DIB_PIDE_PUNTO = ["punto", "linea", "polilinea", "rect", "cuadrado", "triangulo", "circulo", "arco", "distancia", "area", "acotar", "abscisa"];
 const DIB_SELECCION = ["mover", "copiar", "girar"];
+const DIB_UNIBLES = ["l", "pl", "ar"];
 
 function TabDibujo({ proy, onChange, onArchivo }) {
   const h = React.createElement;
@@ -4035,6 +4080,11 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   const setColorNuevo = c => { setColorNuevoR(c); try { if (c) localStorage.setItem(TV_KEY + "_dibColor", c); else localStorage.removeItem(TV_KEY + "_dibColor"); } catch (_) {} };
   const [verPaleta, setVerPaleta] = React.useState(false);
   colorRef.current = colorNuevo;
+  const [desD, setDesD] = React.useState("0.50");       // desfase
+  const [desLado, setDesLado] = React.useState("afuera");
+  const [rapD, setRapD] = React.useState("");           // medida rápida: distancia y azimut desde el último punto
+  const [rapAz, setRapAz] = React.useState("");
+  const [lupa, setLupa] = React.useState(null);         // lupa mientras el dedo está en la pantalla
   const [estModo, setEstModo] = React.useState("cada");  // estacar: "cada" X metros o en N "partes"
   const [estVal, setEstVal] = React.useState("5");
   const eje = objs.find(o => o.t === "eje");
@@ -4140,6 +4190,16 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     terminarSeleccion();
   };
   const terminarSeleccion = () => { setSelSet([]); setSelListo(false); setTemp([]); };
+  const unirSeleccion = () => {
+    const lista = objs.filter(o => selSet.includes(o.id)); if (lista.length < 2) return aviso("Toca al menos dos líneas o polilíneas.");
+    const u = unirObjetos(lista);
+    const nuevo = { t: "pl", v: u.v, c: u.c, col: lista[0].col, id: nuevoId() };
+    cambiarDib(d => ({ objs: d.objs.filter(o => !selSet.includes(o.id)).concat([nuevo]) }));
+    setSelSet([]);
+    if (u.c) setRes(resArea(u.v));
+    aviso(u.c ? "Figura cerrada: " + f3(DIB.area(u.v)) + " m²" + (u.hueco > 0.0005 ? " (había un hueco de " + f3(u.hueco) + " m)" : "")
+      : "Unidas en una polilínea abierta: le faltan " + f3(u.cierre) + " m para cerrar (Elegir → Cerrar figura)");
+  };
   const terminarPoli = cerrar => {
     if (herr === "area") { if (temp.length >= 3) setRes(resArea(temp)); setTemp([]); return; }
     if (temp.length >= 2) agregar([{ t: "pl", v: temp, c: !!cerrar && temp.length >= 3 }]);
@@ -4199,6 +4259,22 @@ function TabDibujo({ proy, onChange, onArchivo }) {
       if (nuevo) agregar([{ ...nuevo, som: undefined }]); else aviso("Con esa distancia no se puede (el radio quedaría en cero).");
       setObjA(null); return;
     }
+    if (herr === "desfase") {
+      const o = tocarObjeto(X, Y, o => ["l", "pl", "ci", "ar", "eje"].includes(o.t));
+      if (!o) return aviso("Toca la figura, polilínea, línea o círculo que quieres abrir o cerrar.");
+      const d = parseFloat(String(desD).replace(",", "."));
+      if (!(d > 0)) return aviso("Escribe la medida del desfase (ej. 0.50).");
+      const lados = desLado === "ambos" ? ["afuera", "adentro"] : [desLado];
+      const nuevos = lados.map(l => desfasar(o, d, l)).filter(Boolean).map(n => ({ ...n, id: undefined }));
+      if (!nuevos.length) return aviso("Con esa medida la figura no cabe hacia adentro.");
+      agregar(nuevos.map(n => { const { id, ...r } = n; return r; }));
+      const c = nuevos[0]; if (c.t === "pl" && c.c) aviso("Desfase " + f3(d) + " m: área " + f3(DIB.area(c.v)) + " m² (antes " + f3(DIB.area(o.v)) + ")");
+      return;
+    }
+    if (herr === "unir") {
+      const o = tocarObjeto(X, Y, o => DIB_UNIBLES.includes(o.t)); if (!o) return;
+      setSelSet(selSet.includes(o.id) ? selSet.filter(x => x !== o.id) : selSet.concat([o.id])); return;
+    }
     if (herr === "estacar") {
       const o = tocarObjeto(X, Y, o => ["l", "pl", "ci", "ar", "eje"].includes(o.t));
       if (!o) return aviso("Toca la línea, polilínea, arco, círculo o eje que quieres dividir.");
@@ -4248,7 +4324,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     if (G.ptrs.size === 2) {
       const [a, b] = [...G.ptrs.values()];
       G.pinch = { d0: Math.hypot(b.X - a.X, b.Y - a.Y) || 1, m0: { X: (a.X + b.X) / 2, Y: (a.Y + b.Y) / 2 }, v0: vistaRef.current };
-      G.anulado = true; G.trazo = null; setTrazo(null); setCursor(null); return;
+      G.anulado = true; G.trazo = null; setTrazo(null); setCursor(null); setLupa(null); return;
     }
     if (G.ptrs.size > 2) return;
     G.anulado = false;
@@ -4256,7 +4332,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     G.pan = { X: p.X, Y: p.Y, v0: vistaRef.current, mov: 0, solo: e.button === 1 || e.button === 2 };
     if (!panear) G.pan.noPan = true;
     if (herr === "pluma" && !G.pan.solo) { G.trazo = [aM(p.X, p.Y)]; G.trazoS = [p]; setTrazo(G.trazo); return; }
-    if (pideIman(herr)) setCursor(conIman(p.X, p.Y));
+    if (pideIman(herr)) { setCursor(conIman(p.X, p.Y)); if (e.pointerType !== "mouse") setLupa(true); }
   };
   const onMove = e => {
     const G = gesto.current, p = posEn(e);
@@ -4287,7 +4363,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   };
   const onUp = e => {
     const G = gesto.current, p = posEn(e);
-    const estaba = G.ptrs.has(e.pointerId); G.ptrs.delete(e.pointerId);
+    const estaba = G.ptrs.has(e.pointerId); G.ptrs.delete(e.pointerId); setLupa(null);
     if (G.ptrs.size < 2) G.pinch = null;
     if (!estaba || G.ptrs.size > 0) return;
     const pan = G.pan; G.pan = null;
@@ -4499,6 +4575,8 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     pluma: "dibuja con el dedo",
     paralela: objA ? "toca hacia qué lado va la paralela" : "toca la línea, polilínea, eje o círculo",
     estacar: "toca la línea, arco o eje para marcar los puntos",
+    desfase: "escribe la medida, elige el lado y toca la figura",
+    unir: `toca las líneas a unir (${selSet.length}) y luego Unir`,
     abscisa: eje ? "toca un punto: te digo su abscisa y desplazamiento" : "primero pon el eje (Dibujar → Eje de la vía)",
     distancia: temp.length ? "segundo punto" : "primer punto",
     area: temp.length ? `vértice ${temp.length + 1} · Calcular` : "toca una figura cerrada o marca los vértices",
@@ -4568,12 +4646,21 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     h("button", { onClick: () => elegir(null), "data-color": "auto", style: { height: 26, padding: "0 9px", borderRadius: 999, border: `2px solid ${!actual ? "#F59E0B" : C.border}`, background: "#fff", fontSize: 11.5, fontWeight: 800, cursor: "pointer", color: C.text } }, "Auto"),
     DIB_COLORES.map(([c, n]) => h("button", { key: c, title: n, "data-color": c, onClick: () => elegir(c), style: { width: 26, height: 26, borderRadius: "50%", background: c, cursor: "pointer", border: actual === c ? "3px solid #F59E0B" : "2px solid #fff", boxShadow: "0 0 0 1px #CBD5E1" } })));
   const btnBarra = (txt, onClick, color, icono) => h("button", { onClick, className: "tv-dib-btn", style: { background: color || "#1E293B", color: "#fff", border: "none", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap", flex: "0 0 auto" } }, icono && h(Icono, { n: icono, size: 14 }), txt);
-  const campoBarra = (valor, set, ph, ancho) => h("input", { value: valor, onChange: e => set(e.target.value), placeholder: ph, inputMode: "decimal", className: "tv-dib-campo",
+  const campoBarra = (valor, set, ph, ancho, modo) => h("input", { value: valor, onChange: e => set(e.target.value), placeholder: ph, inputMode: modo || "decimal", className: "tv-dib-campo",
     style: { width: ancho || 78, flex: "0 0 auto", background: "#1E293B", border: "1px solid #334155", color: "#fff", borderRadius: 8, padding: "5px 8px", fontFamily: "monospace", fontSize: 12.5 } });
   const grupoDe = herr => (DIB_GRUPOS.find(g => g.herr.some(x => x[0] === herr)) || {}).id;
   const puntosLista = objs.filter(o => o.t === "p");
   const ultimo = temp[temp.length - 1];
   const angosto = W < 560;
+  // medida rápida en la barra: desde el último punto, con distancia y azimut (sin abrir Escribir)
+  const baseRapida = DIB_SELECCION.includes(herr) && selListo ? (herr !== "girar" ? temp[0] : null) : (DIB_PIDE_PUNTO.includes(herr) && herr !== "abscisa" && !(herr === "acotar" && temp.length === 2) ? temp[temp.length - 1] : null);
+  const puedeRapido = !!baseRapida && !teclado;
+  const medidaRapida = () => {
+    const D = parseFloat(String(rapD).replace(",", ".")), A = leerAzimut(rapAz);
+    if (isNaN(D) || A === null) return aviso("Escribe la distancia y el azimut (ej. 12.5 y 90, o 53 07 48).");
+    const p = DIB.sum(baseRapida, DIB.dirAz(A), D);
+    ponerPunto(p); irA(p, false); setRapD(""); setRapAz("");
+  };
   const nombreSel = { p: "PUNTO", l: "LÍNEA", pl: "POLILÍNEA", ci: "CÍRCULO", ar: "ARCO", fh: "TRAZO A MANO", cota: "COTA", eje: "EJE" };
   const titObj = o => o.t === "pl" ? (o.forma === "rect" ? "RECTÁNGULO" : o.forma === "cuadrado" ? "CUADRADO" : o.forma === "tri" ? "TRIÁNGULO" : o.c ? "POLILÍNEA CERRADA" : "POLILÍNEA") : nombreSel[o.t];
   // modos del teclado según la herramienta
@@ -4605,6 +4692,12 @@ function TabDibujo({ proy, onChange, onArchivo }) {
         h("span", { style: { flex: angosto ? "0 0 auto" : "1 1 auto", minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: "20px" } }, h("b", { style: { color: "#FBBF24" } }, DIB_NOMBRE[herr]), " · ", pasoTxt),
         h("div", { style: { display: "flex", gap: 6, overflowX: "auto", flex: "0 0 auto", justifyContent: angosto ? "flex-start" : "flex-end", scrollbarWidth: "none", alignItems: "center" } },
           herr === "paralela" && [h("span", { key: "t", style: { whiteSpace: "nowrap" } }, "Dist."), h(React.Fragment, { key: "c" }, campoBarra(paraD, setParaD, "1.000")), h("span", { key: "m" }, "m")],
+          herr === "desfase" && [h(React.Fragment, { key: "c" }, campoBarra(desD, setDesD, "0.50", 60)), h("span", { key: "m" }, "m"),
+            ...[["afuera", "Afuera +"], ["adentro", "Adentro −"], ["ambos", "Ambos"]].map(([k, t]) => h(React.Fragment, { key: k }, btnBarra(t, () => setDesLado(k), desLado === k ? C.accent : "#334155")))],
+          herr === "unir" && btnBarra("Unir (" + selSet.length + ")", unirSeleccion, selSet.length >= 2 ? C.accent : "#475569", "check"),
+          puedeRapido && h("form", { key: "rap", className: "tv-dib-rapido", onSubmit: e => { e.preventDefault(); medidaRapida(); }, style: { display: "flex", gap: 4, alignItems: "center", flex: "0 0 auto" } },
+            campoBarra(rapD, setRapD, "Dist.", 66), campoBarra(rapAz, setRapAz, "Azimut", 84, "text"),
+            h("button", { type: "submit", className: "tv-dib-btn", style: { background: C.accent, color: "#fff", border: "none", borderRadius: 8, padding: "6px 9px", fontWeight: 800, cursor: "pointer" } }, "✓")),
           herr === "estacar" && [h(React.Fragment, { key: "a" }, btnBarra("Cada", () => setEstModo("cada"), estModo === "cada" ? C.accent : "#334155")), h(React.Fragment, { key: "b" }, btnBarra("Partes", () => setEstModo("partes"), estModo === "partes" ? C.accent : "#334155")),
             h(React.Fragment, { key: "c" }, campoBarra(estVal, setEstVal, estModo === "cada" ? "5" : "4", 64)), h("span", { key: "m" }, estModo === "cada" ? "m" : "partes")],
           herr === "extender" && [h("span", { key: "t", style: { whiteSpace: "nowrap" } }, "Medida"), h(React.Fragment, { key: "c" }, campoBarra(extD, setExtD, "hasta línea", 96))],
@@ -4622,6 +4715,14 @@ function TabDibujo({ proy, onChange, onArchivo }) {
         h("svg", { ref: svgRef, width: "100%", height: "100%", className: "tv-dib-svg", style: { display: "block", touchAction: "none", userSelect: "none", cursor: herr === "elegir" ? "grab" : "crosshair", background: "#fff" },
           onPointerDown: onDown, onPointerMove: onMove, onPointerUp: onUp, onPointerCancel: e => { gesto.current.ptrs.delete(e.pointerId); gesto.current.pinch = null; gesto.current.trazo = null; setTrazo(null); },
           onPointerLeave: e => { if (e.pointerType === "mouse") setCursor(null); }, onContextMenu: e => e.preventDefault() }, els),
+        // lupa: muestra ampliado lo que queda bajo el dedo (arriba del dedo para que no lo tape)
+        lupa && cursor && pideIman(herr) && (() => {
+          const s = aP(cursor), D = 128, z = 3, arriba = s.Y > D + 30, cy = arriba ? s.Y - D / 2 - 34 : s.Y + D / 2 + 34;
+          const cx = Math.min(Math.max(s.X, D / 2 + 4), W - D / 2 - 4);
+          return h("div", { className: "tv-dib-lupa", style: { position: "absolute", left: cx - D / 2, top: cy - D / 2, width: D, height: D, borderRadius: "50%", overflow: "hidden", border: "3px solid #0F172A", boxShadow: "0 6px 18px rgba(0,0,0,0.35)", background: "#fff", pointerEvents: "none", zIndex: 6 } },
+            h("svg", { width: D, height: D, viewBox: `${s.X - D / (2 * z)} ${s.Y - D / (2 * z)} ${D / z} ${D / z}`, style: { display: "block" } }, els,
+              h("line", { x1: s.X - 8, y1: s.Y, x2: s.X + 8, y2: s.Y, stroke: "#DC2626", strokeWidth: 1.5 }), h("line", { x1: s.X, y1: s.Y - 8, x2: s.X, y2: s.Y + 8, stroke: "#DC2626", strokeWidth: 1.5 })));
+        })(),
         // escala y coordenadas del puntero
         h("div", { style: { position: "absolute", left: 8, bottom: 8, background: "rgba(255,255,255,0.92)", borderRadius: 8, padding: "3px 8px", fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: "#334155", pointerEvents: "none" } },
           h("span", { style: { display: "inline-block", width: paso * vista.k, borderBottom: "2px solid #334155", marginRight: 6, verticalAlign: "middle" } }), (paso >= 1 ? paso : paso.toPrecision(1)) + " m",
