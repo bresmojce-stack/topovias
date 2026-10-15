@@ -1467,7 +1467,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "44";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "45";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -2750,6 +2750,29 @@ function TablaResultado({
   }))));
 }
 
+// Copiar la estructura (capas y sobreanchos) de otra vía: en una obra casi todas tienen la misma
+function CopiarEstructura({ proy, proyectos, obras, onCopiar }) {
+  const [desde, setDesde] = React.useState("");
+  const conCapas = proyectos.filter(p => !p.libre && p.id !== proy.id && capasDefinidas(p.capas).length);
+  if (!conCapas.length) return null;
+  const nombreObra = id => (obras.find(o => o.id === id) || {}).nombre || "Otra obra";
+  const propias = conCapas.filter(p => p.obraId === proy.obraId), otras = conCapas.filter(p => p.obraId !== proy.obraId);
+  const opcion = p => React.createElement("option", { key: p.id, value: String(p.id) },
+    p.nombre + " — " + capasDefinidas(p.capas).map(c => c.nombre + " " + c.espesor).join(", ") + (p.obraId !== proy.obraId ? " (" + nombreObra(p.obraId) + ")" : ""));
+  const copiar = () => {
+    const f = conCapas.find(p => String(p.id) === desde); if (!f) return;
+    if (capasDefinidas(proy.capas).length && !confirm("¿Reemplazar las capas de esta vía por las de \"" + f.nombre + "\"?")) return;
+    onCopiar({ capas: f.capas.map(c => ({ ...c, id: Math.random() })), sobreancho: f.sobreancho ? { ...f.sobreancho } : proy.sobreancho });
+    setDesde("");
+  };
+  return React.createElement("div", { className: "tv-copiar-estructura", style: { display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", background: "#F0F9FF", border: `1px solid ${C.border}`, borderRadius: 10, padding: 10, marginBottom: 14 } },
+    React.createElement("div", { style: { flex: "1 1 240px", minWidth: 0 } }, React.createElement(Label, null, "Copiar la estructura de otra vía"),
+      React.createElement(Sel, { value: desde, onChange: e => setDesde(e.target.value) },
+        React.createElement("option", { value: "" }, "Elige la vía…"),
+        propias.length > 0 && React.createElement("optgroup", { label: "Esta obra" }, propias.map(opcion)),
+        otras.length > 0 && React.createElement("optgroup", { label: "Otras obras" }, otras.map(opcion)))),
+    React.createElement(Btn, { color: C.accent, disabled: !desde, onClick: copiar }, "Copiar capas"));
+}
 // ── Pestaña Sardinel de la vía: sección, dónde va, tramos sin sardinel, lo ejecutado y el resumen ──
 function TabSardinel({ proy, upd, updSinRecalcular }) {
   const s = proy.sardinel;
@@ -7715,7 +7738,8 @@ function App() {
       color: C.muted,
       marginBottom: 12
     }
-  }, "Orden: primero la capa más superficial (ej. Asfalto o Concreto), luego Base, Sub-base, Roca muerta, etc. Si un parqueadero tiene otra estructura, se define en 🅿 Parqueaderos."), (() => {
+  }, "Orden: primero la capa más superficial (ej. Asfalto o Concreto), luego Base, Sub-base, Roca muerta, etc. Si un parqueadero tiene otra estructura, se define en 🅿 Parqueaderos."),
+  React.createElement(CopiarEstructura, { proy, proyectos, obras, onCopiar: cambios => upd(cambios) }), (() => {
     // ── Sobreancho general (no cambia las cotas; solo el ancho de trabajo) ──
     const sg = proy.sobreancho || {};
     const g = sobreanchoGeneral(proy);
