@@ -96,6 +96,11 @@
   /* En pantallas táctiles la letra de las casillas es de 16 px: así el celular no hace zoom al escribir */
   @media (pointer: coarse) {
     input, select, textarea { font-size: 16px !important; }
+    .tv-btn { min-height: 36px; min-width: 36px; }
+    .tv-mini { min-width: 32px; min-height: 32px; }
+    input[type=checkbox] { width: 22px !important; height: 22px !important; }
+    .tv-calc-dec { min-width: 36px; min-height: 32px; }
+    .tv-dib-btn { min-height: 34px; }
     .tv-tabs button { padding: 13px 14px; }
   }
 </style>
@@ -1150,11 +1155,18 @@ function guardarDato(k, v) {
   DATOS.valores[k] = v;
   const t = Date.now();
   let lsOk = false;
+  // si al abrir no respondió la base de datos y estos datos solo estaban allá, no se escribe encima de nada
+  if (DATOS.noEscribir && DATOS.noEscribir[k]) { avisarGuardado(false); return; }
   if (DATOS.idb) TVDB.set(k, v).then(function() { return TVDB.set(k + "__t", t); })
     .then(function() { avisarGuardado(true); })
     .catch(function(e) { console.error("No se pudo guardar en el dispositivo", e); if (!lsOk) avisarGuardado(false); });
   try { localStorage.setItem(k, JSON.stringify(v)); localStorage.setItem(k + "__t", String(t)); lsOk = true; }
-  catch (e) { try { localStorage.removeItem(k); localStorage.removeItem(k + "__t"); } catch (_) {} /* ya no cabe: queda solo en IndexedDB, sin copia vieja */ }
+  catch (e) {
+    // ya no cabe en localStorage: si está en IndexedDB se quita la copia vieja (y se anota que solo está allá);
+    // si no hay IndexedDB, se deja la última copia buena y se avisa que no se pudo guardar
+    if (DATOS.idb) try { localStorage.removeItem(k); localStorage.removeItem(k + "__t"); localStorage.setItem(k + "__soloIdb", "1"); } catch (_) {}
+  }
+  if (lsOk) try { localStorage.removeItem(k + "__soloIdb"); } catch (_) {}
   if (lsOk) avisarGuardado(true); else if (!DATOS.idb) avisarGuardado(false);
 }
 // Estado del guardado automático (lo muestra el encabezado)
@@ -1210,7 +1222,14 @@ async function precargarDatos(claves) {
     DATOS.idb = true;
   } catch (e) {
     DATOS.idb = false;
-    claves.forEach(k => { try { const ls = localStorage.getItem(k); DATOS.valores[k] = ls ? corregirComas(JSON.parse(ls)) : undefined; } catch (_) {} });
+    DATOS.noEscribir = {};
+    claves.forEach(k => {
+      try {
+        const ls = localStorage.getItem(k); DATOS.valores[k] = ls ? corregirComas(JSON.parse(ls)) : undefined;
+        // los datos de esta clave solo estaban en la base de datos que no abrió: no escribir encima
+        if (localStorage.getItem(k + "__soloIdb")) { DATOS.noEscribir[k] = true; DATOS.avisoCarga = true; }
+      } catch (_) {}
+    });
   }
   DATOS.cargado = true;
   pedirEspacioReservado();
@@ -1226,7 +1245,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "31";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "35";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -1880,7 +1899,7 @@ function CopiasAutomaticas({ onRestaurar }) {
     visibles.map(c => React.createElement("div", { key: c.fecha, className: "tv-copia-auto", style: { display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: `1px solid ${C.border}`, fontSize: 13, flexWrap: "wrap" } },
       React.createElement("span", { style: { flex: 1, minWidth: 160 } },
         React.createElement("strong", null, new Date(c.fecha).toLocaleString("es-CO", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })),
-        React.createElement("span", { style: { color: C.muted } }, " · " + c.obras.length + (c.obras.length === 1 ? " obra" : " obras") + " · " + c.vias.length + (c.vias.length === 1 ? " vía" : " vías"))),
+        React.createElement("span", { style: { color: C.muted } }, " · " + c.obras.length + (c.obras.length === 1 ? " obra" : " obras") + " · " + c.vias.filter(v => !v.libre).length + (c.vias.filter(v => !v.libre).length === 1 ? " vía" : " vías"))),
       React.createElement(Btn, { small: true, color: C.accent2, onClick: () => onRestaurar({ app: "TopoVias", fecha: c.fecha, obras: c.obras, vias: c.vias }) }, "Restaurar"))),
     lista.length > 4 && React.createElement("button", { onClick: () => setVerTodas(!verTodas), style: { marginTop: 6, background: "none", border: "none", color: C.accent, fontWeight: 700, fontSize: 12.5, cursor: "pointer", padding: 0 } },
       verTodas ? "Ver menos" : "Ver las " + lista.length + " copias"));
@@ -3784,7 +3803,13 @@ function desfasar(o, d, lado) {
   const ccw = cerrada && DIB.areaSigno(o.v) > 0;   // en una figura contra reloj, la izquierda es adentro
   const izq = cerrada ? (lado === "afuera" ? !ccw : ccw) : lado === "adentro";
   const r = desfaseIzq(o, izq ? d : -d);
-  return r && cerrada && r.v.length > 2 && DIB.areaSigno(r.v) * DIB.areaSigno(o.v) < 0 ? null : r;   // adentro no puede voltearse
+  if (!r) return null;
+  // si algún lado quedó en cero o se dio la vuelta, la medida no cabe (ej. 6 m hacia adentro en un cuadrado de 10)
+  if (r.t === "pl") {
+    const so = DIB.segmentos({ ...o, t: "pl", c: cerrada }), sn = DIB.segmentos(r);
+    if (so.length !== sn.length || sn.some(([a, b], i) => { const [p, q] = so[i]; return (b.x - a.x) * (q.x - p.x) + (b.y - a.y) * (q.y - p.y) <= 1e-9 || DIB.dist(a, b) < 1e-6; })) return null;
+  }
+  return r;
 }
 // unir líneas, polilíneas y arcos en una sola polilínea (los arcos se vuelven tramos cortos)
 function unirObjetos(lista) {
@@ -3842,7 +3867,7 @@ function recortar(o, objs, toque) {
     if (angs.length < 2) return { error: "Para recortar un círculo, otra línea debe cruzarlo en dos puntos." };
     let lo = angs.filter(a => a < at).pop(), hi = angs.find(a => a > at);
     if (lo === undefined) lo = angs[angs.length - 1]; if (hi === undefined) hi = angs[0];
-    return { nuevos: [{ id: o.id, t: "ar", c: o.c, r: o.r, a1: hi, a2: lo }] };
+    return { nuevos: [{ ...o, t: "ar", a1: hi, a2: lo, som: undefined }] };
   }
   if (o.t === "ar") {
     const B = DIB.barrido(o), rel = p => normA(DIB.ang(o.c, p) - o.a1);
@@ -3903,7 +3928,11 @@ function simplificar(v, tol) {
 function dxfTexto(s) { return String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\x20-\x7E]/g, "?"); }
 // triángulos de un polígono (corte de "orejas") para el relleno sólido
 function triangular(v0) {
-  let v = v0.slice(); if (DIB.areaSigno(v) < 0) v.reverse();
+  // quitar vértices repetidos o alineados (si no, el corte se traba y el relleno queda a medias)
+  let v = v0.filter((p, i) => DIB.dist(p, v0[(i + 1) % v0.length]) > 1e-9);
+  v = v.filter((p, i) => { const a = v[(i + v.length - 1) % v.length], c = v[(i + 1) % v.length]; return Math.abs((p.x - a.x) * (c.y - a.y) - (p.y - a.y) * (c.x - a.x)) > 1e-12; });
+  if (v.length < 3) return [];
+  if (DIB.areaSigno(v) < 0) v.reverse();
   const tris = [], cruz = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
   let guard = 0;
   while (v.length > 3 && guard++ < 5000) {
@@ -3960,7 +3989,10 @@ function crearDXF(dib) {
     if (!o.som || !DIB.cerrada(o)) return;
     const v = DIB.contorno(o);
     if (o.som === "relleno") triangular(v).forEach(([a, b, c]) => { g(0, "SOLID"); capa_("SOMBRA"); g(10, n(a.x)); g(20, n(a.y)); g(30, 0); g(11, n(b.x)); g(21, n(b.y)); g(31, 0); g(12, n(c.x)); g(22, n(c.y)); g(32, 0); g(13, n(c.x)); g(23, n(c.y)); g(33, 0); });
-    else lineasRayado(v, h * 1.2).forEach(([a, b]) => linea(a, b, "SOMBRA"));
+    else {
+      const xs = v.map(p => p.x), ys = v.map(p => p.y), menor = Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+      lineasRayado(v, Math.min(h * 1.2, Math.max(menor / 8, 1e-3))).forEach(([a, b]) => linea(a, b, "SOMBRA"));   // al menos unas 8 rayas por figura
+    }
   };
   dib.objs.forEach(o => {
     colObj = o.col ? aciDe(o.col) : null;
@@ -3970,7 +4002,8 @@ function crearDXF(dib) {
     else if (o.t === "fh") polilinea(o.v, false, "PLUMA");
     else if (o.t === "eje") {
       polilinea(o.v, false, "EJE");
-      EJE.marcas(o).forEach(m => { const nn = { x: m.u.y, y: -m.u.x };   // a la derecha del eje linea(DIB.sum(m.p, nn, h * 0.8), DIB.sum(m.p, nn, -h * 0.8), "EJE");
+      EJE.marcas(o).forEach(m => { const nn = { x: m.u.y, y: -m.u.x };   // a la derecha del eje
+        linea(DIB.sum(m.p, nn, h * 0.8), DIB.sum(m.p, nn, -h * 0.8), "EJE");
         texto(DIB.sum(m.p, nn, h * 1.1), absCorta(m.abs), h * 0.8, Math.atan2(nn.y, nn.x) * 180 / Math.PI, "EJE"); });
     }
     else if (o.t === "ci") { sombra(o); g(0, "CIRCLE"); capa_("LINEAS"); g(10, n(o.c.x)); g(20, n(o.c.y)); g(30, 0); g(40, n(o.r)); }
@@ -4032,9 +4065,22 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   // ── vista ──
   const cajaRef = React.useRef(null), svgRef = React.useRef(null);
   const [tam, setTam] = React.useState({ W: 360, H: 480 });
+  const tamRef = React.useRef(tam);
   const [vista, setVistaR] = React.useState({ cx: 0, cy: 0, k: 20 });
   const vistaRef = React.useRef(vista);
   const setVista = v => { vistaRef.current = v; setVistaR(v); };
+  // Durante un gesto (pellizco, arrastre, rueda) se corre y escala la imagen ya dibujada; al terminar se
+  // dibuja de nuevo con la vista final. Así el zoom va fluido aunque el dibujo tenga cientos de objetos.
+  const capaRef = React.useRef(null), capaCache = React.useRef({}), ruedaT = React.useRef(null);
+  const moverVista = v => {
+    vistaRef.current = v; const el = svgRef.current, base = vista;
+    if (!el) { setVistaR(v); return; }
+    const sc = v.k / base.k, tx = (tamRef.current.W / 2) * (1 - sc) + (base.cx - v.cx) * v.k, ty = (tamRef.current.H / 2) * (1 - sc) - (base.cy - v.cy) * v.k;
+    // se mueve la imagen ya pintada (la tarjeta gráfica la escala): no se vuelve a pintar nada hasta soltar
+    el.style.transformOrigin = "0 0"; el.style.willChange = "transform"; el.style.transform = `translate(${tx}px, ${ty}px) scale(${sc})`;
+  };
+  const fijarVista = () => { clearTimeout(ruedaT.current); ruedaT.current = null; if (vistaRef.current !== vista) setVistaR(vistaRef.current); };
+  React.useLayoutEffect(() => { const el = svgRef.current; if (el && el.style.transform) { el.style.transform = ""; el.style.willChange = ""; } });
   const [alto, setAlto] = React.useState(480);
   React.useEffect(() => {
     const medir = () => {
@@ -4051,7 +4097,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     try { ro = new ResizeObserver(() => { const s = svgRef.current && svgRef.current.getBoundingClientRect(); if (s) setTam({ W: s.width, H: s.height }); }); if (svgRef.current) ro.observe(svgRef.current); } catch (_) {}
     return () => { clearTimeout(t); window.removeEventListener("resize", medir); if (ro) ro.disconnect(); };
   }, [dib && dib.id, alto]);
-  const tamRef = React.useRef(tam); tamRef.current = tam;
+  tamRef.current = tam;
   const { W, H } = tam;
   const aP = (p, v) => { v = v || vista; return { X: (p.x - v.cx) * v.k + W / 2, Y: H / 2 - (p.y - v.cy) * v.k }; };
   const aM = (X, Y, v) => { v = v || vistaRef.current; return { x: (X - W / 2) / v.k + v.cx, y: v.cy - (Y - H / 2) / v.k }; };
@@ -4153,9 +4199,9 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   // ¿con qué termina cada herramienta de figuras? (el último punto cierra la figura)
   const figuraCon = (q, base) => {
     const p = base || temp;
-    if (herr === "rect" && p.length === 1) return { t: "pl", c: true, forma: "rect", v: [p[0], { x: q.x, y: p[0].y }, q, { x: p[0].x, y: q.y }] };
+    if (herr === "rect" && p.length === 1) return Math.abs(q.x - p[0].x) < 1e-9 || Math.abs(q.y - p[0].y) < 1e-9 ? null : { t: "pl", c: true, forma: "rect", v: [p[0], { x: q.x, y: p[0].y }, q, { x: p[0].x, y: q.y }] };
     if (herr === "cuadrado" && p.length === 1) { const L = DIB.dist(p[0], q); if (L < 1e-9) return null; const u = { x: (q.x - p[0].x) / L, y: (q.y - p[0].y) / L }, n = DIB.izq(u); return { t: "pl", c: true, forma: "cuadrado", v: [p[0], q, DIB.sum(q, n, L), DIB.sum(p[0], n, L)] }; }
-    if (herr === "triangulo" && p.length === 2) return { t: "pl", c: true, forma: "tri", v: [p[0], p[1], q] };
+    if (herr === "triangulo" && p.length === 2) return DIB.area([p[0], p[1], q]) < 1e-9 ? null : { t: "pl", c: true, forma: "tri", v: [p[0], p[1], q] };
     if (herr === "circulo" && p.length === 1) { const r = DIB.dist(p[0], q); return r > 1e-9 ? { t: "ci", c: p[0], r } : null; }
     if (herr === "arco" && p.length === 2) return arco3(p[0], p[1], q);
     return null;
@@ -4170,8 +4216,10 @@ function TabDibujo({ proy, onChange, onArchivo }) {
       setTemp(temp.concat([q])); return;
     }
     if (["rect", "cuadrado", "triangulo", "circulo", "arco"].includes(herr)) {
-      const f = figuraCon(q);
-      if (f) { agregar([f]); setTemp([]); } else setTemp(temp.concat([q]));
+      const f = figuraCon(q), ultimoPaso = { rect: 1, cuadrado: 1, circulo: 1, triangulo: 2, arco: 2 }[herr];
+      if (f) { agregar([f]); setTemp([]); }
+      else if (temp.length >= ultimoPaso) aviso("Ese punto deja la figura sin tamaño (en cero o en línea recta). Toca otro.");
+      else setTemp(temp.concat([q]));
       return;
     }
     if (herr === "distancia") { if (temp.length) { setRes(resDistancia(temp[0], q)); setTemp([]); } else { setRes(null); setTemp([q]); } return; }
@@ -4338,15 +4386,16 @@ function TabDibujo({ proy, onChange, onArchivo }) {
 
   // ── gestos: un dedo dibuja, dos dedos mueven y hacen zoom; mouse: rueda = zoom ──
   const gesto = React.useRef({ ptrs: new Map(), pinch: null, pan: null, anulado: false, trazo: null });
-  const posEn = e => { const r = svgRef.current.getBoundingClientRect(); return { X: e.clientX - r.left, Y: e.clientY - r.top }; };
+  // la posición del lienzo se mide una vez al empezar el gesto (medirla en cada movimiento obliga a recalcular la página)
+  const posEn = e => { const G = gesto.current; const r = (G.ptrs.size && G.rect) || (G.rect = svgRef.current.parentElement.getBoundingClientRect()); return { X: e.clientX - r.left, Y: e.clientY - r.top }; };
   const onDown = e => {
-    const G = gesto.current, p = posEn(e);
+    const G = gesto.current; if (!G.ptrs.size) G.rect = null; const p = posEn(e);
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
     G.ptrs.set(e.pointerId, p);
     if (G.ptrs.size === 2) {
       const [a, b] = [...G.ptrs.values()];
       G.pinch = { d0: Math.hypot(b.X - a.X, b.Y - a.Y) || 1, m0: { X: (a.X + b.X) / 2, Y: (a.Y + b.Y) / 2 }, v0: vistaRef.current };
-      G.anulado = true; G.trazo = null; setTrazo(null); setCursor(null); setLupa(null); return;
+      G.anulado = true; G.trazo = null; G.pan = null; setTrazo(null); setCursor(null); setLupa(null); return;
     }
     if (G.ptrs.size > 2) return;
     G.anulado = false;
@@ -4358,6 +4407,25 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   };
   const onMove = e => {
     const G = gesto.current, p = posEn(e);
+    if (G.ptrs.has(e.pointerId)) {
+      if (G.pinch && G.ptrs.size >= 2) {
+        G.ptrs.set(e.pointerId, p);
+        const [a, b] = [...G.ptrs.values()], P = G.pinch, v0 = P.v0;
+        const k = Math.min(Math.max(v0.k * (Math.hypot(b.X - a.X, b.Y - a.Y) / P.d0), 0.0005), 5000);
+        const wm = aM(P.m0.X, P.m0.Y, v0), m = { X: (a.X + b.X) / 2, Y: (a.Y + b.Y) / 2 };
+        moverVista({ k, cx: wm.x - (m.X - W / 2) / k, cy: wm.y + (m.Y - H / 2) / k });
+        return;
+      }
+      if (G.pan && !G.trazo) {
+        const mov = Math.max(G.pan.mov, Math.hypot(p.X - G.pan.X, p.Y - G.pan.Y));
+        if (G.pan.solo || (herr === "elegir" && (!G.pan.noPan || mov > 8))) {
+          G.pan.mov = mov; G.ptrs.set(e.pointerId, p);
+          const v0 = G.pan.v0; moverVista({ ...v0, cx: v0.cx - (p.X - G.pan.X) / v0.k, cy: v0.cy + (p.Y - G.pan.Y) / v0.k });
+          return;
+        }
+      }
+    }
+    if (ruedaT.current) fijarVista();   // terminó de girar la rueda
     setHover(aM(p.X, p.Y));
     if (e.pointerType === "mouse") {
       setPtr(p);
@@ -4366,34 +4434,26 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     }
     if (!G.ptrs.has(e.pointerId)) { if (e.pointerType === "mouse" && pideIman(herr)) setCursor(conIman(p.X, p.Y)); return; }
     G.ptrs.set(e.pointerId, p);
-    if (G.pinch && G.ptrs.size >= 2) {
-      const [a, b] = [...G.ptrs.values()], P = G.pinch, v0 = P.v0;
-      const k = Math.min(Math.max(v0.k * (Math.hypot(b.X - a.X, b.Y - a.Y) / P.d0), 0.0005), 5000);
-      const wm = aM(P.m0.X, P.m0.Y, v0), m = { X: (a.X + b.X) / 2, Y: (a.Y + b.Y) / 2 };
-      setVista({ k, cx: wm.x - (m.X - W / 2) / k, cy: wm.y + (m.Y - H / 2) / k });
-      return;
-    }
     if (G.trazo) {
       const ult = G.trazoS[G.trazoS.length - 1];
       if (Math.hypot(p.X - ult.X, p.Y - ult.Y) > 2.5) { G.trazoS.push(p); G.trazo = G.trazo.concat([aM(p.X, p.Y)]); setTrazo(G.trazo); }
       return;
     }
-    if (G.pan) {
-      G.pan.mov = Math.max(G.pan.mov, Math.hypot(p.X - G.pan.X, p.Y - G.pan.Y));
-      const puedePanear = !G.pan.noPan || (herr === "elegir" && G.pan.mov > 8) || G.pan.solo;
-      if (puedePanear && (herr === "elegir" || G.pan.solo)) {
-        const v0 = G.pan.v0; setVista({ ...v0, cx: v0.cx - (p.X - G.pan.X) / v0.k, cy: v0.cy + (p.Y - G.pan.Y) / v0.k });
-        return;
-      }
-    }
+    if (G.pan) G.pan.mov = Math.max(G.pan.mov, Math.hypot(p.X - G.pan.X, p.Y - G.pan.Y));
     if (pideIman(herr)) setCursor(conIman(p.X, p.Y));
   };
   const onUp = e => {
     const G = gesto.current, p = posEn(e);
     const estaba = G.ptrs.has(e.pointerId); G.ptrs.delete(e.pointerId); setLupa(null);
-    if (G.ptrs.size < 2) G.pinch = null;
+    if (G.ptrs.size < 2 && G.pinch) {
+      G.pinch = null; fijarVista();
+      // queda un dedo: el arrastre sigue desde la vista nueva
+      const resto = [...G.ptrs.values()][0];
+      G.pan = resto ? { X: resto.X, Y: resto.Y, v0: vistaRef.current, mov: 0, solo: false, noPan: true } : null;
+    }
     if (!estaba || G.ptrs.size > 0) return;
     const pan = G.pan; G.pan = null;
+    if (pan && pan.mov > 0) fijarVista();
     if (G.trazo) {
       const v = simplificar(G.trazo, 1.2 / vistaRef.current.k); G.trazo = null; setTrazo(null);
       if (v.length >= 2 && DIB.largo(v) > 3 / vistaRef.current.k) agregar([{ t: "fh", v }]);
@@ -4410,9 +4470,10 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     const el = svgRef.current; if (!el) return;
     const rueda = e => {
       e.preventDefault();
-      const r = el.getBoundingClientRect(), X = e.clientX - r.left, Y = e.clientY - r.top, v = vistaRef.current;
+      const r = el.parentElement.getBoundingClientRect(), X = e.clientX - r.left, Y = e.clientY - r.top, v = vistaRef.current;
       const k = Math.min(Math.max(v.k * Math.pow(1.0015, -e.deltaY), 0.0005), 5000), wm = aM(X, Y, v);
-      setVista({ k, cx: wm.x - (X - W / 2) / k, cy: wm.y + (Y - H / 2) / k });
+      moverVista({ k, cx: wm.x - (X - W / 2) / k, cy: wm.y + (Y - H / 2) / k });
+      clearTimeout(ruedaT.current); ruedaT.current = setTimeout(() => { ruedaT.current = null; setVistaR(vistaRef.current); }, 140);
     };
     el.addEventListener("wheel", rueda, { passive: false });
     return () => el.removeEventListener("wheel", rueda);
@@ -4478,15 +4539,18 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   const accionSobre = (id, herr2) => { setHerrR(herr2); setTemp([]); setRes(null); setSel(null); setGrupo(null); setTeclado(null); setObjA(null); setSelSet([id]); setSelListo(true); };
 
   // ── dibujo en pantalla ──
-  const els = [];
+  // la capa base (cuadrícula y objetos) solo se rehace si cambia algo que la afecte, no con cada movimiento del mouse
+  const capaDeps = [objs, vista, W, H, sel, selSet, objA, hoverId, herr === "borrar", cuadricula];
+  const cc = capaCache.current, vigente = !!cc.deps && cc.deps.every((d, i) => d === capaDeps[i]);
+  const base = vigente ? cc.els : [];
   let paso = 1;
   { const objetivo = 45 / vista.k, e10 = Math.pow(10, Math.floor(Math.log10(objetivo))); paso = [1, 2, 5, 10].map(m => m * e10).find(s => s >= objetivo) || 10 * e10; }
   const rayado = (id, col) => h("pattern", { key: id, id, width: 9, height: 9, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, h("line", { x1: 0, y1: 0, x2: 0, y2: 9, stroke: col, strokeWidth: 1.3 }));
-  els.push(h("defs", { key: "defs" }, rayado("tv-rayado", "#0284C7"), DIB_COLORES.map(([c]) => rayado("tv-rayado-" + c.slice(1), c))));
-  if (cuadricula) {
+  if (!vigente) base.push(h("defs", { key: "defs" }, rayado("tv-rayado", "#0284C7"), DIB_COLORES.map(([c]) => rayado("tv-rayado-" + c.slice(1), c))));
+  if (!vigente && cuadricula) {
     const p0 = aM(0, H, vista), p1 = aM(W, 0, vista);
-    for (let x = Math.ceil(p0.x / paso) * paso, n = 0; x <= p1.x && n < 200; x += paso, n++) { const X = aP({ x, y: 0 }).X; els.push(h("line", { key: "gx" + n, x1: X, y1: 0, x2: X, y2: H, stroke: Math.abs(x / paso / 5 - Math.round(x / paso / 5)) < 1e-6 ? "#CBD5E1" : "#EEF2F6" })); }
-    for (let y = Math.ceil(p0.y / paso) * paso, n = 0; y <= p1.y && n < 200; y += paso, n++) { const Y = aP({ x: 0, y }).Y; els.push(h("line", { key: "gy" + n, x1: 0, y1: Y, x2: W, y2: Y, stroke: Math.abs(y / paso / 5 - Math.round(y / paso / 5)) < 1e-6 ? "#CBD5E1" : "#EEF2F6" })); }
+    for (let x = Math.ceil(p0.x / paso) * paso, n = 0; x <= p1.x && n < 200; x += paso, n++) { const X = aP({ x, y: 0 }).X; base.push(h("line", { key: "gx" + n, x1: X, y1: 0, x2: X, y2: H, stroke: Math.abs(x / paso / 5 - Math.round(x / paso / 5)) < 1e-6 ? "#CBD5E1" : "#EEF2F6" })); }
+    for (let y = Math.ceil(p0.y / paso) * paso, n = 0; y <= p1.y && n < 200; y += paso, n++) { const Y = aP({ x: 0, y }).Y; base.push(h("line", { key: "gy" + n, x1: 0, y1: Y, x2: W, y2: Y, stroke: Math.abs(y / paso / 5 - Math.round(y / paso / 5)) < 1e-6 ? "#CBD5E1" : "#EEF2F6" })); }
   }
   const rellenoDe = o => o.som === "rayado" ? (o.col ? `url(#tv-rayado-${o.col.slice(1)})` : "url(#tv-rayado)") : o.som === "relleno" ? (o.col ? conAlfa(o.col, 0.32) : "rgba(2,132,199,0.32)") : o.t === "pl" && o.c ? (o.col ? conAlfa(o.col, 0.06) : "rgba(2,132,199,0.06)") : "none";
   const pathArco = (o, extra) => {
@@ -4532,8 +4596,12 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   };
   const marcado = o => o.id === sel || selSet.includes(o.id) || (objA && objA.id === o.id);
   const hovObj = hoverId && objs.find(o => o.id === hoverId);
-  if (hovObj) els.push(h("g", { key: "halo", opacity: 0.4, className: "tv-dib-halo" }, dibujarObj(hovObj, "halo-o", { col: herr === "borrar" ? "#DC2626" : "#F59E0B", ancho: 10 })));
-  objs.forEach(o => els.push(dibujarObj(o, o.id, marcado(o) ? { col: "#F59E0B", ancho: 3.5 } : o.id === hoverId && herr === "borrar" ? { col: "#DC2626", ancho: 3 } : null)));
+  if (!vigente) {
+    if (hovObj) base.push(h("g", { key: "halo", opacity: 0.4, className: "tv-dib-halo" }, dibujarObj(hovObj, "halo-o", { col: herr === "borrar" ? "#DC2626" : "#F59E0B", ancho: 10 })));
+    objs.forEach(o => base.push(dibujarObj(o, o.id, marcado(o) ? { col: "#F59E0B", ancho: 3.5 } : o.id === hoverId && herr === "borrar" ? { col: "#DC2626", ancho: 3 } : null)));
+    cc.deps = capaDeps; cc.els = base;
+  }
+  const els = base.slice();
   // operación en curso
   const tempS = temp.map(p => aP(p));
   const fig = cursor && figuraCon(cursor);
@@ -4751,7 +4819,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
           btnBarra("", () => deshacer(), "#334155", "undo-2"), btnBarra("", () => rehacer(), "#334155", "redo-2"))),
       h("div", { style: { position: "relative", flex: 1, minHeight: 0 } },
         h("svg", { ref: svgRef, width: "100%", height: "100%", className: "tv-dib-svg", style: { display: "block", touchAction: "none", userSelect: "none", cursor: ptr ? "none" : herr === "elegir" ? "grab" : "crosshair", background: "#fff" },
-          onPointerDown: onDown, onPointerMove: onMove, onPointerUp: onUp, onPointerCancel: e => { gesto.current.ptrs.delete(e.pointerId); gesto.current.pinch = null; gesto.current.trazo = null; setTrazo(null); },
+          onPointerDown: onDown, onPointerMove: onMove, onPointerUp: onUp, onPointerCancel: e => { gesto.current.ptrs.delete(e.pointerId); gesto.current.pinch = null; gesto.current.pan = null; gesto.current.trazo = null; setTrazo(null); fijarVista(); },
           onPointerLeave: e => { if (e.pointerType === "mouse") { setCursor(null); setPtr(null); setHoverId(null); } }, onContextMenu: e => e.preventDefault() }, els),
         // lupa: muestra ampliado lo que queda bajo el dedo (arriba del dedo para que no lo tape)
         lupa && cursor && pideIman(herr) && (() => {
@@ -4809,7 +4877,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
             const r = calc();
             const aplicar = () => {
               if (!r) return;
-              if (r.fig) { agregar([r.fig]); setTemp([]); setTeclado(null); irA(r.fig.c || r.fig.v[2], false); return; }
+              if (r.fig) { agregar([r.fig]); setTemp([]); setTeclado(null); irA(r.fig.t === "ci" ? r.fig.c : r.fig.v[2], false); return; }
               ponerPunto(r.p, herr === "punto" && teclado.nom.trim() ? teclado.nom.trim() : null); irA(r.p, herr === "punto");
               setTeclado({ ...teclado, N: "", E: "", D: "", AZ: "", DN: "", DE: "", nom: "" });
             };
@@ -4822,7 +4890,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
               : m === "rect" ? [campo("AN", "Ancho (m)", "17.000"), campo("AL", "Alto (m)", "11.000"), campo("AZR", "Azimut del ancho", "90")]
               : m === "lado" ? [campo("LA", "Lado (m)", "10.000"), campo("AZR", "Azimut del lado", "90")]
               : [campo("B", "Base (m)", "5.000"), campo("L2", "Lado 2 (m)", "4.000"), campo("L3", "Lado 3 (m)", "3.000"), campo("AZR", "Azimut base", "90")];
-            const ayuda = m === "abs" ? "Sobre el eje " + (eje.nom || "") + " (" + absCorta(eje.abs0 || 0) + " a " + absCorta((eje.abs0 || 0) + DIB.largo(eje.v)) + "). Desplazamiento positivo a la derecha, negativo a la izquierda." : m === "rect" ? "El ancho va con ese azimut (90 = hacia el Este) y el alto a su izquierda." : m === "lado" ? "El cuadrado se arma a la izquierda del lado." : m === "tri" ? "La base sale con ese azimut; el lado 2 sale del primer punto y el lado 3 del final de la base." : null;
+            const ayuda = m === "abs" && !eje ? "Ya no hay eje en el dibujo." : m === "abs" ? "Sobre el eje " + (eje.nom || "") + " (" + absCorta(eje.abs0 || 0) + " a " + absCorta((eje.abs0 || 0) + DIB.largo(eje.v)) + "). Desplazamiento positivo a la derecha, negativo a la izquierda." : m === "rect" ? "El ancho va con ese azimut (90 = hacia el Este) y el alto a su izquierda." : m === "lado" ? "El cuadrado se arma a la izquierda del lado." : m === "tri" ? "La base sale con ese azimut; el lado 2 sale del primer punto y el lado 3 del final de la base." : null;
             return h("form", { onSubmit: e => { e.preventDefault(); aplicar(); } },
               h("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } }, campos, herr === "punto" && campo("nom", "Nombre (opcional)", "P" + (dib.sig || 1))),
               m !== "ne" && base && h("div", { style: { fontSize: 11.5, color: C.muted, marginTop: 6, fontFamily: "monospace" } }, "Desde N " + f3(base.y) + "  E " + f3(base.x)),
@@ -4890,10 +4958,12 @@ function evaluarExpresion(texto, ans) {
   const numero = () => {
     const m = /^(\d+\.?\d*|\.\d+)/.exec(s.slice(i)); if (!m) error("Falta un número");
     i += m[0].length; let v = parseFloat(m[0]);
+    if (s[i] === ".") error("Número mal escrito (sobra un punto)");
     if (s[i] === "°") {   // grados°minutos'segundos"
       i++; const mm = /^(\d+\.?\d*|\.\d+)'/.exec(s.slice(i)); let min = 0, seg = 0;
       if (mm) { min = parseFloat(mm[1]); i += mm[0].length; }
       const ms = /^(\d+\.?\d*|\.\d+)"/.exec(s.slice(i)); if (ms) { seg = parseFloat(ms[1]); i += ms[0].length; }
+      if (/[0-9.]/.test(s[i] || "")) error("Después de los minutos va ' y después de los segundos va \"");
       v = v + min / 60 + seg / 3600;
     }
     return v;
@@ -4909,7 +4979,8 @@ function evaluarExpresion(texto, ans) {
     if (c === "(") { i++; const v = expr(); if (s[i] === ")") i++; else if (i < s.length) error("Falta cerrar el paréntesis"); return v; }
     if (c === "π") { i++; return Math.PI; }
     if (/[0-9.]/.test(c)) return numero();
-    if (c === "√" || c === "∛") { i++; const f = FUN[c]; if (s[i] === "(") { i++; return f(argumentos()[0]); } return f(potencia()); }
+    if (c === "√" || c === "∛") { i++; const f = FUN[c]; if (s[i] === "(") { i++; const a = argumentos(); if (a.length !== 1) error(c + " lleva un solo valor"); return f(a[0]); } return f(potencia()); }
+    const inicioNombre = i;
     const m = /^(Ans|Pol|Rec|sin⁻¹|cos⁻¹|tan⁻¹|asin|acos|atan|sin|cos|tan|log|ln|abs|sqrt)/i.exec(s.slice(i));
     if (!m) error("No entiendo «" + c + "»");
     const nom = m[1].length > 3 && /⁻¹/.test(m[1]) ? m[1] : m[1].toLowerCase() === "ans" ? "Ans" : m[1].toLowerCase() === "pol" ? "Pol" : m[1].toLowerCase() === "rec" ? "Rec" : m[1].toLowerCase();
@@ -4919,8 +4990,10 @@ function evaluarExpresion(texto, ans) {
     i++; const a = argumentos();
     if (nom === "Pol" || nom === "Rec") {
       if (a.length !== 2) error(nom + " necesita dos valores: " + nom + "(a, b)");
-      if (nom === "Pol") { const r = Math.hypot(a[0], a[1]), th = grad(Math.atan2(a[1], a[0])); par = { tipo: "Pol", r, th }; return r; }
-      const X = a[0] * Math.cos(rad(a[1])), Y = a[0] * Math.sin(rad(a[1])); par = { tipo: "Rec", X, Y }; return X;
+      // el resultado doble (r y θ, o X y Y) solo se muestra si Pol/Rec es toda la cuenta
+      const entera = inicioNombre === 0 && i === s.length;
+      if (nom === "Pol") { const r = Math.hypot(a[0], a[1]), th = grad(Math.atan2(a[1], a[0])); if (entera) par = { tipo: "Pol", r, th }; return r; }
+      const X = a[0] * Math.cos(rad(a[1])), Y = a[0] * Math.sin(rad(a[1])); if (entera) par = { tipo: "Rec", X, Y }; return X;
     }
     if (a.length !== 1) error(nom + " lleva un solo valor");
     return FUN[nom](a[0]);
@@ -4928,12 +5001,13 @@ function evaluarExpresion(texto, ans) {
   const postfijo = () => { let v = primario(); for (;;) { if (s[i] === "²") { i++; v = v * v; } else if (s[i] === "³") { i++; v = v * v * v; } else if (s[i] === "!") { i++; if (v < 0 || v > 170 || v % 1) error("Factorial solo de enteros de 0 a 170"); let f = 1; for (let k = 2; k <= v; k++) f *= k; v = f; } else return v; } };
   const potencia = () => { const b = postfijo(); if (s[i] === "^") { i++; return Math.pow(b, unario()); } return b; };
   const unario = () => { if (s[i] === "-") { i++; return -unario(); } if (s[i] === "+") { i++; return unario(); } return potencia(); };
+  // multiplicación sin signo (2π, 3(4+1), 2sin(30)) va antes que × y ÷, como en las Casio: 100÷2π = 100÷(2π)
+  const implicito = () => { let v = unario(); while (esInicio(s[i])) v *= potencia(); return v; };
   const termino = () => {
-    let v = unario();
+    let v = implicito();
     for (;;) {
-      if (s[i] === "*") { i++; v *= unario(); }
-      else if (s[i] === "/") { i++; const d = unario(); if (d === 0) error("No se puede dividir entre cero"); v /= d; }
-      else if (esInicio(s[i])) v *= unario();   // multiplicación sin signo: 2π, 3(4+1), 2sin(30)
+      if (s[i] === "*") { i++; v *= implicito(); }
+      else if (s[i] === "/") { i++; const d = implicito(); if (d === 0) error("No se puede dividir entre cero"); v /= d; }
       else return v;
     }
   };
@@ -5791,7 +5865,53 @@ async function exportarCartera(proyecto, tabla, niv) {
   }
 }
 
+// Filas de la cartera y de las cotas: memorizadas, así al escribir una lectura solo se vuelve a dibujar
+// esa fila (con carteras de cientos de abscisas cada tecla era lenta en celulares sencillos).
+const STICKY_ABS = { position: "sticky", left: 0, zIndex: 2 };
+const INP_LECT = { width: 64, padding: "3px 4px", borderRadius: 4, fontSize: 12, fontFamily: "monospace", textAlign: "center" };
+const mismaLectura = (a, b) => a.abs === b.abs && (a.sub || 0) === (b.sub || 0) && a.estacionId === b.estacionId && a.fecha === b.fecha && CAMPOS_LECTURA.every(k => (a[k] || "") === (b[k] || ""));
+const FilaLectura = React.memo(function FilaLectura({ lec, i, nivId, acc, estActiva, estColor, colorBloque, tieneAI, pendiente, esSiguiente, aplica, estaciones }) {
+  const A = () => acc.current[nivId];
+  return React.createElement("tr", { "data-i": i, style: { background: esSiguiente ? "#FFF6D6" : estActiva ? "#EBF5FF" : i % 2 === 0 ? "#fff" : "#F8FAFC" } },
+    // abscisa fija a la izquierda: es la guía, siempre visible
+    React.createElement("td", { style: { ...tdS, ...STICKY_ABS, fontFamily: "monospace", fontWeight: 700, background: RASANTE_BG, color: RASANTE_TEXT, whiteSpace: "nowrap", borderLeft: "4px solid " + colorBloque } },
+      formatoAbscisa(lec.abs), lec.sub ? " (" + (lec.sub + 1) + ")" : "",
+      !pendiente && React.createElement("span", { style: { color: "#7FB77E", marginLeft: 4 } }, "✓"),
+      lec.sub
+        ? React.createElement("button", { className: "tv-mini", onClick: () => A().quitarLectura(i), title: "Quitar lectura extra", style: { marginLeft: 6, border: "none", background: "none", color: "#FF8A80", cursor: "pointer", fontWeight: 700 } }, "✕")
+        : React.createElement("button", { className: "tv-mini", onClick: () => A().agregarLectura(i), title: "Otra lectura en esta abscisa", style: { marginLeft: 6, border: "1px solid #FBBF2488", borderRadius: 4, background: "none", color: "#FBBF24", cursor: "pointer", fontWeight: 700, padding: "0 5px" } }, "＋")),
+    React.createElement("td", { style: { ...tdS, whiteSpace: "nowrap", minWidth: 110 } },
+      estActiva
+        ? React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 4 } },
+            React.createElement("span", { style: { background: estColor, color: "#fff", borderRadius: 4, padding: "1px 6px", fontSize: 10, fontWeight: 700 } }, estActiva.nombre),
+            React.createElement("button", { className: "tv-mini", onClick: () => A().setEstacion(i, null), style: { border: "none", background: "none", cursor: "pointer", color: C.danger, fontWeight: 700, fontSize: 11 } }, "✕"))
+        : React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 4 } },
+            tieneAI && React.createElement("span", { style: { width: 8, height: 8, borderRadius: "50%", background: colorBloque, display: "inline-block" } }),
+            React.createElement("select", { value: "", onChange: e => { if (e.target.value) A().setEstacion(i, parseFloat(e.target.value)); },
+              style: { fontSize: 11, padding: "1px 2px", border: "1px solid " + (tieneAI ? C.border : C.danger), borderRadius: 4, color: tieneAI ? C.muted : C.danger } },
+              React.createElement("option", { value: "" }, tieneAI ? "↓ hereda" : "Sin est."),
+              estaciones.map(e => React.createElement("option", { key: e.id, value: e.id }, e.nombre))))),
+    React.createElement("td", { style: { ...tdS, fontSize: 11, color: C.muted, whiteSpace: "nowrap" } }, fechaCorta(lec.fecha)),
+    CAMPOS_LECTURA.map((campo, k) => {
+      const ap = aplica[k] === "1";
+      return React.createElement("td", { key: campo, style: { ...tdS, padding: "3px 4px", background: ap ? "#EAFAF1" : "#F0F0F0" } },
+        React.createElement("input", { value: ap ? (lec[campo] || "") : "", readOnly: !ap, disabled: !ap, inputMode: "decimal",
+          onChange: ap ? e => A().updFila(i, campo, e.target.value) : undefined,
+          style: { ...INP_LECT, ...(ap ? { border: "2px solid #27AE60", background: "#fff", color: "#155724", fontWeight: 700 } : { border: "1px solid #ddd", background: "#EBEBEB", color: "#bbb", cursor: "not-allowed" }) },
+          title: ap ? "Lectura de campo" : "No aplica en este punto" }));
+    }));
+}, (a, b) => a.i === b.i && a.nivId === b.nivId && a.estColor === b.estColor && a.colorBloque === b.colorBloque && a.tieneAI === b.tieneAI && a.pendiente === b.pendiente
+  && a.esSiguiente === b.esSiguiente && a.aplica === b.aplica && a.estActiva === b.estActiva && a.estaciones === b.estaciones && mismaLectura(a.lec, b.lec));
+const FilaCota = React.memo(function FilaCota({ i, abs, ai, v }) {
+  const fmt = x => x !== null ? x.toFixed(3) : "—";
+  return React.createElement("tr", { style: { background: i % 2 === 0 ? "#fff" : "#F0FBF0" } },
+    React.createElement("td", { style: { ...tdS, ...STICKY_ABS, fontFamily: "monospace", fontWeight: 700, background: RASANTE_BG, color: RASANTE_TEXT } }, abs),
+    React.createElement("td", { style: { ...tdS, fontFamily: "monospace", color: C.success, fontWeight: 700 } }, ai !== null ? ai.toFixed(3) : "—"),
+    v.split("|").map((x, k) => React.createElement("td", { key: k, style: { ...tdS, fontFamily: "monospace", fontWeight: k === 2 ? 800 : 400 } }, x === "" ? "—" : fmt(parseFloat(x)))));
+});
+
 function TabNivelaciones({ proyecto, tabla, onChange, onArchivo }) {
+  const accRef = React.useRef({});   // acciones de cada nivelación para las filas memorizadas
   const nivelaciones = proyecto.nivelaciones || [];
   const updProyecto = arr => onChange({ ...proyecto, nivelaciones: arr });
   const estacionNueva = n => ({ id: Math.random(), nombre: "Est. " + n, cotaBM: "", vistaMas: "", fecha: hoyISO() });
@@ -5845,6 +5965,8 @@ function TabNivelaciones({ proyecto, tabla, onChange, onArchivo }) {
         guardar(arr);
       };
       const quitarLectura = i => { if (confirm("¿Quitar esta lectura extra?")) guardar(lecturas.filter((_, j) => j !== i)); };
+      accRef.current[niv.id] = { updFila, setEstacion, agregarLectura, quitarLectura };
+      const colorBloques = []; { let cb = "#ccc"; lecturas.forEach((l, i) => { if (l.estacionId) cb = estColorMap[l.estacionId] || C.accent; colorBloques[i] = cb; }); }
       const cotas = calcCotasNivelacion(niv, tabla);
       const hayCotas = cotas.some(c => c.cotaEje !== null || c.cotaDer !== null || c.cotaIzq !== null);
       // lecturas escritas que aún no tienen altura instrumental (falta BM/V⁺ o marcar la estación)
@@ -5908,68 +6030,35 @@ function TabNivelaciones({ proyecto, tabla, onChange, onArchivo }) {
           React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: C.accent, marginBottom: 4 } }, "Lecturas de campo — ", niv.nombre),
           React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 8 } },
             "Verde = punto que se debe leer; gris = no aplica. La fecha se pone sola. Con ＋ agregas otra lectura en la misma abscisa (cambio brusco de nivel)."),
-          React.createElement("div", { style: { overflow: "auto", maxHeight: "70vh", border: `1px solid ${C.border}`, borderRadius: 6 } },
-            React.createElement("table", { id: idTabla, style: { borderCollapse: "separate", borderSpacing: 0, fontSize: 12, width: "100%" } },
+          React.createElement("div", { style: { overflow: "auto", maxHeight: "70vh", border: `1px solid ${C.border}`, borderRadius: 6, contain: "content" } },
+            React.createElement("table", { id: idTabla, style: { borderCollapse: "separate", borderSpacing: 0, fontSize: 12, tableLayout: "fixed", width: 720, minWidth: "100%" } },
+              React.createElement("colgroup", null, [132, 122, 66, 80, 80, 80, 80, 80].map((w, k) => React.createElement("col", { key: k, style: { width: w } }))),
               React.createElement("thead", null, React.createElement("tr", null,
                 ["ABSCISA", "📌 Est.", "Fecha", "PARQ DER", "LAT DER", "EJE", "LAT IZQ", "PARQ IZQ"].map((h, k) =>
                   React.createElement("th", { key: h, style: { ...thS, padding: "6px 8px", fontSize: 10, background: C.accent, color: "#fff", position: "sticky", top: 0, zIndex: k === 0 ? 4 : 3, ...(k === 0 ? { left: 0 } : {}) } }, h)))),
               React.createElement("tbody", null,
                 lecturas.map((lec, i) => {
-                  const estActiva = lec.estacionId ? estaciones.find(e => e.id === lec.estacionId) : null;
-                  const colorBloque = (() => { for (let j = i; j >= 0; j--) { if (lecturas[j] && lecturas[j].estacionId) return estColorMap[lecturas[j].estacionId] || C.accent; } return "#ccc"; })();
-                  const aiEfectivo = resolverAI(lecturas, estaciones, i);
+                  const estActiva = lec.estacionId ? estaciones.find(e => e.id === lec.estacionId) || null : null;
                   const d = puntosDiseno(lec.row);
-                  const pendiente = CAMPOS_LECTURA.some(k => d[k] !== null && d[k] !== undefined && !hayLectura(lec[k]));
-                  const esSiguiente = av.siguiente && av.siguiente.i === i;
-                  const inp = { width: 64, padding: "3px 4px", borderRadius: 4, fontSize: 12, fontFamily: "monospace", textAlign: "center" };
-                  return React.createElement("tr", { key: lec.abs + "-" + (lec.sub || 0), "data-i": i, style: { background: esSiguiente ? "#FFF6D6" : estActiva ? "#EBF5FF" : i % 2 === 0 ? "#fff" : "#F8FAFC" } },
-                    // abscisa fija a la izquierda: es la guía, siempre visible
-                    React.createElement("td", { style: { ...tdS, ...stickyAbs, fontFamily: "monospace", fontWeight: 700, background: RASANTE_BG, color: RASANTE_TEXT, whiteSpace: "nowrap", borderLeft: "4px solid " + colorBloque } },
-                      formatoAbscisa(lec.abs), lec.sub ? " (" + (lec.sub + 1) + ")" : "",
-                      !pendiente && React.createElement("span", { style: { color: "#7FB77E", marginLeft: 4 } }, "✓"),
-                      lec.sub
-                        ? React.createElement("button", { onClick: () => quitarLectura(i), title: "Quitar lectura extra", style: { marginLeft: 6, border: "none", background: "none", color: "#FF8A80", cursor: "pointer", fontWeight: 900 } }, "✕")
-                        : React.createElement("button", { onClick: () => agregarLectura(i), title: "Otra lectura en esta abscisa", style: { marginLeft: 6, border: "1px solid #FBBF2488", borderRadius: 4, background: "none", color: RASANTE_TEXT, cursor: "pointer", fontWeight: 900, padding: "0 5px" } }, "＋")),
-                    React.createElement("td", { style: { ...tdS, whiteSpace: "nowrap", minWidth: 110 } },
-                      estActiva
-                        ? React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 4 } },
-                            React.createElement("span", { style: { background: estColorMap[estActiva.id], color: "#fff", borderRadius: 4, padding: "1px 6px", fontSize: 10, fontWeight: 700 } }, estActiva.nombre),
-                            React.createElement("button", { onClick: () => setEstacion(i, null), style: { border: "none", background: "none", cursor: "pointer", color: C.danger, fontWeight: 700, fontSize: 11 } }, "✕"))
-                        : React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 4 } },
-                            aiEfectivo !== null && React.createElement("span", { style: { width: 8, height: 8, borderRadius: "50%", background: colorBloque, display: "inline-block" } }),
-                            React.createElement("select", { value: "", onChange: e => { if (e.target.value) setEstacion(i, parseFloat(e.target.value)); },
-                              style: { fontSize: 11, padding: "1px 2px", border: "1px solid " + (aiEfectivo !== null ? C.border : C.danger), borderRadius: 4, color: aiEfectivo !== null ? C.muted : C.danger } },
-                              React.createElement("option", { value: "" }, aiEfectivo !== null ? "↓ hereda" : "Sin est."),
-                              estaciones.map(e => React.createElement("option", { key: e.id, value: e.id }, e.nombre))))),
-                    React.createElement("td", { style: { ...tdS, fontSize: 11, color: C.muted, whiteSpace: "nowrap" } }, fechaCorta(lec.fecha)),
-                    CAMPOS_LECTURA.map(campo => {
-                      const aplica = d[campo] !== null && d[campo] !== undefined;
-                      return React.createElement("td", { key: campo, style: { ...tdS, padding: "3px 4px", background: aplica ? "#EAFAF1" : "#F0F0F0" } },
-                        React.createElement("input", { value: aplica ? (lec[campo] || "") : "", readOnly: !aplica, disabled: !aplica, inputMode: "decimal",
-                          onChange: aplica ? e => updFila(i, campo, e.target.value) : undefined,
-                          style: { ...inp, ...(aplica ? { border: "2px solid #27AE60", background: "#fff", color: "#155724", fontWeight: 700 } : { border: "1px solid #ddd", background: "#EBEBEB", color: "#bbb", cursor: "not-allowed" }) },
-                          title: aplica ? "Lectura de campo" : "No aplica en este punto" }));
-                    }));
+                  const aplica = CAMPOS_LECTURA.map(k => d[k] !== null && d[k] !== undefined ? "1" : "0").join("");
+                  return React.createElement(FilaLectura, { key: lec.abs + "-" + (lec.sub || 0), lec, i, nivId: niv.id, acc: accRef, estActiva, estColor: estActiva ? estColorMap[estActiva.id] : null,
+                    colorBloque: colorBloques[i], tieneAI: resolverAI(lecturas, estaciones, i) !== null,
+                    pendiente: CAMPOS_LECTURA.some((k, j) => aplica[j] === "1" && !hayLectura(lec[k])), esSiguiente: !!(av.siguiente && av.siguiente.i === i), aplica, estaciones });
                 }))))),
         // ── Cotas ──
         (hayCotas || hayLecturas) && React.createElement("div", null,
           React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: C.success, marginBottom: 6 } }, "Cotas — ", niv.nombre, " (AI − Lectura)"),
           sinAI.length > 0 && React.createElement("div", { style: { background: "#FDEDEC", border: `1px solid ${C.danger}`, color: C.danger, borderRadius: 8, padding: "8px 12px", marginBottom: 8, fontSize: 13, fontWeight: 600 } },
             `⚠ ${sinAI.length === 1 ? "Hay 1 abscisa" : "Hay " + sinAI.length + " abscisas"} con lecturas pero sin cota: escribe la Cota BM y la Vista⁺ de la estación y márcala en 📌 Est. en la abscisa donde empieza (desde ${formatoAbscisa(sinAI[0].abs)}).`),
-          React.createElement("div", { style: { overflow: "auto", maxHeight: "60vh", border: `1px solid ${C.border}`, borderRadius: 6 } },
-            React.createElement("table", { style: { borderCollapse: "separate", borderSpacing: 0, fontSize: 12, width: "100%" } },
+          React.createElement("div", { style: { overflow: "auto", maxHeight: "60vh", border: `1px solid ${C.border}`, borderRadius: 6, contain: "content" } },
+            React.createElement("table", { style: { borderCollapse: "separate", borderSpacing: 0, fontSize: 12, tableLayout: "fixed", width: 720, minWidth: "100%" } },
+              React.createElement("colgroup", null, [112, 84, 104, 104, 104, 104, 108].map((w, k) => React.createElement("col", { key: k, style: { width: w } }))),
               React.createElement("thead", null, React.createElement("tr", null,
                 ["ABSCISA", "AI", "COTA PARQ DER", "COTA LAT DER", "COTA EJE", "COTA LAT IZQ", "COTA PARQ IZQ"].map((h, k) =>
                   React.createElement("th", { key: h, style: { ...thS, fontSize: 10, background: C.success, color: "#fff", position: "sticky", top: 0, zIndex: k === 0 ? 4 : 3, ...(k === 0 ? { left: 0 } : {}) } }, h)))),
               React.createElement("tbody", null,
-                cotas.map((c, i) => {
-                  const fmt = v => v !== null ? v.toFixed(3) : "—";
-                  return React.createElement("tr", { key: i, style: { background: i % 2 === 0 ? "#fff" : "#F0FBF0" } },
-                    React.createElement("td", { style: { ...tdS, ...stickyAbs, fontFamily: "monospace", fontWeight: 700, background: RASANTE_BG, color: RASANTE_TEXT } }, c.absFormato),
-                    React.createElement("td", { style: { ...tdS, fontFamily: "monospace", color: C.success, fontWeight: 700 } }, c.ai !== null ? c.ai.toFixed(3) : "—"),
-                    [c.cotaParqDer, c.cotaDer, c.cotaEje, c.cotaIzq, c.cotaParqIzq].map((v, k) =>
-                      React.createElement("td", { key: k, style: { ...tdS, fontFamily: "monospace", fontWeight: k === 2 ? 800 : 400 } }, fmt(v))));
-                }))))));
+                cotas.map((c, i) => React.createElement(FilaCota, { key: i, i, abs: c.absFormato, ai: c.ai,
+                  v: [c.cotaParqDer, c.cotaDer, c.cotaEje, c.cotaIzq, c.cotaParqIzq].map(x => x === null || x === undefined ? "" : String(x)).join("|") })))))));
     }));
 }
 
@@ -7196,7 +7285,7 @@ function App() {
     proyecto: proy,
     tabla: tabla,
     onChange: function(cambios) { updSinRecalcular(cambios); }
-  }), tab === "verif" && React.createElement(Calculadora, null), tab === "dibujo" && React.createElement(TabDibujo, { proy, onChange: d => updSinRecalcular({ dibujos: d }), onArchivo: setArchivo }), tab === "memoria" && /*#__PURE__*/React.createElement(Card, {
+  }), tab === "verif" && React.createElement(Calculadora, null), tab === "dibujo" && React.createElement(TabDibujo, { key: proy.id, proy, onChange: d => updSinRecalcular({ dibujos: d }), onArchivo: setArchivo }), tab === "memoria" && /*#__PURE__*/React.createElement(Card, {
     title: "Memoria de Proyectos"
   }, memoria.length === 0 && /*#__PURE__*/React.createElement("div", {
     style: {
@@ -7267,6 +7356,7 @@ var __topoviasRoot__ = ReactDOM.createRoot(document.getElementById("root"));
 // Primero se cargan los datos guardados en el dispositivo, luego se muestra la app
 precargarDatos([TV_KEY, TV_KEY + '_obras']).then(function() {
   __topoviasRoot__.render(React.createElement(App));
+  if (DATOS.avisoCarga) setTimeout(function() { alert("⚠ No se pudieron abrir todos tus datos guardados (la base de datos del equipo no respondió).\n\nNo se perdió nada: cierra las otras pestañas o ventanas de TopoVías y vuelve a abrir la app. Mientras tanto, los cambios no se guardarán."); }, 300);
 });
 // Modo sin conexión (solo cuando la app se abre desde una dirección web, no como archivo suelto)
 // Cuando llega una versión nueva con la app abierta, se avisa con un botón "Actualizar"
