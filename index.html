@@ -692,6 +692,29 @@ function rangoVia(proy) {
   resolverTodos(proy.tramos || []).forEach(rt => { fin = r3(fin + (rt.distancia || 0)); });
   return { ini, fin };
 }
+// Lateral con rasante propia en una vía con quiebres: el lado de afuera mide más y el de adentro menos.
+// Cada tramo del lateral se reparte en su tramo del eje (si tienen los mismos quiebres) o en todo el largo,
+// para que a cada abscisa del eje le toque el punto del lateral que está frente a ella.
+// Devuelve la distancia recorrida en el lateral, o null si no se reparte (lateral que empieza en otra abscisa).
+function largosTramos(rs) {
+  const l = [];
+  for (const rt of rs) { if (!rt || rt.distancia === null || !isFinite(rt.distancia) || rt.distancia <= 0) break; l.push(rt.distancia); }
+  return l;
+}
+function distEnLateral(ejeR, latR, abs, ini) {
+  const le = largosTramos(ejeR), ll = largosTramos(latR);
+  const Le = le.reduce((a, b) => a + b, 0), Ll = ll.reduce((a, b) => a + b, 0);
+  if (Le <= 0 || Ll <= 0) return null;
+  const x = Math.min(Math.max(abs - ini, 0), Le);
+  if (le.length === ll.length) {
+    let a = 0, b = 0;
+    for (let i = 0; i < le.length; i++) {
+      if (x <= a + le[i] + 1e-9 || i === le.length - 1) return b + (x - a) / le[i] * ll[i];
+      a += le[i]; b += ll[i];
+    }
+  }
+  return x / Le * Ll;
+}
 function datosCabecera(p) {
   const fondo = Math.abs(parseFloat(p.fondo)), d = Math.abs(parseFloat(p.desde) || 0), h = Math.abs(parseFloat(p.hasta));
   const ok = !isNaN(fondo) && fondo > 0 && !isNaN(h) && Math.abs(h - d) > 0.0005;
@@ -923,6 +946,11 @@ function generarTabla(proyecto) {
         const latR = resolverTodos(lat.tramos || []);
         if (!latR.length || !latR[0].completo) return null;
         const latAbsIni = parseFloat(lat.absInicio || absInicio) || absIni;
+        // nace con la vía: se reparte a lo largo del eje (quiebres); si nace en otra abscisa, va a la par del eje
+        if (Math.abs(latAbsIni - absIni) < 0.0005) {
+          const dl = distEnLateral(tramosR, latR, abs, absIni);
+          if (dl !== null) return calcCotaEnAbscisa(latR, latAbsIni, latAbsIni + dl);
+        }
         const latFin = r3(latAbsIni + latR.reduce((s, rt) => s + (rt.distancia || 0), 0));
         if (abs < latAbsIni - 0.001 || abs > latFin + 0.001) return null;
         return calcCotaEnAbscisa(latR, latAbsIni, abs);
@@ -1266,22 +1294,31 @@ function abscisasTramos(tramos, ini) {
   });
   return { filas, fin: a, incompleto: !ok };
 }
-function FranjaAbscisa({ f, color, fondo }) {
+function FranjaAbscisa({ f, color, fondo, eje }) {
   return React.createElement("div", { className: "tv-franja-abs", style: { marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", background: fondo || "#EFF6FF",
       border: `1px dashed ${color || "#60A5FA"}`, borderRadius: 8, padding: "6px 12px", fontSize: 13, color: "#334155" } },
     "📍 Abscisa",
     f.hasta !== null
       ? [React.createElement("b", { key: "a", style: { fontFamily: "monospace", fontSize: 15 } }, formatoAbscisa(f.desde)), "→", React.createElement("b", { key: "b", style: { fontFamily: "monospace", fontSize: 15 } }, formatoAbscisa(f.hasta))]
-      : React.createElement("span", { style: { color: C.muted } }, "falta la distancia de este tramo (o de uno anterior)"));
+      : React.createElement("span", { style: { color: C.muted } }, "falta la distancia de este tramo (o de uno anterior)"),
+    eje && f.hasta !== null ? React.createElement("span", { style: { color: C.muted, fontSize: 12 } }, "· frente al eje ", formatoAbscisa(eje[0]), " → ", formatoAbscisa(eje[1])) : null);
 }
 // Al pie de los tramos: hasta dónde llega y, si debe llegar a otra abscisa, cuánto falta o sobra
-function PieAbscisas({ fin, incompleto, meta, nombre, queMeta, color }) {
+function PieAbscisas({ fin, incompleto, meta, nombre, queMeta, color, info }) {
   const dif = meta !== null && meta !== undefined && !isNaN(meta) ? r3(meta - fin) : null;
   const mono = t => React.createElement("b", { style: { fontFamily: "monospace", fontSize: 16 } }, t);
   return React.createElement("div", { className: "tv-pie-abs", style: { marginTop: 4, marginBottom: 10, display: "flex", gap: "4px 14px", flexWrap: "wrap", alignItems: "center", background: color || "#0F172A", color: "#fff", borderRadius: 10, padding: "9px 14px", fontSize: 13.5 } },
     React.createElement("span", null, nombre, " hasta ", mono(formatoAbscisa(fin))),
     incompleto ? React.createElement("span", { style: { color: "#FDE68A" } }, "⚠ hay un tramo sin distancia: de ahí no se suma") : null,
     dif === null ? null
+      : info ? (() => {
+        // lateral de una vía con quiebres: es normal que mida más (lado de afuera) o menos (lado de adentro)
+        const largoEje = Math.abs(meta - info.ini), mucho = largoEje > 0 && Math.abs(dif) > 0.15 * largoEje;
+        return React.createElement("span", null, "eje hasta ", mono(formatoAbscisa(meta)), " · ",
+          Math.abs(dif) < 0.0005 ? React.createElement("span", { style: { color: "#86EFAC" } }, "mismo largo que el eje")
+            : React.createElement("span", { style: { color: mucho ? "#FDE68A" : "#7DD3FC" } }, Math.abs(dif).toFixed(3), " m ", dif < 0 ? "más largo (lado de afuera del quiebre)" : "más corto (lado de adentro del quiebre)",
+                mucho ? " — revisa si falta o sobra un tramo" : ""));
+      })()
       : Math.abs(dif) < 0.0005 ? React.createElement("span", { style: { color: "#86EFAC" } }, "✓ llega justo a ", queMeta, " (", formatoAbscisa(meta), ")")
       : React.createElement("span", null, queMeta, " ", mono(formatoAbscisa(meta)), " → ", React.createElement("b", { style: { color: "#FCA5A5" } }, dif > 0 ? "faltan " + dif.toFixed(3) + " m" : "se pasa " + (-dif).toFixed(3) + " m")));
 }
@@ -1557,7 +1594,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "52";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "53";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -2275,7 +2312,72 @@ function svgPerfil(d) {
   return { svg: o.join(""), W, H };
 }
 
+// Planta con la forma real: si están las coordenadas de los PI del eje, la vía se dibuja con sus quiebres
+// (los bordes a su ancho, con la esquina de cada quiebre en inglete) y los parqueaderos pegados a ella.
+function svgPlantaReal(d) {
+  const proy = d.proy, A = anchosProyecto(proy), P = proyCalc(proy);
+  const le = largosTramos(resolverTodos(proy.tramos || []));
+  const pts = (proy.coordsEje || []).map(q => ({ x: parseFloat(q.este), y: parseFloat(q.norte) })).filter(q => isFinite(q.x) && isFinite(q.y));
+  if (le.length < 1 || pts.length < le.length + 1) return null;
+  const V = pts.slice(0, le.length + 1);
+  const seg = V.slice(0, -1).map((q, i) => { const dx = V[i + 1].x - q.x, dy = V[i + 1].y - q.y, L = Math.hypot(dx, dy); return L > 1e-6 ? { ux: dx / L, uy: dy / L } : null; });
+  if (seg.some(x => !x)) return null;
+  const ini = r3(parseFloat(proy.absInicio) || 0), Ab = [ini]; le.forEach(l => Ab.push(Ab[Ab.length - 1] + l));
+  const fin = Ab[Ab.length - 1];
+  const nI = i => ({ x: seg[i].uy, y: -seg[i].ux });        // normal hacia la derecha del eje
+  // punto a una abscisa y a una distancia del eje (derecha +, izquierda −); en un quiebre, en inglete
+  const Q = (abs, o) => {
+    for (let k = 1; k < Ab.length - 1; k++) if (Math.abs(abs - Ab[k]) < 1e-6) {
+      const n1 = nI(k - 1), n2 = nI(k), den = 1 + n1.x * n2.x + n1.y * n2.y;
+      const m = den > 0.05 ? { x: (n1.x + n2.x) / den, y: (n1.y + n2.y) / den } : n2;
+      return { x: V[k].x + m.x * o, y: V[k].y + m.y * o };
+    }
+    let i = 0; while (i < le.length - 1 && abs > Ab[i + 1]) i++;
+    const t = (abs - Ab[i]) / le[i], L = Math.hypot(V[i + 1].x - V[i].x, V[i + 1].y - V[i].y), n = nI(i);
+    return { x: V[i].x + seg[i].ux * t * L + n.x * o, y: V[i].y + seg[i].uy * t * L + n.y * o };
+  };
+  const curva = (a, b, o) => [a].concat(Ab.filter(x => x > a + 1e-6 && x < b - 1e-6), [b]).map(x => Q(x, o));
+  const franja = (a, b, o1, o2) => curva(a, b, o1).concat(curva(a, b, o2).reverse());
+  const formas = [{ pts: franja(ini, fin, -A.anchoIzq, A.anchoDer), fill: GC.via, stroke: GC.borde, w: 1.5 }];
+  (P.parqueaderos || []).forEach(p => {
+    const a = parseFloat(p.absInicio), b = parseFloat(p.absFin); if (isNaN(a) || isNaN(b)) return;
+    const lo = Math.min(a, b), hi = Math.max(a, b), izq = p.lado === "izquierdo";
+    let o1, o2;
+    if (esCabecera(p)) { const k = datosCabecera(p); if (!k.ok) return; o1 = izq ? -k.hasta : k.desde; o2 = izq ? -k.desde : k.hasta; }
+    else { const w = parseFloat(p.ancho) || 0, b0 = izq ? A.anchoIzq : A.anchoDer; o1 = izq ? -(b0 + w) : b0; o2 = izq ? -b0 : b0 + w; }
+    formas.push({ pts: franja(lo, hi, o1, o2), fill: GC.parq, stroke: GC.parqBorde, w: 1, dash: "5,3", nombre: (String(p.id).slice(-2) === "~d" ? "" : p.nombreBase || p.nombre || "Parqueadero") });
+  });
+  const todos = formas.flatMap(f => f.pts).concat(V);
+  const mnx = Math.min(...todos.map(q => q.x)), mxx = Math.max(...todos.map(q => q.x)), mny = Math.min(...todos.map(q => q.y)), mxy = Math.max(...todos.map(q => q.y));
+  const W = 1100, M = 70, esc = Math.min((W - 2 * M) / ((mxx - mnx) || 1), 560 / ((mxy - mny) || 1));
+  const H = Math.max(260, (mxy - mny) * esc + 2 * M);
+  const X = q => M + (q.x - mnx) * esc + ((W - 2 * M) - (mxx - mnx) * esc) / 2, Y = q => H - M - (q.y - mny) * esc;
+  const pl = arr => arr.map(q => X(q).toFixed(1) + "," + Y(q).toFixed(1)).join(" ");
+  const o = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H.toFixed(0)}" width="${W}" height="${H.toFixed(0)}" font-family="Arial, Helvetica, sans-serif">`,
+    `<rect x="0" y="0" width="${W}" height="${H.toFixed(1)}" fill="#FFFFFF"/>`];
+  formas.forEach(f => o.push(`<polygon points="${pl(f.pts)}" fill="${f.fill}" stroke="${f.stroke}" stroke-width="${f.w}"${f.dash ? ` stroke-dasharray="${f.dash}"` : ""}/>`));
+  formas.filter(f => f.nombre).forEach(f => { const c = f.pts.reduce((m, q) => ({ x: m.x + q.x / f.pts.length, y: m.y + q.y / f.pts.length }), { x: 0, y: 0 });
+    o.push(svgT(X(c), Y(c) + 4, f.nombre, `text-anchor="middle" font-size="10" font-weight="bold" fill="#6D4C41"`)); });
+  o.push(`<polyline points="${pl(curva(ini, fin, 0))}" fill="none" stroke="${GC.rasante}" stroke-width="2" stroke-dasharray="10,5"/>`);
+  // abscisado cada 10 m (marca a lo ancho del eje y el número afuera del borde derecho)
+  for (let x = Math.ceil(ini / 10 - 1e-9) * 10; x <= fin + 1e-9; x += 10) {
+    const a = Q(x, -1.2), b = Q(x, 1.2), t = Q(x, A.anchoDer + 18 / esc);
+    o.push(`<line x1="${X(a).toFixed(1)}" y1="${Y(a).toFixed(1)}" x2="${X(b).toFixed(1)}" y2="${Y(b).toFixed(1)}" stroke="${GC.rasante}" stroke-width="1.5"/>`,
+      svgT(X(t), Y(t) + 4, formatoAbscisa(x), `text-anchor="middle" font-size="10" fill="${GC.texto}"`));
+  }
+  // PI con su abscisa y el ángulo del quiebre
+  V.forEach((q, k) => {
+    let txt = "PI " + (k + 1) + " · " + formatoAbscisa(Ab[k]);
+    if (k > 0 && k < V.length - 1) { const c = seg[k - 1].ux * seg[k].ux + seg[k - 1].uy * seg[k].uy, g = Math.acos(Math.max(-1, Math.min(1, c))) * 180 / Math.PI; if (g > 0.05) txt += " · quiebre " + g.toFixed(1) + "°"; }
+    const t = Q(Ab[k], -(A.anchoIzq + 26 / esc));
+    o.push(`<circle cx="${X(q).toFixed(1)}" cy="${Y(q).toFixed(1)}" r="4.5" fill="${GC.rasante}"/>`, svgT(X(t), Y(t), txt, `text-anchor="middle" font-size="11" font-weight="bold" fill="${GC.texto}"`));
+  });
+  o.push(svgT(W - 16, 22, "N ↑", `text-anchor="end" font-size="13" font-weight="bold" fill="${GC.gris}"`));
+  o.push("</svg>");
+  return { svg: o.join(""), W, H, real: true };
+}
 function svgPlanta(d) {
+  const real = svgPlantaReal(d); if (real) return real;
   const proy = d.proy, A = anchosProyecto(proy), sg = sobreanchoGeneral(proy);
   const parqs = (proy.parqueaderos || []).filter(p => !esCabecera(p)).map(p => ({ p, ini: parseFloat(p.absInicio), fin: parseFloat(p.absFin), ancho: parseFloat(p.ancho) || 0 })).filter(x => !isNaN(x.ini) && !isNaN(x.fin));
   // parqueaderos de cabecera: detrás del inicio o después del fin, a su distancia del eje
@@ -6455,9 +6557,19 @@ function EditorLateral({
   lat,
   absVia,
   finEje,
+  ejeTramos,
   onChange
 }) {
-  const absLat = abscisasTramos(lat.tramos, parseFloat(lat.absInicio || absVia) || 0);
+  const iniLat = parseFloat(lat.absInicio || absVia) || 0, iniVia = parseFloat(absVia) || 0;
+  const absLat = abscisasTramos(lat.tramos, iniLat);
+  // a qué abscisas del eje corresponde cada tramo (si el lateral nace con la vía se reparte en el eje)
+  const frente = i => {
+    const f = absLat.filas[i]; if (!f || f.hasta === null || Math.abs(iniLat - iniVia) > 0.0005 || !ejeTramos) return null;
+    const eR = resolverTodos(ejeTramos), lR = resolverTodos(lat.tramos), le = largosTramos(eR), ll = largosTramos(lR);
+    const Le = le.reduce((a, b) => a + b, 0), Ll = ll.reduce((a, b) => a + b, 0); if (Le <= 0 || Ll <= 0) return null;
+    const enEje = d => { if (le.length === ll.length) { let a = 0, b = 0; for (let k = 0; k < ll.length; k++) { if (d <= b + ll[k] + 1e-9 || k === ll.length - 1) return a + (d - b) / ll[k] * le[k]; a += le[k]; b += ll[k]; } } return d / Ll * Le; };
+    return [r3(iniVia + enEje(f.desde - iniLat)), r3(iniVia + enEje(f.hasta - iniLat))];
+  };
   const upd = (k, v) => onChange({
     ...lat,
     [k]: v
@@ -6561,7 +6673,7 @@ function EditorLateral({
   }, "✕")), /*#__PURE__*/React.createElement(CamposTramo, {
     t: t,
     onChange: nt => updT(i, nt)
-  }), React.createElement(FranjaAbscisa, { f: absLat.filas[i] }))), React.createElement(PieAbscisas, { fin: absLat.fin, incompleto: absLat.incompleto, nombre: "Lateral", queMeta: "el eje llega a", meta: finEje, color: "#78350F" }), /*#__PURE__*/React.createElement(Btn, {
+  }), React.createElement(FranjaAbscisa, { f: absLat.filas[i], eje: frente(i) }))), React.createElement(PieAbscisas, { fin: absLat.fin, incompleto: absLat.incompleto, nombre: "Lateral", queMeta: "el eje llega a", meta: finEje, info: Math.abs(iniLat - iniVia) < 0.0005 ? { ini: iniVia } : null }), /*#__PURE__*/React.createElement(Btn, {
     small: true,
     color: C.success,
     onClick: () => onChange({
@@ -8189,6 +8301,7 @@ function App() {
     lat: proy.lateralDer,
     absVia: proy.absInicio,
     finEje: absEje.fin,
+    ejeTramos: proy.tramos,
     onChange: v => upd({
       lateralDer: v
     })
@@ -8197,6 +8310,7 @@ function App() {
     lat: proy.lateralIzq,
     absVia: proy.absInicio,
     finEje: absEje.fin,
+    ejeTramos: proy.tramos,
     onChange: v => upd({
       lateralIzq: v
     })

@@ -26,14 +26,14 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 | MATEMÁTICA: RESOLVEDOR UNIVERSAL DE TRAMO | `resolverTramo` (3 de 4 campos), `calcCotaEnAbscisa`, `generarAbscisas`, `formatoAbscisa`; antes de `CamposTramo`: `abscisasTramos` (abscisa acumulada por tramo), `FranjaAbscisa`, `PieAbscisas` (eje, laterales y parqueaderos con rasante propia) |
 | PARQUEADERO DE CABECERA | `proyCalc` (convierte cabecera en abscisas/ancho; usarlo al entrar a cualquier cálculo), `rangoVia`, `datosCabecera`, `cubreCab`, `largoVia`. Modo "esquinas" (el nuevo por defecto): `geoEsquinas`, `cotaEsquinas` (bilineal entre A,B,C,D en `__esq`); si cruza el eje, `proyCalc` lo parte en dos (ids `~i`/`~d`, `nombreBase`). Editor: `DiagramaEsquinas`, `CampoLado`, `cotaViaEnBorde` |
 | SARDINEL | `piezasSardinel`, `calcSardinel` (total, ejecutado por tramos, sin doble conteo) |
-| GENERADOR DE TABLA | `generarTabla`: cotas por abscisa (eje, laterales, parqueaderos, corona del sardinel, capas, excavación); filas `fueraVia` = cabecera |
+| GENERADOR DE TABLA | `generarTabla`: cotas por abscisa (eje, laterales, parqueaderos, corona del sardinel, capas, excavación); filas `fueraVia` = cabecera. Lateral con rasante propia que nace con la vía: `distEnLateral`/`largosTramos` reparten cada tramo del lateral en su tramo del eje (quiebres: afuera más largo, adentro más corto) |
 | ALMACENAMIENTO / COPIAS / PERSISTENCIA | `guardarDato` (IndexedDB + localStorage), `precargarDatos`, `copiaAutomatica`, claves `TV_KEY`, `TV_KEY_OBRAS` |
 | OTRA VENTANA | `BroadcastChannel`: si otra ventana guarda, esta deja de guardar (`DATOS.otraVentana`) |
 | DESHACER / REHACER | `HIST` (atras/adelante/crudo/oyentes), `histAvisar` |
 | VÍAS BLOQUEADAS | `protegerBloqueadas`, `useLocalProyectos`, `useLocalObras`, `viaValida` |
 | SINCRONIZAR CON GOOGLE DRIVE | `nubeSincronizar` (un archivo por vía + Obras.json en la carpeta TopoVías; permiso drive.file; ID de cliente en `NUBE_CLIENTE`) |
 | CANTIDADES DE LA VÍA | `calcAreas`, `calcCantidades` |
-| GRÁFICOS | `svgPerfil`, `svgPlanta` (texto de usuario siempre con `escXml`) |
+| GRÁFICOS | `svgPerfil`, `svgPlanta` (texto de usuario siempre con `escXml`); `svgPlantaReal` dibuja la forma real con quiebres si hay coordenadas de los PI del eje (`coordsEje`) |
 | INSTALAR / COPIA DE SEGURIDAD | `crearCopiaSeguridad`, `leerCopiaSeguridad`, `BotonNube`, `PanelNube`, `CopiasAutomaticas` |
 | TABLA RESULTADO / TABLA DE LECTURAS | `TablaResultado` (tabla de cotas, bloque corona), `CopiarEstructura`, `TabSardinel`, `TablaLecturas` (replanteo) |
 | VOLÚMENES / SOBREANCHO / TIPOS DE VOLUMEN | `calcVolumen` (en el borde de una cabecera parte la sección en dos), `parqEn`, `sobreanchoVolumen`, `construirHojaVia` (hoja Excel con fórmulas) |
