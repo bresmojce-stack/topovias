@@ -623,18 +623,21 @@ function getPIAbscisas(absInicio, tramosResueltos) {
   }
   return pis;
 }
-function generarAbscisas(absInicio, tramosResueltos, intermediasExtra, parqueaderos) {
+// Abscisado: cada "paso" metros (5 por defecto; la vía puede pedir 10, 20 o el que se necesite)
+const pasoAbscisado = proy => { const n = parseFloat(proy && proy.paso); return isFinite(n) && n >= 0.5 ? n : 5; };
+function generarAbscisas(absInicio, tramosResueltos, intermediasExtra, parqueaderos, paso) {
+  const P = paso && paso >= 0.5 ? paso : 5;
   const absIni = parseFloat(absInicio) || 0;
   let absFin = absIni;
   tramosResueltos.forEach(rt => {
     absFin = r3(absFin + (rt.distancia || 0));
   });
-  // Inicio exacto y luego cada 5 m en abscisas redondas (25.73 → 30, 35, 40…), como en el replanteo
+  // Inicio exacto y luego cada P m en abscisas redondas (25.73 → 30, 35, 40… con P = 5), como en el replanteo
   const set = new Set([r3(absIni)]);
-  let a = r3(Math.ceil(absIni / 5 - 1e-9) * 5);
+  let a = r3(Math.ceil(absIni / P - 1e-9) * P);
   while (a <= absFin + 0.0001) {
     set.add(r3(a));
-    a = r3(a + 5);
+    a = r3(a + P);
   }
   set.add(r3(absFin));
   let acc2 = absIni;
@@ -653,10 +656,10 @@ function generarAbscisas(absInicio, tramosResueltos, intermediasExtra, parqueade
     if (isNaN(pi) || isNaN(pf)) return;
     set.add(r3(pi));
     set.add(r3(pf));
-    let pa = r3(Math.ceil(pi / 5) * 5);
+    let pa = r3(Math.ceil(pi / P - 1e-9) * P);
     while (pa < pf - 0.001) {
       set.add(r3(pa));
-      pa = r3(pa + 5);
+      pa = r3(pa + P);
     }
   });
   return [...set].sort((x, y) => x - y);
@@ -903,8 +906,10 @@ function generarTabla(proyecto) {
   const absIni = parseFloat(absInicio) || 0;
   const tramosR = resolverTodos(tramos);
   if (!tramosR.length || !tramosR[0].completo) return [];
-  const extras = (intermedias || []).map(i => i.valor).filter(Boolean);
-  const abscisas = generarAbscisas(absInicio, tramosR, extras, parqueaderos);
+  // las abscisas con lecturas de nivelación siempre van en la tabla (si se cambia el abscisado, no se pierden)
+  const extras = (intermedias || []).map(i => i.valor).filter(Boolean)
+    .concat((proyecto.nivelaciones || []).flatMap(n => (n.lecturas || []).filter(l => l && typeof l.abs === "number").map(l => l.abs)));
+  const abscisas = generarAbscisas(absInicio, tramosR, extras, parqueaderos, pasoAbscisado(proyecto));
   const pisSet = getPIAbscisas(absInicio, tramosR);
   // ─ ESTRUCTURAS: la de la vía y, si un parqueadero tiene estructura propia, la suya.
   //   Las columnas de capas son la unión de nombres (primero las de la vía).
@@ -1594,7 +1599,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "54";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "55";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -8349,7 +8354,11 @@ function App() {
       absInicio: e.target.value
     }),
     placeholder: "ej. 0"
-  })))), /*#__PURE__*/React.createElement(Card, {
+  })), React.createElement("div", null, React.createElement(Label, null, "Abscisado cada (m)"),
+    React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" } },
+      [5, 10, 20].map(n => React.createElement(Btn, { key: n, small: true, color: pasoAbscisado(proy) === n ? C.accent : "#94A3B8", onClick: () => upd({ paso: String(n) }) }, n + " m")),
+      React.createElement(Input, { value: proy.paso || "", onChange: e => upd({ paso: e.target.value }), placeholder: "otro, ej. 2.5", inputMode: "decimal", style: { width: 110 } })),
+    React.createElement("div", { style: { fontSize: 11.5, color: C.muted, marginTop: 4 } }, "Abscisas cada ", pasoAbscisado(proy), " m, más los PI, el inicio y el fin, las intermedias y las que tengan lecturas de nivelación.")))), /*#__PURE__*/React.createElement(Card, {
     title: "Tramos y PI del Eje — llena 3 de los 4 campos"
   }, proy.tramos.map((t, i) => {
     const tramosR = resolverTodos(proy.tramos);
@@ -8417,7 +8426,7 @@ function App() {
       color: C.muted,
       marginBottom: 8
     }
-  }, "Abscisas que no caen en múltiplos de 5 m (ej. 7.3, 34.6, 52.5)"), proy.intermedias.map((item, i) => /*#__PURE__*/React.createElement("div", {
+  }, "Abscisas que no caen en el abscisado de cada " + pasoAbscisado(proy) + " m (ej. 7.3, 34.6, 52.5)"), proy.intermedias.map((item, i) => /*#__PURE__*/React.createElement("div", {
     key: i,
     style: {
       display: "flex",
