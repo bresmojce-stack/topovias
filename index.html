@@ -1213,6 +1213,36 @@ const Tag = ({
 }, children);
 
 // ─── CAMPOS UNIVERSALES DE TRAMO (4 campos, llenar 3) ────────────────────────
+// Abscisa de cada tramo sumando las distancias (igual que la tabla y el Excel). Se corta en el primer
+// tramo sin distancia: de ahí en adelante no se sabe en qué abscisa va.
+function abscisasTramos(tramos, ini) {
+  let a = r3(ini), ok = true;
+  const filas = resolverTodos(tramos || []).map(rt => {
+    const d = rt && rt.distancia !== null && isFinite(rt.distancia) && rt.distancia >= 0 ? rt.distancia : null;
+    if (!ok || d === null) { const desde = ok ? a : null; ok = false; return { desde, hasta: null }; }
+    const desde = a; a = r3(a + d); return { desde, hasta: a };
+  });
+  return { filas, fin: a, incompleto: !ok };
+}
+function FranjaAbscisa({ f, color, fondo }) {
+  return React.createElement("div", { className: "tv-franja-abs", style: { marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", background: fondo || "#EFF6FF",
+      border: `1px dashed ${color || "#60A5FA"}`, borderRadius: 8, padding: "6px 12px", fontSize: 13, color: "#334155" } },
+    "📍 Abscisa",
+    f.hasta !== null
+      ? [React.createElement("b", { key: "a", style: { fontFamily: "monospace", fontSize: 15 } }, formatoAbscisa(f.desde)), "→", React.createElement("b", { key: "b", style: { fontFamily: "monospace", fontSize: 15 } }, formatoAbscisa(f.hasta))]
+      : React.createElement("span", { style: { color: C.muted } }, "falta la distancia de este tramo (o de uno anterior)"));
+}
+// Al pie de los tramos: hasta dónde llega y, si debe llegar a otra abscisa, cuánto falta o sobra
+function PieAbscisas({ fin, incompleto, meta, nombre, queMeta, color }) {
+  const dif = meta !== null && meta !== undefined && !isNaN(meta) ? r3(meta - fin) : null;
+  const mono = t => React.createElement("b", { style: { fontFamily: "monospace", fontSize: 16 } }, t);
+  return React.createElement("div", { className: "tv-pie-abs", style: { marginTop: 4, marginBottom: 10, display: "flex", gap: "4px 14px", flexWrap: "wrap", alignItems: "center", background: color || "#0F172A", color: "#fff", borderRadius: 10, padding: "9px 14px", fontSize: 13.5 } },
+    React.createElement("span", null, nombre, " hasta ", mono(formatoAbscisa(fin))),
+    incompleto ? React.createElement("span", { style: { color: "#FDE68A" } }, "⚠ hay un tramo sin distancia: de ahí no se suma") : null,
+    dif === null ? null
+      : Math.abs(dif) < 0.0005 ? React.createElement("span", { style: { color: "#86EFAC" } }, "✓ llega justo a ", queMeta, " (", formatoAbscisa(meta), ")")
+      : React.createElement("span", null, queMeta, " ", mono(formatoAbscisa(meta)), " → ", React.createElement("b", { style: { color: "#FCA5A5" } }, dif > 0 ? "faltan " + dif.toFixed(3) + " m" : "se pasa " + (-dif).toFixed(3) + " m")));
+}
 function CamposTramo({
   t,
   onChange,
@@ -1485,7 +1515,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "50";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "51";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -6353,8 +6383,11 @@ function Verificador() {
 function EditorLateral({
   label,
   lat,
+  absVia,
+  finEje,
   onChange
 }) {
+  const absLat = abscisasTramos(lat.tramos, parseFloat(lat.absInicio || absVia) || 0);
   const upd = (k, v) => onChange({
     ...lat,
     [k]: v
@@ -6458,7 +6491,7 @@ function EditorLateral({
   }, "✕")), /*#__PURE__*/React.createElement(CamposTramo, {
     t: t,
     onChange: nt => updT(i, nt)
-  }))), /*#__PURE__*/React.createElement(Btn, {
+  }), React.createElement(FranjaAbscisa, { f: absLat.filas[i] }))), React.createElement(PieAbscisas, { fin: absLat.fin, incompleto: absLat.incompleto, nombre: "Lateral", queMeta: "el eje llega a", meta: finEje, color: "#78350F" }), /*#__PURE__*/React.createElement(Btn, {
     small: true,
     color: C.success,
     onClick: () => onChange({
@@ -6545,6 +6578,7 @@ function EditorParq({
   const pi = cab ? cabIni : parseFloat(p.absInicio),
     pf = cab ? cabFin : parseFloat(p.absFin);
   const distAuto = !isNaN(pi) && !isNaN(pf) && pf > pi ? r3(pf - pi) : null;
+  const absParq = abscisasTramos(p.tramos, isNaN(pi) ? 0 : pi);
   const anchoP = cab ? kc.ancho : parseFloat(p.ancho) || 0;
   const wLat = anchos ? (p.lado === "izquierdo" ? anchos.anchoIzq : anchos.anchoDer) : 0;
   const cbc = cab ? cubreCab(p, wLat) : null;
@@ -6731,7 +6765,7 @@ function EditorParq({
   }, "✕")), /*#__PURE__*/React.createElement(CamposTramo, {
     t: t,
     onChange: nt => updT(i, nt)
-  }))), /*#__PURE__*/React.createElement(Btn, {
+  }), !isNaN(pi) && React.createElement(FranjaAbscisa, { f: absParq.filas[i], color: "#A78BFA", fondo: "#F5F3FF" }))), !isNaN(pi) && React.createElement(PieAbscisas, { fin: absParq.fin, incompleto: absParq.incompleto, nombre: "Parqueadero", queMeta: "debe llegar a", meta: pf, color: "#4C1D95" }), /*#__PURE__*/React.createElement(Btn, {
     small: true,
     color: C.success,
     onClick: () => upd("tramos", [...p.tramos, tramoVacio()])
@@ -7792,6 +7826,7 @@ function App() {
     setMemoria(prev => [snap, ...prev].slice(0, 20));
   };
   const areasCalc = calcAreas(proy, tabla);
+  const absEje = abscisasTramos(proy.tramos, parseFloat(proy.absInicio) || 0);
   const areaVia = () => areasCalc.viaPlano;
   const areasParqueaderos = () => areasCalc.parqs.map(x => ({ nombre: x.nombre, area: x.areaPlano }));
   const areaPlanta = () => areasCalc.totalPlano;
@@ -7891,11 +7926,8 @@ function App() {
   })))), /*#__PURE__*/React.createElement(Card, {
     title: "Tramos y PI del Eje — llena 3 de los 4 campos"
   }, proy.tramos.map((t, i) => {
-    let absT = parseFloat(proy.absInicio) || 0;
     const tramosR = resolverTodos(proy.tramos);
-    for (let j = 0; j < i; j++) absT = r3(absT + (tramosR[j]?.distancia || 0));
     const rt = tramosR[i];
-    const absF = rt?.completo ? r3(absT + rt.distancia) : null;
     const prevR = i > 0 ? tramosR[i - 1] : null;
     const salto = prevR?.completo && rt?.completo && Math.abs(prevR.cotaFin - rt.cotaInicio) > 0.0005 ? r3(rt.cotaInicio - prevR.cotaFin) : null;
     return /*#__PURE__*/React.createElement("div", {
@@ -7921,13 +7953,7 @@ function App() {
       }
     }, /*#__PURE__*/React.createElement(Tag, {
       color: C.pi
-    }, "PI ", i + 1), absF !== null && /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 12,
-        color: C.muted,
-        fontFamily: "monospace"
-      }
-    }, absT.toFixed(3), " → ", absF.toFixed(3))), proy.tramos.length > 1 && /*#__PURE__*/React.createElement(Btn, {
+    }, "PI ", i + 1)), proy.tramos.length > 1 && /*#__PURE__*/React.createElement(Btn, {
       small: true,
       color: C.danger,
       onClick: () => upd({
@@ -7944,8 +7970,8 @@ function App() {
           tramos: tr
         });
       }
-    }));
-  }), /*#__PURE__*/React.createElement(Btn, {
+    }), React.createElement(FranjaAbscisa, { f: absEje.filas[i] }));
+  }), React.createElement(PieAbscisas, { fin: absEje.fin, incompleto: absEje.incompleto, nombre: "Eje", meta: null }), /*#__PURE__*/React.createElement(Btn, {
     color: C.success,
     onClick: () => {
       // La cota inicio del nuevo tramo = cota fin del anterior (digitada o calculada)
@@ -8013,12 +8039,16 @@ function App() {
   }, /*#__PURE__*/React.createElement("strong", null, "Nota sobre signos:"), " En ambos laterales, un valor ", /*#__PURE__*/React.createElement("strong", null, "negativo"), " indica que baja respecto al eje y uno ", /*#__PURE__*/React.createElement("strong", null, "positivo"), " que sube. Escribe directamente el valor, ej. ", /*#__PURE__*/React.createElement("code", null, "-0.060"), "."), /*#__PURE__*/React.createElement(EditorLateral, {
     label: "DERECHO",
     lat: proy.lateralDer,
+    absVia: proy.absInicio,
+    finEje: absEje.fin,
     onChange: v => upd({
       lateralDer: v
     })
   }), /*#__PURE__*/React.createElement(EditorLateral, {
     label: "IZQUIERDO",
     lat: proy.lateralIzq,
+    absVia: proy.absInicio,
+    finEje: absEje.fin,
     onChange: v => upd({
       lateralIzq: v
     })
