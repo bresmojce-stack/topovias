@@ -16,7 +16,7 @@ App de topografía de vías (Colombia) para Brian Escobar, topógrafo. Un solo a
 - Revisar el despliegue: `https://api.github.com/repos/bresmojce-stack/topovias/actions/runs?per_page=1`.
 
 ## Mapa en red (artefacto)
-https://claude.ai/artifact/XNYfBVg1uuBN8sugkcosTy : las 40 piezas, sus 59 conexiones (qué alimenta a qué) y
+https://claude.ai/artifact/XNYfBVg1uuBN8sugkcosTy : las 42 piezas, sus 65 conexiones (qué alimenta a qué) y
 dónde está cada una en el código. Leerlo (Artifact, action "read") antes de un cambio que cruce varias piezas.
 Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía juntos.
 
@@ -41,6 +41,7 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 | DIBUJO (mini CAD de obra) | `TabDibujo`, `DIB`, `EJE`, `crearDXF`; herramientas en `DIB_GRUPOS` (Dibujar/Medir/Editar/Ver); "Seleccionar varios" usa `selSet` (tocar o recuadro) y pasa la selección a mover/copiar/girar, borrar, color o unir (`unirObjetos`) |
 | CALCULADORAS | `evaluarExpresion`, `CalcNormal`, `CalcCoordenadas`, `Calculadora` |
 | EDITOR LATERAL / EDITOR PARQUEADERO | `EditorLateral` (modo transversal o "rasante propia" con PI), `EditorParq` (lateral o cabecera) |
+| FALLOS (antes de "Excel no acepta") | `calcFallo`, `cotaSuperficieEn` (interpola la superficie elegida en abscisa y desplazamiento), `SeccionFallos` (Nivelaciones); suma a "Excavación" con desglose y da "Relleno de fallos — material"; sección FALLO en `construirHojaVia` |
 | HELPERS NIVELACIONES / TAB VOLÚMENES | `resolverAI`, `alinearLecturas`, `calcCotasNivelacion`, `exportarCartera`, `TabVolumenes` |
 | APP | `App` (pestañas en `TABS`, `upd` recalcula, `updSinRecalcular` no), `FalloApp` (pantalla de rescate) |
 

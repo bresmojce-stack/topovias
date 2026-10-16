@@ -1467,7 +1467,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "47";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "48";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -1943,6 +1943,14 @@ function calcCantidades(proy, tabla) {
       const mat = (v.materialRelleno || "").trim();
       if (mat) add(nombreRellenoSobreexc(mat), "m³", Math.max(0, c2.r.volTotalExacto), "sobre-excavación").esRelleno = true;
     }
+  });
+  // fallos: su excavación suma a la excavación total (con su línea aparte) y sale el relleno por material
+  (proy.fallos || []).forEach(f => {
+    const r = calcFallo(f, proy, tabla); if (!r.volExacto) return;
+    const it = add("Excavación", "m³", r.volExacto, `fallo "${f.nombre || "Fallo"}" ${r.vol.toFixed(3)} m³`);
+    it.conVolumen = true;
+    it.desglose = (it.desglose || []).concat([{ nombre: "Fallos: " + (f.nombre || "Fallo"), valor: r.vol }]);
+    const rel = add(nombreRellenoFallo(f), "m³", r.volExacto, `fallo "${f.nombre || "Fallo"}"`); rel.conVolumen = true; rel.esRelleno = true;
   });
   (cfg.extras || []).forEach(x => { if (x.nombre && x.nombre.trim()) add(x.nombre, "m²", areaConf, "= área conformada"); });
   return { areas, areaConf, usaManual, capas, items };
@@ -3431,6 +3439,69 @@ function calcVolumenTotal(vol, proyecto, tabla) {
     faltan: partesVolumen(vol).length - partes.length };
 }
 
+// ─── FALLOS ───────────────────────────────────────────────────────────────────
+// Un fallo es una parte de la vía que se excava de más y se rellena con otro material (rajón,
+// roca, sub-base…). Se ubica por abscisas y por desplazamiento desde el eje (puede cruzarlo o
+// quedar en cualquier parte), y se nivela su fondo: 1 a 5 puntos por abscisa, de borde a borde.
+// Profundidad = cota de la superficie elegida (excavación en sitio o teórica) − cota del fondo.
+// El volumen suma a la excavación total (línea "Fallos") y sale como relleno de su material.
+const MATERIALES_FALLO = ["Rajón", "Roca", "Sub-base", "Base", "Piedra", "Recebo"];
+const falloVacio = n => ({ id: Math.random(), nombre: "Fallo " + n, desde: "", hasta: "", xDesde: "", ladoDesde: "der", xHasta: "", ladoHasta: "der",
+  material: "Rajón", contra: "", puntos: 3, cotaBM: "", vistaMas: "", lecturas: [] });
+const xFallo = (v, lado) => (parseFloat(v) || 0) * (lado === "izq" ? -1 : 1);
+const materialFallo = f => ((f.material === "otro" ? f.materialOtro : f.material) || "").trim() || "material sin nombre";
+const nombreRellenoFallo = f => "Relleno de fallos — " + materialFallo(f);
+// Cota de una superficie en (abscisa, desplazamiento): entre sus puntos de la sección (parq, lateral,
+// eje) y entre las dos abscisas que la rodean. Fuera de lo medido no inventa: null.
+function cotaSuperficieEn(serie, A, abs, x) {
+  const pos = { parqIzq: -(A.anchoIzq + A.anchoParqIzq), izq: -A.anchoIzq, eje: 0, der: A.anchoDer, parqDer: A.anchoDer + A.anchoParqDer };
+  const enSeccion = f => {
+    const pts = Object.keys(pos).filter(k => f[k] != null && isFinite(f[k])).map(k => ({ x: pos[k], c: f[k] })).sort((a, b) => a.x - b.x);
+    if (!pts.length) return null;
+    if (x <= pts[0].x) return pts[0].c;
+    if (x >= pts[pts.length - 1].x) return pts[pts.length - 1].c;
+    for (let i = 1; i < pts.length; i++) if (x <= pts[i].x) { const a = pts[i - 1], b = pts[i]; return b.x === a.x ? b.c : a.c + (b.c - a.c) * (x - a.x) / (b.x - a.x); }
+    return null;
+  };
+  const filas = [];
+  serie.forEach(f => { const c = enSeccion(f); if (c == null) return; const u = filas[filas.length - 1];
+    if (u && Math.abs(u.abs - f.abs) < 0.0005) u.c = c; else filas.push({ abs: f.abs, c }); });   // abscisa repetida: la última lectura
+  if (!filas.length || abs < filas[0].abs - 0.0005 || abs > filas[filas.length - 1].abs + 0.0005) return null;
+  for (let i = 0; i < filas.length; i++) {
+    if (Math.abs(filas[i].abs - abs) < 0.0005) return filas[i].c;
+    if (filas[i].abs > abs) { const a = filas[i - 1], b = filas[i]; return a.c + (b.c - a.c) * (abs - a.abs) / (b.abs - a.abs); }
+  }
+  return null;
+}
+function calcFallo(f, proyecto, tabla) {
+  const P = proyCalc(proyecto), A = anchosProyecto(P);
+  const a0 = parseFloat(f.desde), a1 = parseFloat(f.hasta);
+  const x0 = xFallo(f.xDesde, f.ladoDesde), x1 = xFallo(f.xHasta, f.ladoHasta);
+  const ancho = r3(Math.abs(x1 - x0)), largo = !isNaN(a0) && !isNaN(a1) ? r3(Math.abs(a1 - a0)) : 0;
+  const n = Math.min(5, Math.max(1, parseInt(f.puntos, 10) || 3));
+  const xs = n === 1 ? [(x0 + x1) / 2] : Array.from({ length: n }, (_, i) => x0 + (x1 - x0) * i / (n - 1));
+  const bm = parseFloat(f.cotaBM), vm = parseFloat(f.vistaMas), ai = !isNaN(bm) && !isNaN(vm) ? r3(bm + vm) : null;
+  const serie = f.contra && tabla ? getSerie(f.contra, P, tabla) : [];
+  const filas = (f.lecturas || []).map((l, idx) => {
+    const abs = parseFloat(l.abs); if (isNaN(abs)) return null;
+    const lect = xs.map((_, i) => { const v = parseFloat((l.v || [])[i]); return isNaN(v) ? null : v; });
+    const fondo = lect.map(v => ai !== null && v !== null ? r3(ai - v) : null);
+    const ref = xs.map(x => { const c = cotaSuperficieEn(serie, A, abs, x); return c == null ? null : r3(c); });
+    const prof = fondo.map((c, i) => c !== null && ref[i] !== null ? r3(ref[i] - c) : null);
+    const pts = prof.filter(v => v !== null);
+    const prom = pts.length ? r3(pts.reduce((s, v) => s + v, 0) / pts.length) : null;
+    return { idx, abs, lect, fondo, ref, prof, prom, area: prom !== null ? r3(Math.max(0, prom * ancho)) : null };
+  }).filter(Boolean).sort((a, b) => a.abs - b.abs);
+  const validas = filas.filter(r => r.area !== null);
+  let exacto = 0;
+  validas.forEach((r, i) => { r.dist = i ? r3(Math.abs(r.abs - validas[i - 1].abs)) : 0; r.vol = i ? (validas[i - 1].area + r.area) / 2 * r.dist : 0; exacto += r.vol; });
+  // una sola sección medida: su área por el largo del fallo
+  const unaSola = validas.length === 1;
+  if (unaSola) exacto = validas[0].area * largo;
+  return { ancho, largo, xs, x0, x1, ai, n, filas, validas, unaSola, volExacto: exacto, vol: r3(exacto), material: materialFallo(f),
+    sinRef: filas.some(r => r.fondo.some((c, i) => c !== null && r.ref[i] === null)) };
+}
+
 // Excel no acepta \ / ? * [ ] : en el nombre de la hoja (máx. 31 caracteres)
 const nombreHoja = n => ((n || "Via").replace(/[\\\/\?\*\[\]:]/g, "-").trim() || "Via").slice(0, 31);
 
@@ -3904,6 +3975,53 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
         partes: total.partes.map((x, i) => ({ clave: x.parte.clave, ref: totalesPartes[i], val: x.r.volTotal })) });
     });
 
+    // ── FALLOS: cartera del fondo, profundidad contra la superficie elegida, áreas y volumen ──
+    const falloRefs = [];
+    (proyecto.fallos || []).forEach(fa => {
+      const r = calcFallo(fa, proyecto, tabla);
+      if (!r.validas.length) return;
+      const rb = barra("FALLO: " + (fa.nombre || "Fallo").toUpperCase() + " — RELLENO CON " + r.material.toUpperCase(), ANCHO_HOJA);
+      pintaRango(rb, 0, ANCHO_HOJA - 1, { fill: PAL.excavacion.tit, txt: PAL.excavacion.txt });
+      const rA = pushRow(["ABSCISA DESDE", ABS(parseFloat(fa.desde) || 0), "HASTA", ABS(parseFloat(fa.hasta) || 0), "LARGO (m)", ""]);
+      wsData[rA][5] = F(`ABS(${ref(3, rA)}-${ref(1, rA)})`, r.largo);
+      const rX = pushRow(["DESDE EL EJE (m)", r3(r.x0), "HASTA EL EJE (m)", r3(r.x1), "ANCHO (m)", ""]);
+      wsData[rX][5] = F(`ABS(${ref(3, rX)}-${ref(1, rX)})`, r.ancho);
+      const rE = pushRow(["COTA BM", parseFloat(fa.cotaBM) || 0, "VISTA +", parseFloat(fa.vistaMas) || 0, "A.I.", ""]);
+      wsData[rE][5] = F(`ROUND(${ref(1, rE)}+${ref(3, rE)},3)`, r.ai || 0);
+      pushRow(["CONTRA", etiquetaSuperficie(fa.contra, proyecto, tabla), "", "", "IZQ (−) · DER (+)", ""]);
+      [rA, rX, rE].forEach(x => pintaRango(x, 0, 5, { fill: PAL.caja }));
+      const n = r.n, cL = 1, cF = cL + n, cR = cF + n, cP = cR + n, cM = cP + n, cAn = cM + 1, cAr = cM + 2, cD = cM + 3, cV = cM + 4;
+      const nomP = i => n % 2 === 1 && i === (n - 1) / 2 ? "CENTRO" : i === 0 ? "BORDE 1" : i === n - 1 ? "BORDE 2" : "P" + (i + 1);
+      const hdr = ["ABSCISA"];
+      for (let i = 0; i < n; i++) { hdr[cL + i] = "LECT. " + nomP(i); hdr[cF + i] = "FONDO " + nomP(i); hdr[cR + i] = "SUPERF. " + nomP(i); hdr[cP + i] = "PROF. " + nomP(i); }
+      hdr[cM] = "PROMEDIO"; hdr[cAn] = "ANCHO (m)"; hdr[cAr] = "ÁREA (m²)"; hdr[cD] = "DIST (m)"; hdr[cV] = "VOLUMEN (m³)";
+      const rH = pushRow(hdr); headerRows.add(rH); encabezadoBloque(rH, 0, cV, PAL.excavacion);
+      const AI = abs$(5, rE), AN = abs$(5, rX), LA = abs$(5, rA);
+      const r0 = row;
+      r.validas.forEach((x, i) => {
+        const rr = row, fila = [ABS(x.abs)];
+        for (let k = 0; k < n; k++) {
+          fila[cL + k] = x.lect[k] !== null ? x.lect[k] : "";
+          fila[cF + k] = x.fondo[k] !== null ? F(`ROUND(${AI}-${ref(cL + k, rr)},3)`, x.fondo[k]) : "";
+          fila[cR + k] = x.ref[k] !== null ? x.ref[k] : "";
+          fila[cP + k] = x.prof[k] !== null ? F(`ROUND(${ref(cR + k, rr)}-${ref(cF + k, rr)},3)`, x.prof[k]) : "";
+        }
+        fila[cM] = F(`ROUND(AVERAGE(${ref(cP, rr)}:${ref(cP + n - 1, rr)}),3)`, x.prom);
+        fila[cAn] = F(AN, r.ancho);
+        fila[cAr] = F(`ROUND(MAX(0,${ref(cM, rr)}*${ref(cAn, rr)}),3)`, x.area);
+        if (r.unaSola) { fila[cD] = F(LA, r.largo); fila[cV] = F(`${ref(cAr, rr)}*${ref(cD, rr)}`, r.vol); }
+        else if (i === 0) { fila[cD] = ""; fila[cV] = ""; }
+        else { fila[cD] = F(`ABS(${ref(0, rr)}-${ref(0, rr - 1)})`, x.dist); fila[cV] = F(`(${ref(cAr, rr - 1)}+${ref(cAr, rr)})/2*${ref(cD, rr)}`, x.vol); }
+        pushRow(fila);
+      });
+      const rt = pushRow([]);
+      wsData[rt][cD] = "TOTAL"; wsData[rt][cV] = F(`SUM(${ref(cV, r0)}:${ref(cV, rt - 1)})`, r.vol);
+      for (let c = 0; c < cV; c++) if (wsData[rt][c] == null) wsData[rt][c] = "";
+      boldRows.add(rt);
+      falloRefs.push({ fa, ref: ref(cV, rt), val: r.vol });
+      blank();
+    });
+
     // ── 6. CANTIDADES ───────────────────────────────────────────
     // ÍTEM | UNID | ÁREA | ESPESOR | CANTIDAD, todo con fórmulas de esta hoja.
     const cantRefs = {};
@@ -3952,6 +4070,12 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
         const mat = (rd.vol.materialRelleno || "").trim();
         if (mat) P_(claveCapa(nombreRellenoSobreexc(mat)) + "|m³").f.push(`MAX(0,${c2.ref})`);
       }
+    });
+    falloRefs.forEach(fr => {
+      const pe = P_(claveCapa("Excavación") + "|m³");
+      pe.vols.push(fr.ref);
+      pe.desglose = (pe.desglose || []).concat([{ nombre: "Fallos: " + (fr.fa.nombre || "Fallo"), ref: fr.ref, val: fr.val }]);
+      P_(claveCapa(nombreRellenoFallo(fr.fa)) + "|m³").vols.push(fr.ref);
     });
     (cfg.extras || []).forEach(x => { if (x.nombre && x.nombre.trim()) P_(claveCapa(x.nombre) + "|m²").f.push(areaRef); });
     q.items.forEach(it => {
@@ -6766,6 +6890,79 @@ const FilaCota = React.memo(function FilaCota({ i, abs, ai, v }) {
     v.split("|").map((x, k) => React.createElement("td", { key: k, style: { ...tdS, fontFamily: "monospace", fontWeight: k === 2 ? 800 : 400 } }, x === "" ? "—" : fmt(parseFloat(x)))));
 });
 
+// ── Nivelaciones › Fallos: cada fallo con su ubicación, material, superficie y su cartera ──
+function SeccionFallos({ proyecto, tabla, onChange }) {
+  const fallos = proyecto.fallos || [];
+  const set = l => onChange({ fallos: l });
+  const upd = (id, c) => set(fallos.map(f => f.id === id ? { ...f, ...c } : f));
+  const opciones = opcionesSuperficie(proyecto, tabla);
+  const COLOR = "#B91C1C";
+  const num = (f, k, ph, label) => React.createElement("div", null, React.createElement(Label, null, label),
+    React.createElement(Input, { value: f[k] || "", inputMode: "decimal", placeholder: ph, onChange: e => upd(f.id, { [k]: e.target.value }) }));
+  const lado = (f, k) => React.createElement(Sel, { value: f[k] || "der", onChange: e => upd(f.id, { [k]: e.target.value }), style: { width: 84, flex: "0 0 84px" } },
+    React.createElement("option", { value: "izq" }, "Izq."), React.createElement("option", { value: "der" }, "Der."));
+  const f3v = v => v === null || v === undefined ? "" : v.toFixed(3);
+  return React.createElement(Card, { title: "🕳 Fallos", accent: COLOR, style: { marginTop: 18 } },
+    React.createElement("div", { style: { fontSize: 13, color: "#334155", lineHeight: 1.5, marginBottom: 12 } },
+      "Partes de la vía que se excavan de más y se rellenan con otro material. Ubícalo por abscisas y desde el eje (puede cruzarlo o quedar en cualquier parte), y nivela su fondo. ",
+      "El volumen se suma a la excavación total como \"Fallos\" y sale el relleno con su material en Cantidades y en el Excel."),
+    fallos.map(f => {
+      const r = calcFallo(f, proyecto, tabla);
+      const lecturas = f.lecturas || [];
+      const setLect = l => upd(f.id, { lecturas: l });
+      const porIdx = {}; r.filas.forEach(x => { porIdx[x.idx] = x; });
+      const nombreP = i => r.n % 2 === 1 && i === (r.n - 1) / 2 ? "Centro" : i === 0 ? "Borde 1" : i === r.n - 1 ? "Borde 2" : "Punto " + (i + 1);
+      return React.createElement("div", { key: f.id, className: "tv-fallo", style: { border: `2px solid ${COLOR}`, borderRadius: 12, padding: 14, marginBottom: 14, background: "#FEF2F2" } },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" } },
+          React.createElement(Input, { value: f.nombre || "", onChange: e => upd(f.id, { nombre: e.target.value }), style: { maxWidth: 240, fontWeight: 800, color: COLOR } }),
+          React.createElement(Btn, { small: true, color: C.danger, onClick: () => { if (confirm("¿Eliminar " + (f.nombre || "este fallo") + " y sus lecturas?")) set(fallos.filter(x => x.id !== f.id)); } }, "Eliminar")),
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, marginBottom: 10 } },
+          num(f, "desde", "ej. 30", "Abscisa desde"), num(f, "hasta", "ej. 35", "Abscisa hasta"),
+          React.createElement("div", null, React.createElement(Label, null, "Desde el eje (m)"), React.createElement("div", { style: { display: "flex", gap: 6 } },
+            React.createElement(Input, { value: f.xDesde || "", inputMode: "decimal", placeholder: "0.00", onChange: e => upd(f.id, { xDesde: e.target.value }) }), lado(f, "ladoDesde"))),
+          React.createElement("div", null, React.createElement(Label, null, "Hasta el eje (m)"), React.createElement("div", { style: { display: "flex", gap: 6 } },
+            React.createElement(Input, { value: f.xHasta || "", inputMode: "decimal", placeholder: "3.00", onChange: e => upd(f.id, { xHasta: e.target.value }) }), lado(f, "ladoHasta"))),
+          React.createElement("div", null, React.createElement(Label, null, "Material de relleno"),
+            React.createElement(Sel, { value: f.material || "Rajón", onChange: e => upd(f.id, { material: e.target.value }) },
+              MATERIALES_FALLO.map(m => React.createElement("option", { key: m, value: m }, m)), React.createElement("option", { value: "otro" }, "Otro…")),
+            f.material === "otro" && React.createElement(Input, { value: f.materialOtro || "", placeholder: "¿Cuál?", onChange: e => upd(f.id, { materialOtro: e.target.value }), style: { marginTop: 6 } })),
+          React.createElement("div", null, React.createElement(Label, null, "Se compara contra"),
+            React.createElement(Sel, { value: f.contra || "", onChange: e => upd(f.id, { contra: e.target.value }) },
+              React.createElement("option", { value: "" }, "Elige la superficie…"),
+              opciones.filter(o => o.tipo === "nivel").length > 0 && React.createElement("optgroup", { label: "Medido en campo" }, opciones.filter(o => o.tipo === "nivel").map(o => React.createElement("option", { key: o.id, value: o.id }, o.label))),
+              React.createElement("optgroup", { label: "Diseño" }, opciones.filter(o => o.tipo === "tabla").map(o => React.createElement("option", { key: o.id, value: o.id }, o.label))))),
+          React.createElement("div", null, React.createElement(Label, null, "Puntos por abscisa"),
+            React.createElement(Sel, { value: String(r.n), onChange: e => upd(f.id, { puntos: parseInt(e.target.value, 10) }) }, [1, 2, 3, 4, 5].map(k => React.createElement("option", { key: k, value: k }, k)))),
+          num(f, "cotaBM", "ej. 964.663", "Cota BM"), num(f, "vistaMas", "ej. 1.500", "Vista +")),
+        React.createElement("div", { style: { fontSize: 12.5, color: "#334155", marginBottom: 8 } },
+          "Ancho ", React.createElement("strong", null, r.ancho.toFixed(2) + " m"), " · largo ", React.createElement("strong", null, r.largo.toFixed(2) + " m"),
+          " · A.I. ", React.createElement("strong", null, r.ai !== null ? r.ai.toFixed(3) : "—"),
+          r.n > 1 ? " · puntos a " + r.xs.map(x => (x < 0 ? "izq " : "der ") + Math.abs(x).toFixed(2)).join(", ") + " m del eje" : ""),
+        !f.contra && React.createElement("div", { style: { color: C.warn, fontSize: 12.5, fontWeight: 700, marginBottom: 8 } }, "Elige contra qué superficie se mide la profundidad."),
+        r.sinRef && f.contra && React.createElement("div", { style: { color: C.warn, fontSize: 12.5, fontWeight: 700, marginBottom: 8 } }, "Hay abscisas fuera de lo medido en la superficie elegida: ahí no se calcula la profundidad."),
+        React.createElement("div", { style: { overflowX: "auto" } },
+          React.createElement("table", { style: { borderCollapse: "collapse", fontSize: 12, minWidth: 420, width: "100%", background: "#fff" } },
+            React.createElement("thead", null, React.createElement("tr", { style: { background: "#FEE2E2" } },
+              ["Abscisa"].concat(Array.from({ length: r.n }, (_, i) => "Lect. " + nombreP(i)), ["Prof. prom.", "Área m²", ""]).map((h, k) => React.createElement("th", { key: k, style: { ...thS, color: COLOR, border: `1px solid ${C.border}` } }, h)))),
+            React.createElement("tbody", null, lecturas.map((l, i) => {
+              const x = porIdx[i];
+              const cambiar = c => setLect(lecturas.map((y, j) => j === i ? { ...y, ...c } : y));
+              return React.createElement("tr", { key: l.id || i },
+                React.createElement("td", { style: { ...tdS, padding: 3 } }, React.createElement(Input, { value: l.abs || "", inputMode: "decimal", placeholder: "abscisa", onChange: e => cambiar({ abs: e.target.value }), style: { minWidth: 76, padding: "5px 7px" } })),
+                Array.from({ length: r.n }, (_, k) => React.createElement("td", { key: k, style: { ...tdS, padding: 3 } },
+                  React.createElement(Input, { value: (l.v || [])[k] || "", inputMode: "decimal", placeholder: "lectura", onChange: e => { const v = (l.v || []).slice(); v[k] = e.target.value; cambiar({ v }); }, style: { minWidth: 70, padding: "5px 7px" } }),
+                  x && x.prof[k] !== null && React.createElement("div", { style: { fontSize: 10.5, color: C.muted, fontFamily: "monospace" } }, "fondo " + f3v(x.fondo[k]) + " · prof " + f3v(x.prof[k])))),
+                React.createElement("td", { style: { ...tdS, fontFamily: "monospace" } }, x ? f3v(x.prom) : ""),
+                React.createElement("td", { style: { ...tdS, fontFamily: "monospace" } }, x ? f3v(x.area) : ""),
+                React.createElement("td", { style: tdS }, React.createElement(Btn, { small: true, color: C.danger, onClick: () => setLect(lecturas.filter((_, j) => j !== i)) }, "✕")));
+            })))),
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 10 } },
+          React.createElement(Btn, { small: true, color: COLOR, onClick: () => setLect(lecturas.concat([{ id: Math.random(), abs: !lecturas.length ? f.desde || "" : lecturas.length === 1 ? f.hasta || "" : "", v: [] }])) }, "+ Agregar abscisa"),
+          React.createElement("div", { style: { fontSize: 14, color: "#0F172A" } }, "Volumen del fallo: ", React.createElement("strong", { style: { fontFamily: "monospace", fontSize: 15 } }, r.vol.toFixed(3) + " m³"),
+            React.createElement("span", { style: { color: C.muted, fontSize: 12 } }, " · excavación extra y relleno con " + r.material.toLowerCase(), r.unaSola ? " (una sola sección × largo)" : ""))));
+    }),
+    React.createElement(Btn, { color: COLOR, onClick: () => set(fallos.concat([falloVacio(fallos.length + 1)])) }, "+ Agregar fallo"));
+}
 function TabNivelaciones({ proyecto, tabla, onChange, onArchivo }) {
   const accRef = React.useRef({});   // acciones de cada nivelación para las filas memorizadas
   const nivelaciones = proyecto.nivelaciones || [];
@@ -8137,7 +8334,7 @@ function App() {
     tabla: tabla,
     onChange: proyActualizado => updSinRecalcular(proyActualizado),
     onArchivo: fn => preparar("Preparando la cartera…", fn)
-  }), tab === "vol" && /*#__PURE__*/React.createElement(TabVolumenes, {
+  }), tab === "nivel" && tabla && tabla.length > 0 && React.createElement(SeccionFallos, { proyecto: proy, tabla, onChange: c => updSinRecalcular(c) }), tab === "vol" && /*#__PURE__*/React.createElement(TabVolumenes, {
     proyecto: proy,
     tabla: tabla,
     onChange: function(cambios) { updSinRecalcular(cambios); }
