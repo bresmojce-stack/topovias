@@ -1594,7 +1594,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "53";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "54";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -2314,18 +2314,18 @@ function svgPerfil(d) {
 
 // Planta con la forma real: si están las coordenadas de los PI del eje, la vía se dibuja con sus quiebres
 // (los bordes a su ancho, con la esquina de cada quiebre en inglete) y los parqueaderos pegados a ella.
-function svgPlantaReal(d) {
-  const proy = d.proy, A = anchosProyecto(proy), P = proyCalc(proy);
+// Geometría de la vía en planta: con las coordenadas de los PI del eje, su forma real (quiebres);
+// sin ellas, recta. Q(abscisa, distancia) da el punto (derecha +, izquierda −; en un quiebre, en inglete).
+function geoVia(proy, soloReal) {
   const le = largosTramos(resolverTodos(proy.tramos || []));
+  if (le.length < 1) return null;
   const pts = (proy.coordsEje || []).map(q => ({ x: parseFloat(q.este), y: parseFloat(q.norte) })).filter(q => isFinite(q.x) && isFinite(q.y));
-  if (le.length < 1 || pts.length < le.length + 1) return null;
-  const V = pts.slice(0, le.length + 1);
-  const seg = V.slice(0, -1).map((q, i) => { const dx = V[i + 1].x - q.x, dy = V[i + 1].y - q.y, L = Math.hypot(dx, dy); return L > 1e-6 ? { ux: dx / L, uy: dy / L } : null; });
-  if (seg.some(x => !x)) return null;
   const ini = r3(parseFloat(proy.absInicio) || 0), Ab = [ini]; le.forEach(l => Ab.push(Ab[Ab.length - 1] + l));
-  const fin = Ab[Ab.length - 1];
+  let V = pts.length >= le.length + 1 ? pts.slice(0, le.length + 1) : null, real = !!V;
+  let seg = V && V.slice(0, -1).map((q, i) => { const dx = V[i + 1].x - q.x, dy = V[i + 1].y - q.y, L = Math.hypot(dx, dy); return L > 1e-6 ? { ux: dx / L, uy: dy / L } : null; });
+  if (seg && seg.some(x => !x)) { V = null; real = false; }
+  if (!V) { if (soloReal) return null; V = Ab.map(a => ({ x: a - ini, y: 0 })); seg = le.map(() => ({ ux: 1, uy: 0 })); }
   const nI = i => ({ x: seg[i].uy, y: -seg[i].ux });        // normal hacia la derecha del eje
-  // punto a una abscisa y a una distancia del eje (derecha +, izquierda −); en un quiebre, en inglete
   const Q = (abs, o) => {
     for (let k = 1; k < Ab.length - 1; k++) if (Math.abs(abs - Ab[k]) < 1e-6) {
       const n1 = nI(k - 1), n2 = nI(k), den = 1 + n1.x * n2.x + n1.y * n2.y;
@@ -2338,6 +2338,14 @@ function svgPlantaReal(d) {
   };
   const curva = (a, b, o) => [a].concat(Ab.filter(x => x > a + 1e-6 && x < b - 1e-6), [b]).map(x => Q(x, o));
   const franja = (a, b, o1, o2) => curva(a, b, o1).concat(curva(a, b, o2).reverse());
+  const angulo = k => { if (k <= 0 || k >= V.length - 1) return 0; const c = seg[k - 1].ux * seg[k].ux + seg[k - 1].uy * seg[k].uy; return Math.acos(Math.max(-1, Math.min(1, c))) * 180 / Math.PI; };
+  return { le, Ab, V, seg, ini, fin: Ab[Ab.length - 1], Q, curva, franja, angulo, real };
+}
+function svgPlantaReal(d) {
+  const proy = d.proy, A = anchosProyecto(proy), P = proyCalc(proy);
+  const G = geoVia(proy, true); if (!G) return null;
+  const { le, Ab, V, seg, ini, fin, Q } = G;
+  const { curva, franja } = G;
   const formas = [{ pts: franja(ini, fin, -A.anchoIzq, A.anchoDer), fill: GC.via, stroke: GC.borde, w: 1.5 }];
   (P.parqueaderos || []).forEach(p => {
     const a = parseFloat(p.absInicio), b = parseFloat(p.absFin); if (isNaN(a) || isNaN(b)) return;
@@ -2368,7 +2376,7 @@ function svgPlantaReal(d) {
   // PI con su abscisa y el ángulo del quiebre
   V.forEach((q, k) => {
     let txt = "PI " + (k + 1) + " · " + formatoAbscisa(Ab[k]);
-    if (k > 0 && k < V.length - 1) { const c = seg[k - 1].ux * seg[k].ux + seg[k - 1].uy * seg[k].uy, g = Math.acos(Math.max(-1, Math.min(1, c))) * 180 / Math.PI; if (g > 0.05) txt += " · quiebre " + g.toFixed(1) + "°"; }
+    const g = G.angulo(k); if (g > 0.05) txt += " · quiebre " + g.toFixed(1) + "°";
     const t = Q(Ab[k], -(A.anchoIzq + 26 / esc));
     o.push(`<circle cx="${X(q).toFixed(1)}" cy="${Y(q).toFixed(1)}" r="4.5" fill="${GC.rasante}"/>`, svgT(X(t), Y(t), txt, `text-anchor="middle" font-size="11" font-weight="bold" fill="${GC.texto}"`));
   });
@@ -2488,6 +2496,162 @@ function svgAPng(g, escala) {
   });
 }
 
+// ─── EDITAR EN PLANTA ─────────────────────────────────────────────────────────
+// Apoyo visual: la vía vista desde arriba con los PI del eje (o los puntos de los laterales), su abscisa,
+// cota, distancia y pendiente. Se toca un punto o un tramo y se edita abajo. Son los mismos datos de
+// los campos de siempre (no cambia nada del cálculo ni del Excel).
+const valorTramo = v => v !== "" && v !== null && v !== undefined;
+// poner la cota de un PI: es la cota fin del tramo anterior y la cota inicio del siguiente; si con eso un
+// tramo queda con los 4 datos, la pendiente pasa a calcularse
+function ponerCotaPI(tramos, k, v) {
+  const tr = tramos.map(t => ({ ...t }));
+  const lleno = t => ["cotaInicio", "cotaFin", "distancia", "pendiente"].every(c => valorTramo(t[c]));
+  if (k > 0 && tr[k - 1]) { tr[k - 1].cotaFin = v; if (lleno(tr[k - 1])) tr[k - 1].pendiente = ""; }
+  if (k < tr.length) { tr[k].cotaInicio = v; if (lleno(tr[k])) tr[k].pendiente = ""; }
+  return tr;
+}
+const cotaDePI = (rs, k) => k === 0 ? (rs[0] ? rs[0].cotaInicio : null) : (rs[k - 1] ? rs[k - 1].cotaFin : null);
+// abscisa del eje frente a una distancia recorrida en un lateral con rasante propia
+function abscisaEjeDeLateral(proy, lat, d) {
+  const iniV = parseFloat(proy.absInicio) || 0, iniL = parseFloat(lat.absInicio || proy.absInicio) || 0;
+  if (Math.abs(iniL - iniV) > 0.0005) return iniL + d;
+  const le = largosTramos(resolverTodos(proy.tramos || [])), ll = largosTramos(resolverTodos(lat.tramos || []));
+  const Le = le.reduce((a, b) => a + b, 0), Ll = ll.reduce((a, b) => a + b, 0);
+  if (Le <= 0 || Ll <= 0) return iniV + d;
+  if (le.length === ll.length) { let a = 0, b = 0; for (let k = 0; k < ll.length; k++) { if (d <= b + ll[k] + 1e-9 || k === ll.length - 1) return iniV + a + (d - b) / ll[k] * le[k]; a += le[k]; b += ll[k]; } }
+  return iniV + d / Ll * Le;
+}
+function EditorPlanta({ proy, modo, onEje, onLat }) {
+  const [abierto, setAbierto] = React.useState(() => { try { return localStorage.getItem("tv_planta_ed") !== "0"; } catch (_) { return true; } });
+  const [sel, setSel] = React.useState(null);   // { tipo: "pi"|"tramo"|"lpi"|"ltramo"|"borde", lado, k }
+  const alternar = () => { const v = !abierto; setAbierto(v); try { localStorage.setItem("tv_planta_ed", v ? "1" : "0"); } catch (_) {} };
+  const h = React.createElement;
+  const G = geoVia(proy);
+  const A = anchosProyecto(proy), rsEje = resolverTodos(proy.tramos || []);
+  const cab = h("button", { onClick: alternar, className: "tv-planta-ed-btn", style: { width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#EFF6FF", border: "1px solid #93C5FD",
+      borderRadius: 9, padding: "9px 12px", fontWeight: 800, color: "#1D4ED8", fontSize: 14, cursor: "pointer", marginBottom: abierto ? 8 : 14 } },
+    "📐 Ver y editar en planta", h("span", null, abierto ? "▴" : "▾"));
+  if (!abierto) return cab;
+  if (!G) return h("div", null, cab, h("div", { style: { color: C.muted, fontSize: 13, marginBottom: 14 } }, "Escribe la distancia del primer tramo del eje para ver la vía en planta."));
+  const lats = [["izq", proy.lateralIzq, -1], ["der", proy.lateralDer, 1]];
+  // puntos de cada lateral con rasante propia (a lo largo del borde)
+  const ptsLat = lats.map(([lado, lat, sg]) => {
+    if (!lat || lat.modo !== "longitudinal") return { lado, lat, sg, pts: [], largo: null };
+    const rs = resolverTodos(lat.tramos || []), ll = largosTramos(rs); let d = 0; const pts = [{ d: 0, cota: cotaDePI(rs, 0) }];
+    ll.forEach((l, k) => { d += l; pts.push({ d, cota: cotaDePI(rs, k + 1) }); });
+    return { lado, lat, sg, rs, pts: pts.map(q => ({ ...q, abs: abscisaEjeDeLateral(proy, lat, q.d), absLat: (parseFloat(lat.absInicio || proy.absInicio) || 0) + q.d })), largo: ll.reduce((a, b) => a + b, 0) };
+  });
+  // a pantalla
+  const fr = G.franja(G.ini, G.fin, -A.anchoIzq, A.anchoDer);
+  const xs = fr.map(q => q.x), ys = fr.map(q => q.y);
+  const mnx = Math.min(...xs), mxx = Math.max(...xs), mny = Math.min(...ys), mxy = Math.max(...ys);
+  const W = 720, M = 86;
+  const ex = (W - 2 * M) / ((mxx - mnx) || 1);
+  let ey = G.real ? ex : ex; const Hm = 110;
+  if (!G.real && (mxy - mny) * ey < Hm) ey = Hm / ((mxy - mny) || 1);
+  const H = Math.max(260, (mxy - mny) * ey + 2 * 90);
+  const X = q => M + (q.x - mnx) * ex, Y = q => 90 + (mxy - q.y) * ey;
+  const pl = arr => arr.map(q => X(q).toFixed(1) + "," + Y(q).toFixed(1)).join(" ");
+  const fmt = v => v === null || v === undefined || isNaN(v) ? "falta" : v.toFixed(3);
+  const flecha = p => p === null || p === undefined || isNaN(p) ? "" : p > 0.0005 ? " ↗" : p < -0.0005 ? " ↘" : " →";
+  const esSel = (tipo, k, lado) => sel && sel.tipo === tipo && sel.k === k && (lado === undefined || sel.lado === lado);
+  const el = [];
+  el.push(h("polygon", { key: "via", points: pl(fr), fill: "#ECEFF1", stroke: modo === "lat" ? "#94A3B8" : "#94A3B8", strokeWidth: 1.5 }));
+  el.push(h("polyline", { key: "eje", points: pl(G.curva(G.ini, G.fin, 0)), fill: "none", stroke: modo === "eje" ? "#C0392B" : "#CBD5E1", strokeWidth: modo === "eje" ? 3 : 2, strokeDasharray: "10 6" }));
+  const etiqueta = (key, q, lineas, arriba, color) => h("text", { key, x: X(q), y: Y(q) + (arriba ? -24 - 21 * (lineas.length - 1) : 40), textAnchor: "middle", fontSize: 19, fontWeight: 700, fill: color || "#1E293B" },
+    lineas.map((t, i) => h("tspan", { key: i, x: X(q), dy: i ? 21 : 0, fontFamily: i ? "monospace" : undefined }, t)));
+  if (modo === "eje") {
+    G.le.forEach((l, k) => {
+      const a = G.Ab[k], b = G.Ab[k + 1], m = G.Q((a + b) / 2, 0), r = rsEje[k];
+      el.push(h("polyline", { key: "t" + k, points: pl(G.curva(a, b, 0)), fill: "none", stroke: esSel("tramo", k) ? "#F59E0B" : "transparent", strokeWidth: 22, strokeLinecap: "round", style: { cursor: "pointer" }, onClick: () => setSel({ tipo: "tramo", k }) }));
+      el.push(h("text", { key: "tl" + k, x: X(m), y: Y(m) - 12, textAnchor: "middle", fontSize: 17, fontWeight: 700, fill: "#475569", style: { pointerEvents: "none" } },
+        l.toFixed(2) + " m · " + (r && r.pendiente !== null && !isNaN(r.pendiente) ? (r.pendiente > 0 ? "+" : "") + r.pendiente.toFixed(2) + " %" : "? %") + flecha(r && r.pendiente)));
+    });
+    G.Ab.forEach((a, k) => {
+      const q = G.Q(a, 0), act = esSel("pi", k), g = G.angulo(k);
+      el.push(h("g", { key: "p" + k, onClick: () => setSel({ tipo: "pi", k }), style: { cursor: "pointer" } },
+        h("circle", { cx: X(q), cy: Y(q), r: 28, fill: "transparent" }),
+        h("circle", { cx: X(q), cy: Y(q), r: act ? 17 : 14, fill: act ? "#F59E0B" : "#C0392B", stroke: act ? "#92400E" : "#fff", strokeWidth: 3 }),
+        h("text", { x: X(q), y: Y(q) + 6, textAnchor: "middle", fontSize: 16, fontWeight: 800, fill: "#fff" }, k + 1)));
+      const c = cotaDePI(rsEje, k);
+      el.push(etiqueta("pl" + k, G.Q(a, k % 2 === 0 ? -A.anchoIzq : A.anchoDer), [formatoAbscisa(a) + (g > 0.05 ? " · " + g.toFixed(0) + "°" : ""), fmt(c)], k % 2 === 0, c === null ? "#DC2626" : null));
+    });
+  } else {
+    ptsLat.forEach(({ lado, lat, sg, rs, pts }) => {
+      if (!lat || !lat.ancho) return;
+      const w = sg < 0 ? A.anchoIzq : A.anchoDer, o = sg * w;
+      const borde = G.curva(G.ini, G.fin, o);
+      if (lat.modo !== "longitudinal") {
+        const m = G.Q((G.ini + G.fin) / 2, o), act = esSel("borde", 0, lado);
+        el.push(h("polyline", { key: "b" + lado, points: pl(borde), fill: "none", stroke: act ? "#F59E0B" : "#0369A1", strokeWidth: act ? 9 : 6, style: { cursor: "pointer" }, onClick: () => setSel({ tipo: "borde", k: 0, lado }) }));
+        el.push(etiqueta("bl" + lado, m, [(lado === "izq" ? "IZQ" : "DER") + " · " + w.toFixed(2) + " m", lat.modoT === "pendiente" ? "pend. " + (lat.pendienteT || "?") + " %" : "dif. " + (lat.diferencia || "?") + " m"], sg < 0, "#0369A1"));
+        return;
+      }
+      el.push(h("polyline", { key: "b" + lado, points: pl(borde), fill: "none", stroke: "#0369A1", strokeWidth: 5, style: { pointerEvents: "none" } }));
+      pts.slice(0, -1).forEach((p0, k) => {
+        const p1 = pts[k + 1], r = rs[k], act = esSel("ltramo", k, lado);
+        const seg = [p0.abs].concat(G.Ab.filter(x => x > p0.abs + 1e-6 && x < p1.abs - 1e-6), [p1.abs]).map(x => G.Q(x, o));
+        el.push(h("polyline", { key: "lt" + lado + k, points: pl(seg), fill: "none", stroke: act ? "#F59E0B" : "transparent", strokeWidth: 20, strokeLinecap: "round", style: { cursor: "pointer" }, onClick: () => setSel({ tipo: "ltramo", k, lado }) }));
+        const m = G.Q((p0.abs + p1.abs) / 2, o + sg * 0.0001);
+        el.push(h("text", { key: "ltl" + lado + k, x: X(m), y: Y(m) + (sg < 0 ? -12 : 26), textAnchor: "middle", fontSize: 16, fontWeight: 700, fill: "#0369A1", style: { pointerEvents: "none" } },
+          (p1.d - p0.d).toFixed(2) + " m · " + (r && r.pendiente !== null && !isNaN(r.pendiente) ? (r.pendiente > 0 ? "+" : "") + r.pendiente.toFixed(2) + " %" : "? %") + flecha(r && r.pendiente)));
+      });
+      pts.forEach((p, k) => {
+        const q = G.Q(p.abs, o), act = esSel("lpi", k, lado);
+        el.push(h("g", { key: "lp" + lado + k, onClick: () => setSel({ tipo: "lpi", k, lado }), style: { cursor: "pointer" } },
+          h("circle", { cx: X(q), cy: Y(q), r: 26, fill: "transparent" }),
+          h("circle", { cx: X(q), cy: Y(q), r: act ? 15 : 11, fill: act ? "#F59E0B" : "#0369A1", stroke: act ? "#92400E" : "#fff", strokeWidth: 3 })));
+        el.push(etiqueta("lpl" + lado + k, G.Q(p.abs, o + sg * 0.6), [formatoAbscisa(p.absLat), fmt(p.cota)], sg < 0, p.cota === null ? "#DC2626" : null));
+      });
+    });
+  }
+  // largos
+  const largoEje = r3(G.fin - G.ini);
+  const resumen = modo === "eje" ? "Largo del eje " + largoEje.toFixed(3) + " m · " + G.le.length + (G.le.length === 1 ? " tramo" : " tramos")
+    : ["IZQ", "DER"].map((t, i) => { const L = ptsLat[i]; return t + " " + (L.largo !== null ? r3(L.largo).toFixed(3) + " m" : "a lo largo del eje"); }).join(" · ") + " · eje " + largoEje.toFixed(3) + " m";
+  // panel de edición
+  let panel = null;
+  const titulo = t => h("div", { style: { fontWeight: 800, fontSize: 13.5, marginBottom: 6 } }, t);
+  const cajaPanel = (...hijos) => h("div", { style: { background: "#FFFBEB", border: "2px solid #F59E0B", borderRadius: 10, padding: 10, marginTop: 6 } }, ...hijos);
+  const campoCota = (valor, onCambio) => h(Input, { value: valor, onChange: e => onCambio(e.target.value), placeholder: "cota, ej. 955.256", inputMode: "decimal", style: { maxWidth: 220 } });
+  if (sel && modo === "eje" && sel.tipo === "pi" && sel.k <= G.le.length) {
+    const k = sel.k, t0 = proy.tramos[k - 1], t1 = proy.tramos[k];
+    const v = k === 0 ? (t1 && t1.cotaInicio) : (t0 && valorTramo(t0.cotaFin) ? t0.cotaFin : t1 && t1.cotaInicio) || "";
+    panel = cajaPanel(titulo("PI " + (k + 1) + " · " + formatoAbscisa(G.Ab[k])), campoCota(v || "", nv => onEje(ponerCotaPI(proy.tramos, k, nv))),
+      h("div", { style: { fontSize: 11.5, color: C.muted, marginTop: 4 } }, "Es la cota fin del tramo de antes y la cota inicio del siguiente."));
+  } else if (sel && modo === "eje" && sel.tipo === "tramo" && proy.tramos[sel.k]) {
+    panel = cajaPanel(titulo("Tramo PI " + (sel.k + 1) + " → PI " + (sel.k + 2) + " · " + formatoAbscisa(G.Ab[sel.k]) + " → " + formatoAbscisa(G.Ab[sel.k + 1])),
+      h(CamposTramo, { t: proy.tramos[sel.k], onChange: nt => { const tr = [...proy.tramos]; tr[sel.k] = nt; onEje(tr); } }));
+  } else if (sel && modo === "lat") {
+    const L = ptsLat.find(x => x.lado === sel.lado), lat = L && L.lat, nombre = sel.lado === "izq" ? "Lateral izquierdo" : "Lateral derecho";
+    const set = nl => onLat(sel.lado, nl);
+    if (lat && sel.tipo === "borde" && lat.modo !== "longitudinal") {
+      panel = cajaPanel(titulo(nombre),
+        h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 } },
+          h("div", null, h(Label, null, "Ancho desde el eje (m)"), h(Input, { value: lat.ancho || "", onChange: e => set({ ...lat, ancho: e.target.value }), inputMode: "decimal" })),
+          h("div", null, h(Label, null, "Se calcula con"), h(Sel, { value: lat.modoT || "diferencia", onChange: e => set({ ...lat, modoT: e.target.value }) },
+            h("option", { value: "diferencia" }, "Diferencia con el eje (m)"), h("option", { value: "pendiente" }, "Pendiente transversal (%)"))),
+          lat.modoT === "pendiente" ? h("div", null, h(Label, null, "Pendiente (%)"), h(Input, { value: lat.pendienteT || "", onChange: e => set({ ...lat, pendienteT: e.target.value }), inputMode: "decimal", placeholder: "ej. -2.0" }))
+            : h("div", null, h(Label, null, "Diferencia (m)"), h(Input, { value: lat.diferencia || "", onChange: e => set({ ...lat, diferencia: e.target.value }), inputMode: "decimal", placeholder: "ej. -0.06" }))));
+    } else if (lat && sel.tipo === "lpi" && L.pts[sel.k]) {
+      const k = sel.k, t0 = lat.tramos[k - 1], t1 = lat.tramos[k];
+      const v = k === 0 ? (t1 && t1.cotaInicio) : (t0 && valorTramo(t0.cotaFin) ? t0.cotaFin : t1 && t1.cotaInicio) || "";
+      panel = cajaPanel(titulo(nombre + " · punto " + (k + 1) + " · " + formatoAbscisa(L.pts[k].absLat)), campoCota(v || "", nv => set({ ...lat, tramos: ponerCotaPI(lat.tramos, k, nv) })));
+    } else if (lat && sel.tipo === "ltramo" && lat.tramos[sel.k]) {
+      panel = cajaPanel(titulo(nombre + " · tramo " + (sel.k + 1)), h(CamposTramo, { t: lat.tramos[sel.k], onChange: nt => { const tr = [...lat.tramos]; tr[sel.k] = nt; set({ ...lat, tramos: tr }); } }));
+    }
+  }
+  const agregarPI = () => { const ult = resolverTramo(proy.tramos[proy.tramos.length - 1]);
+    onEje([...proy.tramos, { ...tramoVacio(), cotaInicio: ult.cotaFin !== null && !isNaN(ult.cotaFin) ? String(ult.cotaFin) : "" }]); setSel({ tipo: "tramo", k: proy.tramos.length }); };
+  return h("div", { style: { marginBottom: 14 } }, cab,
+    h("div", { style: { background: "#fff", border: `1px solid ${C.border}`, borderRadius: 12, padding: 10 } },
+      h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 } },
+        h("div", { style: { fontSize: 13, fontWeight: 700, color: "#334155" } }, resumen),
+        modo === "eje" && h(Btn, { small: true, color: C.success, onClick: agregarPI }, "+ PI al final")),
+      h("svg", { viewBox: `0 0 ${W} ${H.toFixed(0)}`, style: { width: "100%", maxWidth: 760, display: "block", margin: "0 auto", touchAction: "manipulation" } }, el),
+      !G.real && h("div", { style: { fontSize: 11.5, color: C.muted } }, "Dibujo recto: con las coordenadas de los PI (Eje y tramos → Distancias por coordenadas) se ve con sus quiebres."),
+      panel || h("div", { style: { fontSize: 12.5, color: C.muted, marginTop: 6 } }, modo === "eje" ? "Toca un PI para poner su cota, o un tramo para su distancia o pendiente." : "Toca un punto o un tramo del borde para editarlo (o el borde, si va con diferencia).")));
+}
 function GraficosVia({ proyecto, tabla, onChange }) {
   const d = datosGraficos(proyecto, tabla);
   if (!d) return React.createElement("div", { style: { color: C.muted, textAlign: "center", padding: 30, fontSize: 13 } }, "Presiona ⚡ CALCULAR para ver los gráficos.");
@@ -8163,7 +8327,9 @@ function App() {
     React.createElement(Btn, { small: true, color: "#B45309", onClick: alternarBloqueo }, React.createElement(Icono, { n: "lock-open", size: 14 }), "Desbloquear")),
   React.createElement(BloqueoCtx.Provider, { value: bloqueada }, /*#__PURE__*/React.createElement("main", {
     className: "tv-main" + (bloqueada ? " tv-bloqueada" : ""),
-  }, enVia("eje") && /*#__PURE__*/React.createElement("div", { style: { minWidth: 0 } }, /*#__PURE__*/React.createElement(Card, {
+  }, enVia("eje") && React.createElement(EditorPlanta, { proy, modo: "eje", onEje: tr => upd({ tramos: tr }) }),
+  enVia("lat") && React.createElement(EditorPlanta, { proy, modo: "lat", onLat: (lado, l) => upd(lado === "izq" ? { lateralIzq: l } : { lateralDer: l }) }),
+  enVia("eje") && /*#__PURE__*/React.createElement("div", { style: { minWidth: 0 } }, /*#__PURE__*/React.createElement(Card, {
     title: "Proyecto"
   }, /*#__PURE__*/React.createElement("div", {
     style: {

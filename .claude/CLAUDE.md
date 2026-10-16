@@ -33,7 +33,8 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 | VÍAS BLOQUEADAS | `protegerBloqueadas`, `useLocalProyectos`, `useLocalObras`, `viaValida` |
 | SINCRONIZAR CON GOOGLE DRIVE | `nubeSincronizar` (un archivo por vía + Obras.json en la carpeta TopoVías; permiso drive.file; ID de cliente en `NUBE_CLIENTE`) |
 | CANTIDADES DE LA VÍA | `calcAreas`, `calcCantidades` |
-| GRÁFICOS | `svgPerfil`, `svgPlanta` (texto de usuario siempre con `escXml`); `svgPlantaReal` dibuja la forma real con quiebres si hay coordenadas de los PI del eje (`coordsEje`) |
+| GRÁFICOS | `svgPerfil`, `svgPlanta` (texto de usuario siempre con `escXml`); `geoVia` (geometría en planta: real con `coordsEje` o recta; `Q(abs, desplazamiento)`), `svgPlantaReal` dibuja la forma real con quiebres |
+| EDITAR EN PLANTA (antes de `GraficosVia`) | `EditorPlanta` (desplegable en Eje y tramos y en Laterales: tocar PI/tramo/borde y editar; mismos datos), `ponerCotaPI`, `abscisaEjeDeLateral` |
 | INSTALAR / COPIA DE SEGURIDAD | `crearCopiaSeguridad`, `leerCopiaSeguridad`, `BotonNube`, `PanelNube`, `CopiasAutomaticas` |
 | TABLA RESULTADO / TABLA DE LECTURAS | `TablaResultado` (tabla de cotas, bloque corona), `CopiarEstructura`, `TabSardinel`, `TablaLecturas` (replanteo) |
 | VOLÚMENES / SOBREANCHO / TIPOS DE VOLUMEN | `calcVolumen` (en el borde de una cabecera parte la sección en dos), `parqEn`, `sobreanchoVolumen`, `construirHojaVia` (hoja Excel con fórmulas) |
