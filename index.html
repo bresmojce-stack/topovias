@@ -69,6 +69,13 @@
     color: #64748B; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; transition: color .15s, background .15s; }
   .tv-tabs button:hover { color: #1E293B; border-bottom-color: #CBD5E1; }
   .tv-tabs button.activa { color: #0284C7; border-bottom-color: #0284C7; background: rgba(240,249,255,0.7); }
+  /* Las pestañas y, en Vía, la barra de sus cinco apartados quedan juntas fijas arriba */
+  .tv-barras { position: sticky; top: 0; z-index: 50; }
+  .tv-subvia { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; padding: 6px 8px; background: #fff; border-bottom: 2px solid #0284C7; box-shadow: 0 2px 4px rgba(15,23,42,0.06); }
+  .tv-subvia button { border: none; background: none; border-radius: 10px; padding: 6px 2px 5px; font-size: 11px; font-weight: 700; color: #475569; cursor: pointer; line-height: 1.15; }
+  @media (min-width: 700px) { .tv-subvia { grid-template-columns: repeat(5, 128px); padding: 6px 20px; } }
+  .tv-subvia button:hover { background: #F1F5F9; }
+  .tv-subvia button.activa { background: #E0F2FE; color: #0369A1; box-shadow: inset 0 0 0 2px #0284C7; }
 
   /* ── Contenido a pantalla completa ── */
   .tv-main { width: 100%; flex: 1 0 auto; padding: 24px max(28px, env(safe-area-inset-right)) calc(84px + env(safe-area-inset-bottom)) max(28px, env(safe-area-inset-left)); }
@@ -1467,7 +1474,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "48";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "49";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -2867,19 +2874,40 @@ function TabSardinel({ proy, upd, updSinRecalcular }) {
       React.createElement("div", { style: { marginTop: 12 } }, React.createElement(Btn, { small: true, color: "#64748B", onClick: () => { if (confirm("¿Quitar el sardinel de esta vía? (lo anotado se guarda por si lo vuelves a agregar)")) set({ activo: false }); } }, "Quitar sardinel"))));
 }
 // ─── TABLA DE LECTURAS (nivelacion: BM, vista+, altura instrumental) ─────────
-// ── Pestaña Vía: eje y tramos, estructura y laterales en un solo apartado ──
-const SECCIONES_VIA = [["tv-sec-estructura", "Estructura"], ["tv-sec-eje", "Eje y tramos"], ["tv-sec-laterales", "Laterales"]];
-const irASeccion = id => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); };
-function IndiceVia() {
-  return React.createElement("div", { style: { order: 0, display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 } },
-    SECCIONES_VIA.map(([id, t], i) => React.createElement("button", { key: id, onClick: () => irASeccion(id),
-      style: { border: `1px solid ${C.border}`, background: "#fff", color: C.accent, borderRadius: 16, padding: "6px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer" } },
-      "①②③"[i] + " " + t)));
+// ── Pestaña Vía: cinco apartados con su barra de iconos (fija arriba) ──
+// Iconos a color dibujados para vías (el resto de la app usa los de línea de ICONOS)
+const ICONOS_VIA = {
+  estr: [["rect", { x: 2, y: 5, width: 28, height: 7, rx: 1, fill: "#1F2937" }], ["path", { d: "M7 8.5h5M18 8.5h5", stroke: "#FACC15", strokeWidth: 1.6 }],
+    ["rect", { x: 2, y: 13, width: 28, height: 6, fill: "#D6B98C" }],
+    ["path", { d: "M6 15.5h.1M11 17h.1M16 15h.1M21 17.2h.1M26 15.3h.1", stroke: "#A47E4B", strokeWidth: 1.8, strokeLinecap: "round" }],
+    ["rect", { x: 2, y: 20, width: 28, height: 8, rx: 1, fill: "#9CA3AF" }],
+    ["ellipse", { cx: 6.5, cy: 23.5, rx: 3, ry: 2, fill: "#4B5563" }], ["ellipse", { cx: 13.5, cy: 25, rx: 2.6, ry: 1.8, fill: "#4B5563" }],
+    ["ellipse", { cx: 19.5, cy: 23, rx: 3, ry: 2, fill: "#4B5563" }], ["ellipse", { cx: 26, cy: 25, rx: 2.6, ry: 1.9, fill: "#4B5563" }]],
+  eje: [["path", { d: "M11 30L14 2h4l3 28z", fill: "#374151" }], ["path", { d: "M5 30L13 2M27 30L19 2", stroke: "#9CA3AF", strokeWidth: 1.5 }],
+    ["path", { d: "M16 4v5", stroke: "#FACC15", strokeWidth: 2 }], ["path", { d: "M16 13v6", stroke: "#FACC15", strokeWidth: 2.4 }], ["path", { d: "M16 23v6", stroke: "#FACC15", strokeWidth: 2.8 }]],
+  lat: [["rect", { x: 3, y: 14, width: 26, height: 6, fill: "#374151" }], ["path", { d: "M16 12v10", stroke: "#FACC15", strokeWidth: 2, strokeDasharray: "2 1.5" }],
+    ["path", { d: "M15 8H5l3-2.5M5 8l3 2.5M17 8h10l-3-2.5M27 8l-3 2.5", stroke: "#0369A1", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" }],
+    ["rect", { x: 2, y: 12, width: 2, height: 10, fill: "#0369A1" }], ["rect", { x: 28, y: 12, width: 2, height: 10, fill: "#0369A1" }]],
+  parq: [["rect", { x: 3, y: 3, width: 26, height: 26, rx: 5, fill: "#2563EB" }], ["path", { d: "M12 24V8h6a5 5 0 0 1 0 10h-6", stroke: "#fff", strokeWidth: 3.2, strokeLinejoin: "round" }]],
+  sard: [["rect", { x: 2, y: 21, width: 16, height: 4, fill: "#374151" }],
+    ["path", { d: "M18 25V14l3-4h6l1 4 2 11z", fill: "#CBD5E1", stroke: "#64748B", strokeWidth: 1.3, strokeLinejoin: "round" }],
+    ["rect", { x: 2, y: 25, width: 28, height: 4, fill: "#A47E4B" }]]
+};
+function IconoVia({ n, size }) {
+  return React.createElement("svg", { width: size || 28, height: size || 28, viewBox: "0 0 32 32", fill: "none", "aria-hidden": true, style: { display: "block", margin: "0 auto 3px" } },
+    ICONOS_VIA[n].map(([tag, at], i) => React.createElement(tag, { key: i, ...at })));
 }
 function TituloSeccionVia({ n, id, texto, orden }) {
   return React.createElement("div", { id, style: { order: orden, scrollMarginTop: 110, display: "flex", alignItems: "center", gap: 8, margin: n > 1 ? "18px 0 10px" : "0 0 10px",
       fontWeight: 900, fontSize: 16, color: C.accent, borderBottom: `2px solid ${C.accent}`, paddingBottom: 4 } },
     React.createElement("span", null, "①②③"[n - 1]), texto);
+}
+const APARTADOS_VIA = [["estr", "Estructura"], ["eje", "Eje y tramos"], ["lat", "Laterales"], ["parq", "Parqueaderos"], ["sard", "Sardinel"]];
+function BarraVia({ actual, onCambiar }) {
+  return React.createElement("div", { className: "tv-subvia" },
+    APARTADOS_VIA.map(([id, t]) => React.createElement("button", { key: id, "data-sub": id, className: actual === id ? "activa" : undefined,
+      onClick: () => { onCambiar(id); try { window.scrollTo({ top: 0 }); } catch (_) {} } },
+      React.createElement(IconoVia, { n: id }), t)));
 }
 
 function TablaLecturas({
@@ -5436,7 +5464,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     setGrupo(null);
     const v = (proy.coordsEje || []).map(p => ({ x: parseFloat(p.este), y: parseFloat(p.norte) })).filter(p => !isNaN(p.x) && !isNaN(p.y));
     if (v.length < 2 && proy.libre) { alert("En el dibujo libre no hay vía de donde traer el eje.\n\nDibuja el eje como polilínea (puedes escribir las coordenadas de cada PI), tócalo con Elegir y usa \"Usar como eje\"."); return; }
-    if (v.length < 2) { alert("Esta vía todavía no tiene coordenadas de los PI.\n\nEscríbelas en la pestaña Vía → \"Distancias por coordenadas\" (Norte y Este de cada PI), o dibuja el eje como polilínea, tócalo con Elegir y usa \"Usar como eje\"."); return; }
+    if (v.length < 2) { alert("Esta vía todavía no tiene coordenadas de los PI.\n\nEscríbelas en Vía → Eje y tramos → \"Distancias por coordenadas\" (Norte y Este de cada PI), o dibuja el eje como polilínea, tócalo con Elegir y usa \"Usar como eje\"."); return; }
     const nuevo = { t: "eje", v, abs0: parseFloat(proy.absInicio) || 0, paso: 10, nom: proy.nombre || "Eje" };
     agregar([nuevo]); setTimeout(() => verTodo(objs.concat([nuevo])), 60);
     aviso("Eje traído: " + v.length + " PI, de " + absCorta(nuevo.abs0) + " a " + absCorta(nuevo.abs0 + DIB.largo(v)));
@@ -7490,6 +7518,8 @@ function App() {
     } catch(e) { return null; }
   });
   const [tab, setTab] = React.useState("via");
+  const [subVia, setSubVia] = React.useState("estr");   // apartado abierto dentro de Vía (se recuerda al cambiar de pestaña)
+  const enVia = id => tab === "via" && subVia === id;
   const [capaLectura, setCapaLectura] = React.useState("__rasante__");
   const [memoria, setMemoria] = React.useState([]);
   const [archivo, setArchivo] = React.useState(null); // Excel generado, listo para guardar o compartir
@@ -7720,8 +7750,6 @@ function App() {
   const areaPlanta = () => areasCalc.totalPlano;
   const TABS = [
     { id: "via", label: "Vía", icono: "route" },
-    { id: "parq", label: "Parqueaderos", icono: "car" },
-    { id: "sard", label: "Sardinel", icono: "brick-wall" },
     { id: "resultado", label: "Cotas y lecturas", icono: "table" },
     { id: "plano", label: "Plano", icono: "map" },
     { id: "nivel", label: "Nivelaciones", icono: "chart-column" },
@@ -7780,26 +7808,21 @@ function App() {
       fontSize: 13.5,
       letterSpacing: 0.3
     }
-  }, React.createElement(Icono, { n: "zap", size: 16 }), "CALCULAR"))), archivo && React.createElement(VentanaArchivo, { archivo: archivo, onClose: () => setArchivo(null) }), avisoGenerando, avisoCorto, tab !== "dibujo" && barraDeshacer, /*#__PURE__*/React.createElement("nav", {
+  }, React.createElement(Icono, { n: "zap", size: 16 }), "CALCULAR"))), archivo && React.createElement(VentanaArchivo, { archivo: archivo, onClose: () => setArchivo(null) }), avisoGenerando, avisoCorto, tab !== "dibujo" && barraDeshacer, React.createElement("div", { className: "tv-barras" }, /*#__PURE__*/React.createElement("nav", {
     className: "tv-tabs"
   }, TABS.map(t => /*#__PURE__*/React.createElement("button", {
     key: t.id,
     "data-tab": t.id,
     onClick: e => { setTab(t.id); try { e.currentTarget.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }); } catch (_) {} },
     className: tab === t.id ? "activa" : undefined
-  }, React.createElement(Icono, { n: t.icono, size: 16 }), t.label))),
+  }, React.createElement(Icono, { n: t.icono, size: 16 }), t.label))), tab === "via" && React.createElement(BarraVia, { actual: subVia, onCambiar: setSubVia })),
   bloqueada && React.createElement("div", { className: "tv-banner-bloqueo" },
     React.createElement(Icono, { n: "lock", size: 16 }),
     React.createElement("span", { style: { flex: 1, minWidth: 200 } }, "Vía bloqueada: puedes ver, calcular y exportar, pero no cambiar datos."),
     React.createElement(Btn, { small: true, color: "#B45309", onClick: alternarBloqueo }, React.createElement(Icono, { n: "lock-open", size: 14 }), "Desbloquear")),
   React.createElement(BloqueoCtx.Provider, { value: bloqueada }, /*#__PURE__*/React.createElement("main", {
     className: "tv-main" + (bloqueada ? " tv-bloqueada" : ""),
-    style: tab === "via" ? { display: "flex", flexDirection: "column" } : undefined
-  }, tab === "via" && React.createElement(IndiceVia, null),
-  tab === "via" && React.createElement(TituloSeccionVia, { n: 1, id: "tv-sec-estructura", texto: "Estructura", orden: 1 }),
-  tab === "via" && React.createElement(TituloSeccionVia, { n: 2, id: "tv-sec-eje", texto: "Eje y tramos", orden: 3 }),
-  tab === "via" && React.createElement(TituloSeccionVia, { n: 3, id: "tv-sec-laterales", texto: "Laterales", orden: 5 }),
-  tab === "via" && /*#__PURE__*/React.createElement("div", { style: { order: 4, minWidth: 0 } }, /*#__PURE__*/React.createElement(Card, {
+  }, enVia("eje") && /*#__PURE__*/React.createElement("div", { style: { minWidth: 0 } }, /*#__PURE__*/React.createElement(Card, {
     title: "Proyecto"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -7932,7 +7955,7 @@ function App() {
         valor: ""
       }]
     })
-  }, "+ Abscisa intermedia"))), tab === "via" && /*#__PURE__*/React.createElement("div", { style: { order: 6, minWidth: 0 } }, /*#__PURE__*/React.createElement("div", {
+  }, "+ Abscisa intermedia"))), enVia("lat") && /*#__PURE__*/React.createElement("div", { style: { minWidth: 0 } }, /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#FFF9E6",
       border: `1px solid ${C.warn}`,
@@ -7953,8 +7976,8 @@ function App() {
     onChange: v => upd({
       lateralIzq: v
     })
-  }), proy.lateralDer.modo === "longitudinal" && React.createElement(CalcCoordenadas, { label: "LATERAL DERECHO", prefijo: "Tramo", nTramos: proy.lateralDer.tramos.length, puntos: proy.coordsDer || [], onChange: function(arr) { updSinRecalcular({ coordsDer: arr }); }, onAplicar: function(ds) { upd({ lateralDer: Object.assign({}, proy.lateralDer, { tramos: aplicarDistancias(proy.lateralDer.tramos, ds) }) }); }}), proy.lateralIzq.modo === "longitudinal" && React.createElement(CalcCoordenadas, { label: "LATERAL IZQUIERDO", prefijo: "Tramo", nTramos: proy.lateralIzq.tramos.length, puntos: proy.coordsIzq || [], onChange: function(arr) { updSinRecalcular({ coordsIzq: arr }); }, onAplicar: function(ds) { upd({ lateralIzq: Object.assign({}, proy.lateralIzq, { tramos: aplicarDistancias(proy.lateralIzq.tramos, ds) }) }); }})), tab === "via" && /*#__PURE__*/React.createElement(Card, {
-    style: { order: 2, minWidth: 0 },
+  }), proy.lateralDer.modo === "longitudinal" && React.createElement(CalcCoordenadas, { label: "LATERAL DERECHO", prefijo: "Tramo", nTramos: proy.lateralDer.tramos.length, puntos: proy.coordsDer || [], onChange: function(arr) { updSinRecalcular({ coordsDer: arr }); }, onAplicar: function(ds) { upd({ lateralDer: Object.assign({}, proy.lateralDer, { tramos: aplicarDistancias(proy.lateralDer.tramos, ds) }) }); }}), proy.lateralIzq.modo === "longitudinal" && React.createElement(CalcCoordenadas, { label: "LATERAL IZQUIERDO", prefijo: "Tramo", nTramos: proy.lateralIzq.tramos.length, puntos: proy.coordsIzq || [], onChange: function(arr) { updSinRecalcular({ coordsIzq: arr }); }, onAplicar: function(ds) { upd({ lateralIzq: Object.assign({}, proy.lateralIzq, { tramos: aplicarDistancias(proy.lateralIzq.tramos, ds) }) }); }})), enVia("estr") && /*#__PURE__*/React.createElement(Card, {
+    style: { minWidth: 0 },
     title: "Capas de Estructura de Pavimento"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -8100,7 +8123,7 @@ function App() {
       fontWeight: 700,
       color: C.danger
     }
-  }, "Profundidad total de excavación: ", r3(proy.capas.filter(c => c.nombre && c.espesor).reduce((s, c) => s + (parseFloat(c.espesor) || 0), 0)).toFixed(3), " m"))), tab === "sard" && React.createElement(TabSardinel, { proy, upd, updSinRecalcular }), tab === "parq" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, "Profundidad total de excavación: ", r3(proy.capas.filter(c => c.nombre && c.espesor).reduce((s, c) => s + (parseFloat(c.espesor) || 0), 0)).toFixed(3), " m"))), enVia("sard") && React.createElement(TabSardinel, { proy, upd, updSinRecalcular }), enVia("parq") && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 12
     }
