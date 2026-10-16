@@ -62,21 +62,20 @@
   .tv-aviso { pointer-events: none; position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(70px + env(safe-area-inset-bottom, 0px)); z-index: 130; background: #0F172A; color: #fff; padding: 11px 18px; border-radius: 12px; font-size: 13.5px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.3); max-width: calc(100vw - 32px); text-align: center; }
 
   /* ── Pestañas: una sola fila que se desliza, fija arriba al hacer scroll ── */
-  .tv-tabs { position: sticky; top: 0; z-index: 50; background: #fff; border-bottom: 1px solid #E2E8F0; display: flex; gap: 2px;
-    overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding: 0 12px; box-shadow: 0 1px 2px rgba(15,23,42,0.05); }
+  .tv-tabs { display: flex; gap: 2px; background: #1E293B; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding: 6px 12px 0; }
   .tv-tabs::-webkit-scrollbar { display: none; }
-  .tv-tabs button { flex: 0 0 auto; padding: 12px 14px; border: none; border-bottom: 2px solid transparent; background: none; font-size: 13px; font-weight: 700;
-    color: #64748B; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; transition: color .15s, background .15s; }
-  .tv-tabs button:hover { color: #1E293B; border-bottom-color: #CBD5E1; }
-  .tv-tabs button.activa { color: #0284C7; border-bottom-color: #0284C7; background: rgba(240,249,255,0.7); }
-  /* Las pestañas y, en Vía, la barra de sus cinco apartados quedan juntas fijas arriba */
+  .tv-tabs button { flex: 0 0 auto; display: inline-flex; flex-direction: column; align-items: center; gap: 4px; padding: 7px 16px 8px; border: none; border-radius: 10px 10px 0 0;
+    background: none; font-size: 12.5px; font-weight: 700; color: #CBD5E1; cursor: pointer; white-space: nowrap; transition: color .15s, background .15s; }
+  .tv-tabs button:hover { background: rgba(255,255,255,0.07); color: #fff; }
+  .tv-tabs button.activa { background: #fff; color: #0369A1; }
+  .tv-corto { display: none; }
+  /* Las pestañas y debajo los apartados de la pestaña abierta quedan juntas fijas arriba */
   .tv-barras { position: sticky; top: 0; z-index: 50; }
-  .tv-subvia { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; padding: 6px 8px; background: #fff; border-bottom: 2px solid #0284C7; box-shadow: 0 2px 4px rgba(15,23,42,0.06); }
-  .tv-subvia button { border: none; background: none; border-radius: 10px; padding: 6px 2px 5px; font-size: 11px; font-weight: 700; color: #475569; cursor: pointer; line-height: 1.15; }
-  @media (min-width: 700px) { .tv-subvia { grid-template-columns: repeat(5, 128px); padding: 6px 20px; } }
+  .tv-subvia { display: flex; gap: 6px; padding: 6px 12px; background: #fff; border-bottom: 1px solid #E2E8F0; box-shadow: 0 2px 4px rgba(15,23,42,0.06); overflow-x: auto; scrollbar-width: none; }
+  .tv-subvia button { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #E2E8F0; background: #F8FAFC; border-radius: 16px; padding: 4px 12px 4px 7px;
+    font-size: 12px; font-weight: 700; color: #475569; cursor: pointer; white-space: nowrap; }
   .tv-subvia button:hover { background: #F1F5F9; }
-  .tv-subvia button.activa { background: #E0F2FE; color: #0369A1; box-shadow: inset 0 0 0 2px #0284C7; }
-
+  .tv-subvia button.activa { background: #0369A1; border-color: #0369A1; color: #fff; }
   /* ── Contenido a pantalla completa ── */
   .tv-main { width: 100%; flex: 1 0 auto; padding: 24px max(28px, env(safe-area-inset-right)) calc(84px + env(safe-area-inset-bottom)) max(28px, env(safe-area-inset-left)); }
   /* Gráficas: en pantallas angostas se pueden deslizar en vez de quedar diminutas */
@@ -99,7 +98,20 @@
     .tv-proyecto select { flex: 1 1 auto; max-width: none; }
     .tv-main { padding-top: 12px; padding-left: max(10px, env(safe-area-inset-left)); padding-right: max(10px, env(safe-area-inset-right)); }
     .tv-card { padding: 14px 12px !important; }
+    .tv-brand > div { display: none; }
+    .tv-header { padding-left: max(10px, env(safe-area-inset-left)); padding-right: max(10px, env(safe-area-inset-right)); }
+    .tv-acciones { gap: 5px; }
+    .tv-acciones .tv-btn { padding-left: 9px !important; padding-right: 9px !important; }
+    .tv-tabs { padding: 5px 4px 0; gap: 0; }
+    .tv-tabs button { flex: 1 1 0; min-width: 0; padding: 6px 1px 7px; font-size: 10.5px; gap: 3px; }
+    .tv-tabs button svg { width: 25px; height: 25px; }
+    .tv-largo { display: none; }
+    .tv-corto { display: inline; }
+    .tv-subvia { gap: 4px; padding: 5px 6px; }
+    .tv-subvia button { flex: 1 1 0; min-width: 0; max-width: 150px; flex-direction: column; gap: 2px; border-radius: 9px; padding: 4px 2px 3px; font-size: 10.5px; }
+    .tv-subvia button svg { width: 15px; height: 15px; }
   }
+  @media (max-width: 380px) { .tv-tabs button { font-size: 9.5px; letter-spacing: -0.2px; } }
   /* En pantallas táctiles la letra de las casillas es de 16 px: así el celular no hace zoom al escribir */
   @media (pointer: coarse) {
     input, select, textarea { font-size: 16px !important; }
@@ -108,7 +120,6 @@
     input[type=checkbox] { width: 22px !important; height: 22px !important; }
     .tv-calc-dec { min-width: 36px; min-height: 32px; }
     .tv-dib-btn { min-height: 34px; }
-    .tv-tabs button { padding: 13px 14px; }
   }
 </style>
 </head>
@@ -1474,7 +1485,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "49";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "50";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -2889,12 +2900,40 @@ const ICONOS_VIA = {
     ["path", { d: "M15 8H5l3-2.5M5 8l3 2.5M17 8h10l-3-2.5M27 8l-3 2.5", stroke: "#0369A1", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" }],
     ["rect", { x: 2, y: 12, width: 2, height: 10, fill: "#0369A1" }], ["rect", { x: 28, y: 12, width: 2, height: 10, fill: "#0369A1" }]],
   parq: [["rect", { x: 3, y: 3, width: 26, height: 26, rx: 5, fill: "#2563EB" }], ["path", { d: "M12 24V8h6a5 5 0 0 1 0 10h-6", stroke: "#fff", strokeWidth: 3.2, strokeLinejoin: "round" }]],
+  via: [["path", { d: "M4 30C9 22 22 20 20 13S10 7 14 2h5c-3 4 7 6 6 12s-13 9-14 16z", fill: "#374151" }],
+    ["path", { d: "M15 27c2-3 7-6 7-11M18 11c-1-3 0-6 2-8", stroke: "#FACC15", strokeWidth: 1.8, strokeDasharray: "2.5 2.5" }], ["path", { d: "M2 30h6M24 30h6", stroke: "#16A34A", strokeWidth: 3 }]],
+  cot: [["rect", { x: 4, y: 3, width: 24, height: 26, rx: 2, fill: "#fff", stroke: "#64748B", strokeWidth: 1.5 }], ["rect", { x: 4, y: 3, width: 24, height: 6, rx: 2, fill: "#0369A1" }],
+    ["path", { d: "M4 14h24M4 19h24M4 24h24M12 9v20M20 9v20", stroke: "#94A3B8", strokeWidth: 1 }]],
+  lec: [["rect", { x: 13, y: 2, width: 6, height: 28, rx: 1, fill: "#fff", stroke: "#64748B", strokeWidth: 1 }],
+    ["path", { d: "M13 5.5h6M13 11.5h6M13 17.5h6M13 23.5h6", stroke: "#DC2626", strokeWidth: 3 }], ["path", { d: "M4 12h7M21 18h7", stroke: "#0369A1", strokeWidth: 2 }]],
+  niv: [["rect", { x: 8, y: 5, width: 16, height: 7, rx: 2, fill: "#FACC15", stroke: "#A16207", strokeWidth: 1 }], ["circle", { cx: 24.5, cy: 8.5, r: 2.6, fill: "#1F2937" }],
+    ["rect", { x: 6, y: 9, width: 3, height: 3, fill: "#1F2937" }], ["rect", { x: 13, y: 12, width: 6, height: 3, fill: "#374151" }],
+    ["path", { d: "M16 15L8 30M16 15v15M16 15l8 15", stroke: "#A8A29E", strokeWidth: 2.2, strokeLinecap: "round" }]],
+  cant: [["path", { d: "M3 12l14-2 2 10H5z", fill: "#F59E0B" }], ["path", { d: "M4 12c3-5 9-6 13-2z", fill: "#A47E4B" }],
+    ["rect", { x: 19, y: 13, width: 9, height: 7, rx: 1, fill: "#F59E0B" }], ["rect", { x: 22, y: 14.5, width: 4.5, height: 3, fill: "#BAE6FD" }],
+    ["rect", { x: 3, y: 20, width: 26, height: 3, fill: "#475569" }], ["circle", { cx: 9, cy: 25, r: 3, fill: "#1F2937", stroke: "#9CA3AF", strokeWidth: 1 }], ["circle", { cx: 23, cy: 25, r: 3, fill: "#1F2937", stroke: "#9CA3AF", strokeWidth: 1 }]],
+  vol: [["path", { d: "M3 24l7-12h12l7 12z", fill: "#A47E4B" }], ["path", { d: "M10 12l3 4h6l3-4", fill: "#C9A26B" }], ["rect", { x: 3, y: 24, width: 26, height: 3, fill: "#78716C" }]],
+  lista: [["rect", { x: 6, y: 4, width: 20, height: 25, rx: 2, fill: "#FEF3C7", stroke: "#B45309", strokeWidth: 1.3 }], ["rect", { x: 11, y: 2, width: 10, height: 5, rx: 1.5, fill: "#B45309" }],
+    ["path", { d: "M10 13h3M10 18h3M10 23h3", stroke: "#16A34A", strokeWidth: 2 }], ["path", { d: "M15 13h7M15 18h7M15 23h7", stroke: "#78716C", strokeWidth: 1.5 }]],
+  dib: [["rect", { x: 3, y: 5, width: 22, height: 22, rx: 1.5, fill: "#DBEAFE", stroke: "#3B82F6", strokeWidth: 1.3 }],
+    ["path", { d: "M3 11h22M3 17h22M3 23h22M9 5v22M15 5v22M21 5v22", stroke: "#93C5FD", strokeWidth: 0.8 }], ["path", { d: "M6 23l6-10 7 5", stroke: "#1D4ED8", strokeWidth: 1.8 }],
+    ["path", { d: "M20 26l9-15 2.5 1.5-9 15-3.2 1.2z", fill: "#F59E0B", stroke: "#92400E", strokeWidth: 0.8 }]],
+  calc: [["rect", { x: 6, y: 2, width: 20, height: 28, rx: 3, fill: "#475569" }], ["rect", { x: 9, y: 5, width: 14, height: 6, rx: 1, fill: "#A7F3D0" }],
+    ["path", { d: "M9.5 15.5h3M14.5 15.5h3M9.5 20.5h3M14.5 20.5h3M9.5 25.5h3M14.5 25.5h3", stroke: "#E2E8F0", strokeWidth: 3, strokeLinecap: "round" }],
+    ["rect", { x: 19, y: 14, width: 4, height: 3, rx: 0.7, fill: "#F59E0B" }], ["rect", { x: 19, y: 19, width: 4, height: 8, rx: 0.7, fill: "#0284C7" }]],
+  bit: [["rect", { x: 6, y: 3, width: 20, height: 26, rx: 2, fill: "#92400E" }], ["rect", { x: 8, y: 3, width: 18, height: 26, rx: 1.5, fill: "#B45309" }],
+    ["rect", { x: 11, y: 7, width: 12, height: 7, rx: 1, fill: "#FEF3C7" }], ["path", { d: "M12.5 9.5h9M12.5 11.8h6", stroke: "#92400E", strokeWidth: 1 }],
+    ["path", { d: "M21 3v10l2-1.6 2 1.6V3z", fill: "#DC2626" }], ["rect", { x: 14, y: 16.5, width: 4, height: 2, rx: 0.6, fill: "#1F2937" }],
+    ["circle", { cx: 17, cy: 22, r: 4.3, fill: "#1F2937" }], ["circle", { cx: 17, cy: 22, r: 2.4, fill: "#60A5FA" }]],
+  plano: [["rect", { x: 2, y: 3, width: 28, height: 26, rx: 2, fill: "#F0FDF4", stroke: "#16A34A", strokeWidth: 1.3 }],
+    ["path", { d: "M4 9c6-3 10 4 16 1s6-3 8-3", stroke: "#374151", strokeWidth: 3.2 }], ["path", { d: "M4 9c6-3 10 4 16 1s6-3 8-3", stroke: "#FACC15", strokeWidth: 0.9, strokeDasharray: "1.6 1.4" }],
+    ["path", { d: "M4 16h24", stroke: "#CBD5E1", strokeWidth: 0.8 }], ["path", { d: "M4 26l6-5 5 2 6-6 7 3", stroke: "#DC2626", strokeWidth: 1.8, strokeLinejoin: "round" }], ["path", { d: "M4 27h24", stroke: "#A47E4B", strokeWidth: 1.5 }]],
   sard: [["rect", { x: 2, y: 21, width: 16, height: 4, fill: "#374151" }],
     ["path", { d: "M18 25V14l3-4h6l1 4 2 11z", fill: "#CBD5E1", stroke: "#64748B", strokeWidth: 1.3, strokeLinejoin: "round" }],
     ["rect", { x: 2, y: 25, width: 28, height: 4, fill: "#A47E4B" }]]
 };
 function IconoVia({ n, size }) {
-  return React.createElement("svg", { width: size || 28, height: size || 28, viewBox: "0 0 32 32", fill: "none", "aria-hidden": true, style: { display: "block", margin: "0 auto 3px" } },
+  return React.createElement("svg", { width: size || 28, height: size || 28, viewBox: "0 0 32 32", fill: "none", "aria-hidden": true, style: { display: "block", flex: "0 0 auto" } },
     ICONOS_VIA[n].map(([tag, at], i) => React.createElement(tag, { key: i, ...at })));
 }
 function TituloSeccionVia({ n, id, texto, orden }) {
@@ -2902,12 +2941,19 @@ function TituloSeccionVia({ n, id, texto, orden }) {
       fontWeight: 900, fontSize: 16, color: C.accent, borderBottom: `2px solid ${C.accent}`, paddingBottom: 4 } },
     React.createElement("span", null, "①②③"[n - 1]), texto);
 }
-const APARTADOS_VIA = [["estr", "Estructura"], ["eje", "Eje y tramos"], ["lat", "Laterales"], ["parq", "Parqueaderos"], ["sard", "Sardinel"]];
-function BarraVia({ actual, onCambiar }) {
+// Apartados de cada pestaña (la barra pequeña debajo de las pestañas): [id, nombre, nombre corto en celular]
+const APARTADOS = {
+  via: [["estr", "Estructura"], ["eje", "Eje y tramos", "Eje"], ["lat", "Laterales"], ["parq", "Parqueaderos", "Parq."], ["sard", "Sardinel"], ["plano", "Plano"]],
+  resultado: [["cot", "Tabla de cotas"], ["lec", "Lecturas de replanteo"]],
+  cant: [["vol", "Volúmenes"], ["lista", "Cantidades"]]
+};
+const APARTADO_INICIAL = { via: "estr", resultado: "cot", cant: "vol" };
+function BarraApartados({ lista, actual, onCambiar }) {
   return React.createElement("div", { className: "tv-subvia" },
-    APARTADOS_VIA.map(([id, t]) => React.createElement("button", { key: id, "data-sub": id, className: actual === id ? "activa" : undefined,
+    lista.map(([id, t, corto]) => React.createElement("button", { key: id, "data-sub": id, className: actual === id ? "activa" : undefined,
       onClick: () => { onCambiar(id); try { window.scrollTo({ top: 0 }); } catch (_) {} } },
-      React.createElement(IconoVia, { n: id }), t)));
+      React.createElement(IconoVia, { n: id, size: 16 }),
+      corto ? [React.createElement("span", { key: "l", className: "tv-largo" }, t), React.createElement("span", { key: "c", className: "tv-corto" }, corto)] : t)));
 }
 
 function TablaLecturas({
@@ -7518,8 +7564,9 @@ function App() {
     } catch(e) { return null; }
   });
   const [tab, setTab] = React.useState("via");
-  const [subVia, setSubVia] = React.useState("estr");   // apartado abierto dentro de Vía (se recuerda al cambiar de pestaña)
-  const enVia = id => tab === "via" && subVia === id;
+  const [sub, setSub] = React.useState(APARTADO_INICIAL);   // apartado abierto de cada pestaña (se recuerda al cambiar de pestaña)
+  const enVia = id => tab === "via" && sub.via === id;
+  const enApartado = (t, id) => tab === t && sub[t] === id;
   const [capaLectura, setCapaLectura] = React.useState("__rasante__");
   const [memoria, setMemoria] = React.useState([]);
   const [archivo, setArchivo] = React.useState(null); // Excel generado, listo para guardar o compartir
@@ -7732,7 +7779,7 @@ function App() {
   const calcular = () => {
     const t = generarTabla(proy);
     setTabla(t);
-    setTab("resultado");
+    setTab("resultado"); setSub(s => ({ ...s, resultado: "cot" }));
     const snap = {
       id: Date.now(),
       nombre: proy.nombre,
@@ -7749,15 +7796,13 @@ function App() {
   const areasParqueaderos = () => areasCalc.parqs.map(x => ({ nombre: x.nombre, area: x.areaPlano }));
   const areaPlanta = () => areasCalc.totalPlano;
   const TABS = [
-    { id: "via", label: "Vía", icono: "route" },
-    { id: "resultado", label: "Cotas y lecturas", icono: "table" },
-    { id: "plano", label: "Plano", icono: "map" },
-    { id: "nivel", label: "Nivelaciones", icono: "chart-column" },
-    { id: "vol", label: "Volúmenes", icono: "trending-up" },
-    { id: "cant", label: "Cantidades", icono: "clipboard-list" },
-    { id: "verif", label: "Calculadora", icono: "calculator" },
-    { id: "dibujo", label: "Dibujo", icono: "pencil-ruler" },
-    { id: "memoria", label: "Memoria", icono: "folder-open" }];
+    { id: "via", label: "Vía", icono: "via" },
+    { id: "resultado", label: "Cotas y lecturas", corto: "Cotas", icono: "cot" },
+    { id: "nivel", label: "Nivelaciones", corto: "Nivelac.", icono: "niv" },
+    { id: "cant", label: "Cantidades", icono: "cant" },
+    { id: "dibujo", label: "Dibujo", icono: "dib" },
+    { id: "verif", label: "Calculadora", corto: "Calcul.", icono: "calc" },
+    { id: "memoria", label: "Memoria", icono: "bit" }];
   return /*#__PURE__*/React.createElement("div", {
     style: {
       color: C.text,
@@ -7815,7 +7860,8 @@ function App() {
     "data-tab": t.id,
     onClick: e => { setTab(t.id); try { e.currentTarget.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }); } catch (_) {} },
     className: tab === t.id ? "activa" : undefined
-  }, React.createElement(Icono, { n: t.icono, size: 16 }), t.label))), tab === "via" && React.createElement(BarraVia, { actual: subVia, onCambiar: setSubVia })),
+  }, React.createElement(IconoVia, { n: t.icono, size: 26 }), t.corto ? [React.createElement("span", { key: "l", className: "tv-largo" }, t.label), React.createElement("span", { key: "c", className: "tv-corto" }, t.corto)] : t.label))),
+    APARTADOS[tab] && React.createElement(BarraApartados, { lista: APARTADOS[tab], actual: sub[tab], onCambiar: id => setSub(s => ({ ...s, [tab]: id })) })),
   bloqueada && React.createElement("div", { className: "tv-banner-bloqueo" },
     React.createElement(Icono, { n: "lock", size: 16 }),
     React.createElement("span", { style: { flex: 1, minWidth: 200 } }, "Vía bloqueada: puedes ver, calcular y exportar, pero no cambiar datos."),
@@ -8172,7 +8218,7 @@ function App() {
     }
   }, "Sin datos. Verifica que el primer tramo tenga al menos 3 de los 4 campos llenos."), tabla?.length > 0 && tramosIncompletos.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: { background: "#FDEDEC", border: `1px solid ${C.danger}`, color: C.danger, borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 13, fontWeight: 600 }
-  }, `⚠ ${tramosIncompletos.length === 1 ? "El tramo" : "Los tramos"} PI ${tramosIncompletos.join(", ")} no ${tramosIncompletos.length === 1 ? "tiene" : "tienen"} 3 de los 4 campos: la tabla se cortó o quedó incompleta a partir de ahí.`), tabla?.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, `⚠ ${tramosIncompletos.length === 1 ? "El tramo" : "Los tramos"} PI ${tramosIncompletos.join(", ")} no ${tramosIncompletos.length === 1 ? "tiene" : "tienen"} 3 de los 4 campos: la tabla se cortó o quedó incompleta a partir de ahí.`), tabla?.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, sub.resultado === "cot" && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 10,
@@ -8217,10 +8263,10 @@ function App() {
       fontSize: 18,
       color: s.color
     }
-  }, s.val)))), React.createElement(TituloSeccionVia, { n: 1, id: "tv-sec-cotas", texto: "Tabla de cotas", orden: 0 }), /*#__PURE__*/React.createElement(TablaResultado, {
+  }, s.val)))), sub.resultado === "cot" && /*#__PURE__*/React.createElement(TablaResultado, {
     tabla: tabla,
     capas: proy.capas
-  }), React.createElement(TituloSeccionVia, { n: 2, id: "tv-sec-lecturas", texto: "Tabla de lecturas (replanteo)", orden: 0 }), /*#__PURE__*/React.createElement(TablaLecturas, {
+  }), sub.resultado === "lec" && /*#__PURE__*/React.createElement(TablaLecturas, {
     tabla: tabla,
     capasDisponibles: (tabla[0]?.capas || []).filter(c => !c.esOculta).map(c => c.nombre),
     bmEstaciones: proy.bmEstaciones || [],
@@ -8229,7 +8275,7 @@ function App() {
     }),
     capaSeleccionada: capaLectura,
     onChangeCapa: setCapaLectura
-  }))), tab === "plano" && /*#__PURE__*/React.createElement("div", null, !tabla && /*#__PURE__*/React.createElement("div", {
+  }))), enVia("plano") && /*#__PURE__*/React.createElement("div", null, !tabla && /*#__PURE__*/React.createElement("div", {
     style: {
       color: C.muted,
       textAlign: "center",
@@ -8357,11 +8403,11 @@ function App() {
     tabla: tabla,
     onChange: proyActualizado => updSinRecalcular(proyActualizado),
     onArchivo: fn => preparar("Preparando la cartera…", fn)
-  }), tab === "nivel" && tabla && tabla.length > 0 && React.createElement(SeccionFallos, { proyecto: proy, tabla, onChange: c => updSinRecalcular(c) }), tab === "vol" && /*#__PURE__*/React.createElement(TabVolumenes, {
+  }), tab === "nivel" && tabla && tabla.length > 0 && React.createElement(SeccionFallos, { proyecto: proy, tabla, onChange: c => updSinRecalcular(c) }), enApartado("cant", "vol") && /*#__PURE__*/React.createElement(TabVolumenes, {
     proyecto: proy,
     tabla: tabla,
     onChange: function(cambios) { updSinRecalcular(cambios); }
-  }), tab === "cant" && React.createElement(TabCantidades, {
+  }), enApartado("cant", "lista") && React.createElement(TabCantidades, {
     proyecto: proy,
     tabla: tabla,
     onChange: function(cambios) { updSinRecalcular(cambios); }

@@ -43,7 +43,7 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 | EDITOR LATERAL / EDITOR PARQUEADERO | `EditorLateral` (modo transversal o "rasante propia" con PI), `EditorParq` (lateral o cabecera) |
 | FALLOS (antes de "Excel no acepta") | `calcFallo`, `cotaSuperficieEn` (interpola la superficie elegida en abscisa y desplazamiento), `SeccionFallos` (Nivelaciones); suma a "Excavación" con desglose y da "Relleno de fallos — material"; sección FALLO en `construirHojaVia` |
 | HELPERS NIVELACIONES / TAB VOLÚMENES | `resolverAI`, `alinearLecturas`, `calcCotasNivelacion`, `exportarCartera`, `TabVolumenes` |
-| APP | `App` (pestañas en `TABS`, `upd` recalcula, `updSinRecalcular` no), `FalloApp` (pantalla de rescate). Vía tiene 5 apartados (`APARTADOS_VIA`, `BarraVia`, `subVia`/`enVia`): Estructura, Eje y tramos, Laterales, Parqueaderos, Sardinel; iconos a color en `ICONOS_VIA` |
+| APP | `App` (pestañas en `TABS`, `upd` recalcula, `updSinRecalcular` no), `FalloApp` (pantalla de rescate). Pestañas: Vía, Cotas y lecturas, Nivelaciones, Cantidades, Dibujo, Calculadora, Memoria. Apartados por pestaña en `APARTADOS` (`BarraApartados`, estado `sub`, `enVia`/`enApartado`): Vía = Estructura, Eje y tramos, Laterales, Parqueaderos, Sardinel, Plano; Cotas = tabla de cotas, lecturas de replanteo; Cantidades = volúmenes, cantidades. Iconos a color en `ICONOS_VIA` (`IconoVia`) |
 
 ## Pendientes conocidos (auditoría, Brian decidió dejarlos por ahora)
 Estación sin V+ usa la AI de la anterior (Brian lo quiere así: si necesita otra estación la crea); tramo
