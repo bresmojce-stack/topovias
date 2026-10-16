@@ -1467,7 +1467,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "46";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "47";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -3852,13 +3852,13 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
           const dif = { parqDer: f.dParqDer, der: f.dDer, eje: f.dEje, izq: f.dIzq, parqIzq: f.dParqIzq };
           Kv.forEach((k, j) => {
             const vs = pS ? pS[k] : null, vi = pI ? pI[k] : null;
-            const rs = vs != null ? celdaSuperficie(parte.fuenteSup, f.abs, f.sub, k) : null;
-            const ri = vi != null ? celdaSuperficie(parte.fuenteInf, f.abs, f.sub, k) : null;
+            const rs = vs != null ? celdaSuperficie(parte.fuenteSup, f.abs, pS.sub, k) : null;
+            const ri = vi != null ? celdaSuperficie(parte.fuenteInf, f.abs, pI.sub, k) : null;
             // sección partida en el borde de la vía: cada fila muestra solo sus puntos
             const fuera = (f.cab || f.partida) && dif[k] == null;
             fila[cS + j] = vs == null || fuera ? "" : rs ? F(rs, vs) : vs;
             fila[cI + j] = vi == null || fuera ? "" : ri ? F(ri, vi) : vi;
-            fila[cC + j] = dif[k] == null || vs == null || vi == null ? "" : F(`${ref(cS + j, r)}-${ref(cI + j, r)}`, dif[k]);
+            fila[cC + j] = dif[k] == null || vs == null || vi == null ? "" : F(`ROUND(${ref(cS + j, r)}-${ref(cI + j, r)},3)`, dif[k]);
           });
           fila[cP] = F(`ROUND(AVERAGE(${ref(cC, r)}:${ref(cC + n - 1, r)}),3)`, f.prom);
           fila[cAn] = formulaAncho(f);

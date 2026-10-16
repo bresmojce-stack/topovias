@@ -45,7 +45,7 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 | APP | `App` (pestañas en `TABS`, `upd` recalcula, `updSinRecalcular` no), `FalloApp` (pantalla de rescate) |
 
 ## Pendientes conocidos (auditoría, Brian decidió dejarlos por ahora)
-Estación sin V+ usa la AI de la anterior; cortes del Excel sin ROUND; lecturas extra (sub) en Excel; tramo
+Estación sin V+ usa la AI de la anterior (Brian lo quiere así: si necesita otra estación la crea); tramo
 intermedio incompleto inventa cotas; texto suelto en un tramo da NaN; parqueaderos que se montan o con
 inicio > fin; sobreancho a lo largo en extremos de parqueaderos; nombres de hoja con ' o "History";
 choque de vía en dos equipos sin guardar las dos; obras se juntan todo o nada. La cota del PI con
