@@ -704,6 +704,27 @@ function cubreCab(p, w) {
   if (!k.ok) return { eje: false, lat: false, mas: false };
   return { eje: k.desde <= t, lat: w > 0 && k.desde <= w + t && k.hasta >= w - t, mas: k.hasta > w + t };
 }
+// Cabecera "4 esquinas": se ubica con desde/hasta medidos desde el eje con su lado (izq. negativo) y el
+// fondo; la cota sale de las 4 esquinas repartida como una lámina plana (bilineal).
+// A = fondo-desde, B = borde-desde, C = borde-hasta, D = fondo-hasta (desde = el más a la izquierda).
+const esEsquinas = p => esCabecera(p) && p.modo === "esquinas";
+const cabGeo = p => p.modo === "diferencia" || p.modo === "esquinas";   // cubre eje/lateral según su ancho
+function geoEsquinas(p) {
+  const sx = (v, l) => { const n = Math.abs(parseFloat(v)); return isNaN(n) ? NaN : (l === "izq" ? -n : n); };
+  const a = sx(p.desdeX, p.desdeLado), b = sx(p.hastaX, p.hastaLado), fondo = Math.abs(parseFloat(p.fondo));
+  const ok = !isNaN(a) && !isNaN(b) && Math.abs(b - a) > 0.0005 && !isNaN(fondo) && fondo > 0;
+  const n = k => { const v = parseFloat((p.esq || {})[k]); return isNaN(v) ? null : v; };
+  return { ok, x0: ok ? r3(Math.min(a, b)) : 0, x1: ok ? r3(Math.max(a, b)) : 0, fondo: ok ? r3(fondo) : 0, ancho: ok ? r3(Math.abs(b - a)) : 0,
+    A: n("A"), B: n("B"), C: n("C"), D: n("D") };
+}
+// cota en (abscisa, desplazamiento con signo) dentro de un parqueadero de 4 esquinas ya ubicado (proyCalc)
+function cotaEsquinas(p, abs, x) {
+  const e = p.__esq; if (!e || [e.A, e.B, e.C, e.D].some(v => v === null)) return null;
+  const t = e.aF === e.aB ? 0 : Math.min(1, Math.max(0, (abs - e.aB) / (e.aF - e.aB)));
+  const u = e.x1 === e.x0 ? 0 : Math.min(1, Math.max(0, (x - e.x0) / (e.x1 - e.x0)));
+  const cB = e.B + (e.C - e.B) * u, cF = e.A + (e.D - e.A) * u;
+  return r3(cB + (cF - cB) * t);
+}
 // filas de la tabla que son de la vía (sin las de cabecera) y su largo
 const filasVia = t => (t || []).filter(r => !r.fueraVia);
 const largoVia = t => { const f = filasVia(t); return f.length > 1 ? r3(Math.abs(f[f.length - 1].abs - f[0].abs)) : 0; };
@@ -716,13 +737,25 @@ function proyCalc(proy) {
   let out = proy;
   if (ps.some(esCabecera)) {
     const rv = rangoVia(proy);
-    out = { ...proy, __calc: true, parqueaderos: ps.map(p => {
-      if (!esCabecera(p)) return p;
+    out = { ...proy, __calc: true, parqueaderos: ps.flatMap(p => {
+      if (!esCabecera(p)) return [p];
+      if (esEsquinas(p)) {
+        const g = geoEsquinas(p);
+        if (!g.ok) return [{ ...p, absInicio: "", absFin: "", ancho: "" }];
+        const borde = p.ubicacion === "inicio" ? rv.ini : rv.fin, aF = p.ubicacion === "inicio" ? r3(borde - g.fondo) : r3(borde + g.fondo);
+        const base = { ...p, idBase: p.id, absInicio: String(Math.min(borde, aF)), absFin: String(Math.max(borde, aF)), borde, fondo: String(g.fondo),
+          __esq: { aB: borde, aF, x0: g.x0, x1: g.x1, A: g.A, B: g.B, C: g.C, D: g.D } };
+        const mitad = (lado, d, h, sufijo) => ({ ...base, id: sufijo ? p.id + sufijo : p.id, nombreBase: p.nombre, nombre: sufijo ? (p.nombre || "Parqueadero") + (lado === "izquierdo" ? " · izq." : " · der.") : p.nombre,
+          lado, desde: String(r3(d)), hasta: String(r3(h)), ancho: String(r3(h - d)) });
+        // si cruza el eje, para el resto del cálculo son dos parqueaderos (uno a cada lado) con la misma lámina
+        if (g.x0 < -0.0005 && g.x1 > 0.0005) return [mitad("izquierdo", 0, -g.x0, "~i"), mitad("derecho", 0, g.x1, "~d")];
+        return g.x1 <= 0.0005 ? [mitad("izquierdo", -g.x1, -g.x0)] : [mitad("derecho", g.x0, g.x1)];
+      }
       const k = datosCabecera(p);
       if (!k.ok) return { ...p, absInicio: "", absFin: "", ancho: "" };
       const borde = p.ubicacion === "inicio" ? rv.ini : rv.fin;
       const a = p.ubicacion === "inicio" ? r3(borde - k.fondo) : borde, b = p.ubicacion === "inicio" ? borde : r3(borde + k.fondo);
-      return { ...p, absInicio: String(a), absFin: String(b), ancho: String(k.ancho), borde };
+      return [{ ...p, absInicio: String(a), absFin: String(b), ancho: String(k.ancho), borde }];
     }) };
   }
   cacheCalc.set(proy, out);
@@ -902,9 +935,15 @@ function generarTabla(proyecto) {
     const anchoLat = lado => parseFloat((lado === "izquierdo" ? lateralIzq : lateralDer).ancho) || 0;
     const subeFondo = p => (parseFloat(p.pendienteFondo) || 0) / 100 * Math.abs(abs - p.borde);
     const estrPunto = { eje: null, der: null, izq: null };
-    if (fueraVia) (parqueaderos || []).filter(p => esCabecera(p) && p.modo === "diferencia").forEach(p => {
+    if (fueraVia) (parqueaderos || []).filter(p => esCabecera(p) && cabGeo(p)).forEach(p => {
       const a = parseFloat(p.absInicio), b = parseFloat(p.absFin);
       if (isNaN(a) || isNaN(b) || abs < a - 0.001 || abs > b + 0.001) return;
+      if (p.modo === "esquinas") {
+        const cb = cubreCab(p, anchoLat(p.lado)), sg = p.lado === "izquierdo" ? -1 : 1;
+        if (cb.eje) { cotaEje = cotaEsquinas(p, abs, 0); estrPunto.eje = p; }
+        if (cb.lat) { const c = cotaEsquinas(p, abs, sg * anchoLat(p.lado)); if (p.lado === "izquierdo") { cotaLatIzq = c; estrPunto.izq = p; } else { cotaLatDer = c; estrPunto.der = p; } }
+        return;
+      }
       const cb = cubreCab(p, anchoLat(p.lado)), eB = cotaEjeEn(p.borde);
       if (cb.eje && eB !== null) { cotaEje = r3(eB + subeFondo(p)); estrPunto.eje = p; }
       if (cb.lat) {
@@ -930,7 +969,10 @@ function generarTabla(proyecto) {
       if (abs < pi - 0.001 || abs > pf + 0.001) return;
       esParq = true;
       let cotaParq = null;
-      if (esCabecera(p) && p.modo === "diferencia") {
+      if (esEsquinas(p)) {
+        // cabecera de 4 esquinas: la columna PARQ es su borde de afuera (si pasa del lateral)
+        if (cubreCab(p, anchoLat(p.lado)).mas) cotaParq = cotaEsquinas(p, abs, (p.lado === "izquierdo" ? -1 : 1) * (parseFloat(p.hasta) || 0));
+      } else if (esCabecera(p) && p.modo === "diferencia") {
         // cabecera: la columna PARQ es solo la parte que pasa del lateral: cota del lateral en el
         // borde de la vía + diferencia, y la pendiente hacia el fondo (sobre la distancia positiva)
         if (cubreCab(p, anchoLat(p.lado)).mas) {
@@ -1515,7 +1557,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "51";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "52";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -2236,16 +2278,21 @@ function svgPerfil(d) {
 function svgPlanta(d) {
   const proy = d.proy, A = anchosProyecto(proy), sg = sobreanchoGeneral(proy);
   const parqs = (proy.parqueaderos || []).filter(p => !esCabecera(p)).map(p => ({ p, ini: parseFloat(p.absInicio), fin: parseFloat(p.absFin), ancho: parseFloat(p.ancho) || 0 })).filter(x => !isNaN(x.ini) && !isNaN(x.fin));
-  const pIzq = Math.max(0, ...parqs.filter(x => x.p.lado === "izquierdo").map(x => x.ancho)), pDer = Math.max(0, ...parqs.filter(x => x.p.lado !== "izquierdo").map(x => x.ancho));
+  // parqueaderos de cabecera: detrás del inicio o después del fin, a su distancia del eje
+  const cabs = (proyCalc(proy).parqueaderos || []).filter(esCabecera).map(p => ({ p, ini: parseFloat(p.absInicio), fin: parseFloat(p.absFin), kc: datosCabecera(p) }))
+    .filter(x => !isNaN(x.ini) && !isNaN(x.fin) && x.kc.ok);
+  const pIzq = Math.max(0, ...parqs.filter(x => x.p.lado === "izquierdo").map(x => x.ancho), ...cabs.filter(x => x.p.lado === "izquierdo").map(x => x.kc.hasta - A.anchoIzq)),
+    pDer = Math.max(0, ...parqs.filter(x => x.p.lado !== "izquierdo").map(x => x.ancho), ...cabs.filter(x => x.p.lado !== "izquierdo").map(x => x.kc.hasta - A.anchoDer));
+  const absMin = Math.min(d.absMin, ...cabs.map(x => Math.min(x.ini, x.fin))), absMax = Math.max(d.absMax, ...cabs.map(x => Math.max(x.ini, x.fin)));
   const W = 1100, PL = 74, PR = 30;
-  const xsPI = d.PI.map(p => PL + (p.abs - d.absMin) / ((d.absMax - d.absMin) || 1) * (W - PL - PR));
+  const xsPI = d.PI.map(p => PL + (p.abs - absMin) / ((absMax - absMin) || 1) * (W - PL - PR));
   const nivE = nivelesEtiquetas(xsPI, 150), dosFilas = nivE.some(n => n === 1);
   const total = A.anchoIzq + A.anchoDer + pIzq + pDer + sg.izq + sg.der;
   const esc = Math.min(11, 130 / (total || 1));
   const top = (dosFilas ? 96 : 52) + 24 + (pIzq + sg.izq) * esc;
   const eY = top + A.anchoIzq * esc, yIzq = top, yDer = eY + A.anchoDer * esc;
   const H = yDer + (pDer + sg.der) * esc + 48;
-  const X = x => PL + (x - d.absMin) / ((d.absMax - d.absMin) || 1) * (W - PL - PR);
+  const X = x => PL + (x - absMin) / ((absMax - absMin) || 1) * (W - PL - PR);
   const o = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H.toFixed(0)}" width="${W}" height="${H.toFixed(0)}" font-family="Arial, Helvetica, sans-serif">`, flechaDef("fl"),
     `<rect x="0" y="0" width="${W}" height="${H.toFixed(1)}" fill="#FFFFFF"/>`];
   const x0 = X(d.absMin), x1 = X(d.absMax);
@@ -2267,11 +2314,23 @@ function svgPlanta(d) {
       o.push(`<line x1="${X(s).toFixed(1)}" x2="${X(s).toFixed(1)}" y1="${ya.toFixed(1)}" y2="${yb.toFixed(1)}" stroke="${GC.agua}" stroke-width="1.5" stroke-opacity="0.8" marker-end="url(#fl)"/>`);
     }
   });
+  // cabeceras (las dos mitades de una que cruza el eje se dibujan juntas)
+  cabs.forEach(x => {
+    const izq = x.p.lado === "izquierdo", a = Math.min(x.ini, x.fin), b = Math.max(x.ini, x.fin);
+    const yA = izq ? eY - x.kc.hasta * esc : eY + x.kc.desde * esc, h = x.kc.ancho * esc;
+    o.push(`<rect x="${X(a).toFixed(1)}" y="${yA.toFixed(1)}" width="${(X(b) - X(a)).toFixed(1)}" height="${h.toFixed(1)}" fill="${GC.parq}" stroke="${GC.parqBorde}" stroke-dasharray="5,3"/>`);
+    if (!x.p.id || String(x.p.id).slice(-2) !== "~d") o.push(svgT((X(a) + X(b)) / 2, yA + Math.min(h - 4, 13), (x.p.nombreBase || x.p.nombre || "Parqueadero"), `text-anchor="middle" font-size="10" font-weight="bold" fill="#6D4C41"`));
+    const e = x.p.__esq;
+    if (e) [[e.aF, e.x0, e.A, "A"], [e.aB, e.x0, e.B, "B"], [e.aB, e.x1, e.C, "C"], [e.aF, e.x1, e.D, "D"]].forEach(([ab, xs, c, k]) => {
+      if ((izq && xs > 0.0005) || (!izq && xs < -0.0005)) return;   // cada mitad pinta sus esquinas
+      o.push(`<circle cx="${X(ab).toFixed(1)}" cy="${(eY + xs * esc).toFixed(1)}" r="3" fill="#6D28D9"/>`);
+    });
+  });
   // eje, bordes y abscisado cada 10 m
   o.push(`<line x1="${x0}" x2="${x1}" y1="${eY.toFixed(1)}" y2="${eY.toFixed(1)}" stroke="${GC.rasante}" stroke-width="2" stroke-dasharray="10,5"/>`,
     svgT(8, eY + 4, "EJE", `font-size="11" font-weight="bold" fill="${GC.rasante}"`),
     svgT(8, yIzq + 4, "IZQ " + A.anchoIzq.toFixed(2), `font-size="10" fill="${GC.borde}"`), svgT(8, yDer + 4, "DER " + A.anchoDer.toFixed(2), `font-size="10" fill="${GC.borde}"`));
-  marcasAbscisa(d.absMin, d.absMax, 10, X, 62).forEach(({ x, extremo }) =>
+  marcasAbscisa(absMin, absMax, 10, X, 62).forEach(({ x, extremo }) =>
     o.push(`<line x1="${X(x).toFixed(1)}" x2="${X(x).toFixed(1)}" y1="${(eY - 6).toFixed(1)}" y2="${(eY + 6).toFixed(1)}" stroke="${GC.rasante}" stroke-width="1.5"/>`,
       `<line x1="${X(x).toFixed(1)}" x2="${X(x).toFixed(1)}" y1="${(H - 36).toFixed(1)}" y2="${(H - 30).toFixed(1)}" stroke="${GC.texto}"/>`,
       svgT(Math.min(Math.max(X(x), 34), W - 34), H - 16, formatoAbscisa(x), `text-anchor="middle" font-size="11" fill="${GC.texto}"${extremo ? ' font-weight="bold"' : ""}`)));
@@ -3404,7 +3463,7 @@ function calcVolumen(vol, proyecto, tabla) {
     // parqueadero de cabecera de cada lado y qué puntos de la sección ocupa
     const anchoLatV = lado => parseFloat(((lado === "izquierdo" ? proyecto.lateralIzq : proyecto.lateralDer) || {}).ancho) || 0;
     const cabDe = lado => { const pq = cubre(lado, true); if (!pq) return null;
-      return pq.modo === "diferencia" ? { pq, ...cubreCab(pq, anchoLatV(lado)) } : { pq, eje: false, lat: false, mas: true }; };
+      return cabGeo(pq) ? { pq, ...cubreCab(pq, anchoLatV(lado)) } : { pq, eje: false, lat: false, mas: true }; };
     const cabI = cabDe("izquierdo"), cabD = cabDe("derecho");
     const latD = D.parqDer !== null && cubre("derecho", false), latI = D.parqIzq !== null && cubre("izquierdo", false);
     const filas = [];
@@ -3741,6 +3800,17 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
           parseFloat(pq.ancho) || 0, sobreanchoParq(pq), sobreanchoExtremosParq(pq)]);
         R.parq[pq.id] = { pq, L: `ABS(${ref(2, r)}-${ref(1, r)})`, A: ref(3, r), EXT: ref(4, r), EXTR: ref(5, r), esp: {}, sa: {} };
       });
+      blank();
+    }
+    // cabeceras de 4 esquinas: la cota de cada esquina (las de adentro salen repartidas entre ellas)
+    const conEsq = parqsX.filter(pq => pq.__esq).filter((pq, i, l) => l.findIndex(x => x.idBase === pq.idBase) === i);
+    if (conEsq.length) {
+      boldRows.add(pushRow(["COTAS DE LAS 4 ESQUINAS (PARQUEADEROS DE CABECERA)"]));
+      headerRows.add(pushRow(["PARQUEADERO", "ESQUINA", "ABSCISA", "DEL EJE (m)", "COTA"]));
+      const lx = x => Math.abs(x).toFixed(2) + (x < 0 ? " izq." : x > 0 ? " der." : " eje");
+      conEsq.forEach(pq => { const e = pq.__esq;
+        [["A", e.aF, e.x0, e.A], ["B", e.aB, e.x0, e.B], ["C", e.aB, e.x1, e.C], ["D", e.aF, e.x1, e.D]].forEach(([k, ab, xs, c]) =>
+          pushRow([pq.nombreBase || pq.nombre || "Parqueadero", k, ABS(ab), lx(xs), c === null ? "" : r3(c)])); });
       blank();
     }
     parqsX.filter(pq => pq.estructura === "propia" && capasDefinidas(pq.capas).length).forEach(pq => {
@@ -6550,11 +6620,77 @@ function EstructuraParq({ p, capasVia, onChange }) {
           "Excavación parqueadero: ", espesorTotal(def).toFixed(3), " m"))));
 }
 
+// Cota de la vía en su borde (inicio o fin) a una distancia del eje (izq. negativo), con la tabla calculada
+function cotaViaEnBorde(tabla, abs, x, A) {
+  const filas = (tabla || []).filter(r => !r.fueraVia); if (!filas.length) return null;
+  const r = filas.reduce((m, f) => Math.abs(f.abs - abs) < Math.abs(m.abs - abs) ? f : m, filas[0]);
+  if (Math.abs(r.abs - abs) > 0.01) return null;
+  const pts = [[-(A.anchoIzq || 0), r.cotaLatIzq], [0, r.cotaEje], [A.anchoDer || 0, r.cotaLatDer]].filter(q => q[1] !== null && q[1] !== undefined);
+  if (!pts.length) return null;
+  if (x <= pts[0][0]) return r3(pts[0][1]);
+  if (x >= pts[pts.length - 1][0]) return r3(pts[pts.length - 1][1]);
+  for (let i = 1; i < pts.length; i++) if (x <= pts[i][0]) { const [xa, ya] = pts[i - 1], [xb, yb] = pts[i]; return r3(ya + (yb - ya) * (x - xa) / ((xb - xa) || 1)); }
+  return null;
+}
+const NOMBRE_ESQ = { A: "fondo, lado de “desde”", B: "borde de la vía, lado de “desde”", C: "borde de la vía, lado de “hasta”", D: "fondo, lado de “hasta”" };
+function DiagramaEsquinas({ p, g, borde, anchos, tabla, onChange }) {
+  const esq = p.esq || {};
+  const [sel, setSel] = React.useState(() => ["B", "C", "A", "D"].find(k => esq[k] === undefined || esq[k] === "") || "B");
+  const A = anchos || { anchoIzq: 0, anchoDer: 0 };
+  const inicio = p.ubicacion !== "fin";
+  const mn = Math.min(g.x0, -(A.anchoIzq || 0)), mx = Math.max(g.x1, A.anchoDer || 0);
+  const Y = x => 26 + (x - mn) / ((mx - mn) || 1) * 170;
+  const xB = 170, xF = inicio ? 34 : 306, viaA = inicio ? 170 : 14, viaB = inicio ? 326 : 170;
+  const pos = { A: [xF, Y(g.x0)], B: [xB, Y(g.x0)], C: [xB, Y(g.x1)], D: [xF, Y(g.x1)] };
+  const xEsq = k => k === "A" || k === "B" ? g.x0 : g.x1;
+  const txtX = x => Math.abs(x).toFixed(2) + (x < 0 ? " izq." : x > 0 ? " der." : " (eje)");
+  const set = (k, v) => onChange({ ...p, esq: { ...esq, [k]: v } });
+  const traer = k => {
+    const c = cotaViaEnBorde(tabla, borde, xEsq(k), A);
+    if (c === null) { alert("No hay cota de la vía en " + formatoAbscisa(borde) + ".\n\nPresiona ⚡ CALCULAR para tener la tabla y vuelve a intentar."); return; }
+    set(k, c.toFixed(3));
+  };
+  const h = React.createElement;
+  return h("div", { style: { background: "#fff", border: `1px solid ${C.border}`, borderRadius: 10, padding: 10, marginBottom: 10 } },
+    h("div", { style: { fontWeight: 800, fontSize: 13, color: C.parq, marginBottom: 4 } }, "COTAS DE LAS 4 ESQUINAS — toca una esquina"),
+    h("svg", { viewBox: "0 0 340 222", style: { width: "100%", maxWidth: 420, display: "block", margin: "0 auto", touchAction: "manipulation" } },
+      h("rect", { x: viaA, y: Y(-(A.anchoIzq || 0)), width: viaB - viaA, height: Y(A.anchoDer || 0) - Y(-(A.anchoIzq || 0)), fill: "#E5E7EB" }),
+      h("line", { x1: viaA, x2: viaB, y1: Y(0), y2: Y(0), stroke: "#B91C1C", strokeWidth: 2, strokeDasharray: "8 5" }),
+      h("text", { x: inicio ? 300 : 20, y: Y(0) - 5, fontSize: 11, fontWeight: 700, fill: "#B91C1C" }, "EJE"),
+      h("line", { x1: xB, x2: xB, y1: 14, y2: 208, stroke: "#111", strokeWidth: 2 }),
+      h("text", { x: xB + (inicio ? 5 : -5), y: 218, fontSize: 11, textAnchor: inicio ? "start" : "end" }, formatoAbscisa(borde)),
+      h("text", { x: inicio ? 250 : 90, y: 18, fontSize: 11, fill: "#475569", textAnchor: "middle" }, "vía"),
+      h("rect", { x: Math.min(xF, xB), y: Y(g.x0), width: Math.abs(xB - xF), height: Y(g.x1) - Y(g.x0), fill: "#EDE9FE", stroke: "#6D28D9", strokeWidth: 2.5 }),
+      h("text", { x: (xF + xB) / 2, y: (Y(g.x0) + Y(g.x1)) / 2 + 4, fontSize: 11, fontWeight: 700, fill: "#5B21B6", textAnchor: "middle" }, "fondo " + g.fondo.toFixed(2) + " m"),
+      ["A", "B", "C", "D"].map(k => {
+        const [cx, cy] = pos[k], act = k === sel, arriba = k === "A" || k === "B";
+        return h("g", { key: k, onClick: () => setSel(k), style: { cursor: "pointer" } },
+          h("circle", { cx, cy, r: 18, fill: "transparent" }),
+          h("circle", { cx, cy, r: act ? 13 : 11, fill: act ? "#F59E0B" : "#6D28D9", stroke: act ? "#92400E" : "none", strokeWidth: 3 }),
+          h("text", { x: cx, y: cy + 4, fontSize: 12, fontWeight: 800, fill: "#fff", textAnchor: "middle" }, k),
+          h("text", { x: cx + (cx < 170 ? -2 : 2), y: arriba ? cy - 16 : cy + 26, fontSize: 11.5, fontWeight: 700, fontFamily: "monospace", textAnchor: cx < 170 ? "start" : "end", fill: esq[k] ? "#111" : "#DC2626" },
+            esq[k] ? parseFloat(esq[k]).toFixed(3) : "falta"));
+      })),
+    h("div", { style: { background: "#FFFBEB", border: "2px solid #F59E0B", borderRadius: 10, padding: 10, marginTop: 6 } },
+      h("div", { style: { fontWeight: 700, fontSize: 13, marginBottom: 6 } }, "Esquina ", sel, " · ", NOMBRE_ESQ[sel], " · ", txtX(xEsq(sel)), " · ", formatoAbscisa(sel === "B" || sel === "C" ? borde : (inicio ? r3(borde - g.fondo) : r3(borde + g.fondo)))),
+      h("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
+        h(Input, { value: esq[sel] || "", onChange: e => set(sel, e.target.value), placeholder: "cota, ej. 955.256", inputMode: "decimal", style: { flex: "1 1 140px" } }),
+        (sel === "B" || sel === "C") && h(Btn, { color: "#0369A1", onClick: () => traer(sel) }, "⇩ Cota de la vía"))),
+    h("div", { style: { fontSize: 11.5, color: C.muted, marginTop: 6 } }, "La cota de cualquier punto del parqueadero sale repartida entre las 4 esquinas (como una lámina plana inclinada): así salen las cotas del eje, los laterales y el parqueadero en cada abscisa."));
+}
+function CampoLado({ label, valor, lado, ph, onValor, onLado }) {
+  return React.createElement("div", null, React.createElement(Label, null, label),
+    React.createElement("div", { style: { display: "flex", gap: 6 } },
+      React.createElement(Input, { value: valor || "", onChange: e => onValor(e.target.value), placeholder: ph, inputMode: "decimal", style: { flex: 1, minWidth: 0 } }),
+      React.createElement(Sel, { value: lado, onChange: e => onLado(e.target.value), style: { width: 84, flex: "0 0 auto" } },
+        React.createElement("option", { value: "izq" }, "Izq."), React.createElement("option", { value: "der" }, "Der."))));
+}
 function EditorParq({
   p,
   capasVia,
   rango,
   anchos,
+  tabla,
   onChange,
   onDelete
 }) {
@@ -6571,7 +6707,8 @@ function EditorParq({
     });
   };
   // de cabecera: las abscisas y el ancho salen del fondo y del desde/hasta
-  const cab = esCabecera(p), kc = cab ? datosCabecera(p) : null, rv = rango || { ini: 0, fin: 0 };
+  const cab = esCabecera(p), esq = cab && p.modo === "esquinas", ge = esq ? geoEsquinas(p) : null;
+  const kc = esq ? { ok: ge.ok, fondo: ge.fondo, ancho: ge.ancho, desde: ge.x0, hasta: ge.x1 } : cab ? datosCabecera(p) : null, rv = rango || { ini: 0, fin: 0 };
   const borde = p.ubicacion === "fin" ? rv.fin : rv.ini;
   const cabIni = kc && kc.ok ? (p.ubicacion === "inicio" ? r3(borde - kc.fondo) : borde) : NaN;
   const cabFin = kc && kc.ok ? (p.ubicacion === "inicio" ? borde : r3(borde + kc.fondo)) : NaN;
@@ -6625,7 +6762,7 @@ function EditorParq({
       color: C.parq,
       marginBottom: 10
     }
-  }, cab ? ["CABECERA AL ", p.ubicacion === "inicio" ? "INICIO" : "FIN", " (", p.lado === "izquierdo" ? "IZQ" : "DER", ") \xA0|\xA0 nace en ", formatoAbscisa(borde), " y va ", p.ubicacion === "inicio" ? "hacia atrás (abscisas negativas)" : "hacia adelante", ". Desde/hasta se miden desde el eje."]
+  }, cab ? ["CABECERA AL ", p.ubicacion === "inicio" ? "INICIO" : "FIN", esq ? "" : " (" + (p.lado === "izquierdo" ? "IZQ" : "DER") + ")", " \xA0|\xA0 nace en ", formatoAbscisa(borde), " y va ", p.ubicacion === "inicio" ? "hacia atrás (abscisas negativas)" : "hacia adelante", ". Desde/hasta se miden desde el eje."]
     : ["EJE → LATERAL (", p.lado === "izquierdo" ? "IZQ" : "DER", ") → ", /*#__PURE__*/React.createElement("strong", { key: "pq" }, "PARQUEADERO"), " \xA0|\xA0 el parqueadero nace desde el borde de vía (lateral), no desde el eje."]), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
@@ -6638,15 +6775,17 @@ function EditorParq({
     onChange: e => upd("nombre", e.target.value)
   })), React.createElement("div", null, React.createElement(Label, null, "Ubicación"), React.createElement(Sel, {
     value: cab ? p.ubicacion : "lateral",
-    onChange: e => upd("ubicacion", e.target.value)
+    onChange: e => { const v = e.target.value; onChange(!cab && v !== "lateral" ? { ...p, ubicacion: v, modo: "esquinas", desdeLado: p.desdeLado || "izq", hastaLado: p.hastaLado || "der" } : { ...p, ubicacion: v }); }
   }, React.createElement("option", { value: "lateral" }, "Lateral (a lo largo)"),
     React.createElement("option", { value: "inicio" }, "Cabecera al inicio"),
     React.createElement("option", { value: "fin" }, "Cabecera al fin"))),
-  cab && React.createElement("div", null, React.createElement(Label, null, "Lado del eje"), React.createElement(Sel, {
+  esq && React.createElement(CampoLado, { label: "Desde (m del eje)", valor: p.desdeX, lado: p.desdeLado || "izq", ph: "ej. 3.00", onValor: v => upd("desdeX", v), onLado: v => upd("desdeLado", v) }),
+  esq && React.createElement(CampoLado, { label: "Hasta (m del eje)", valor: p.hastaX, lado: p.hastaLado || "der", ph: "ej. 3.00", onValor: v => upd("hastaX", v), onLado: v => upd("hastaLado", v) }),
+  cab && !esq && React.createElement("div", null, React.createElement(Label, null, "Lado del eje"), React.createElement(Sel, {
     value: p.lado, onChange: e => upd("lado", e.target.value)
   }, React.createElement("option", { value: "derecho" }, "Derecho"), React.createElement("option", { value: "izquierdo" }, "Izquierdo"))),
-  cab && campo("Desde (m del eje)", "desde", "0 = nace en el eje"),
-  cab && campo("Hasta (m del eje)", "hasta", "ej. " + (wLat ? wLat.toFixed(2) + " (ancho lateral)" : "3.00")),
+  cab && !esq && campo("Desde (m del eje)", "desde", "0 = nace en el eje"),
+  cab && !esq && campo("Hasta (m del eje)", "hasta", "ej. " + (wLat ? wLat.toFixed(2) + " (ancho lateral)" : "3.00")),
   cab && campo("Fondo (m)", "fondo", "ej. 5.00"),
   !cab && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Abscisa inicio (m)"), /*#__PURE__*/React.createElement(Input, {
     value: p.absInicio,
@@ -6680,7 +6819,8 @@ function EditorParq({
   }))), /*#__PURE__*/React.createElement("div", {
     style: { fontSize: 12, color: C.muted, marginBottom: 10, marginTop: -4 }
   }, cab && (kc.ok ? React.createElement("div", { style: { color: C.parq, fontWeight: 700, marginBottom: 4 } },
-      "Abscisas ", formatoAbscisa(pi), " a ", formatoAbscisa(pf), " · ancho ", kc.ancho.toFixed(2), " m (", kc.desde.toFixed(2), " a ", kc.hasta.toFixed(2), " ", p.lado === "izquierdo" ? "izq." : "der.", ") · área ",
+      "Abscisas ", formatoAbscisa(pi), " a ", formatoAbscisa(pf), " · ancho ", kc.ancho.toFixed(2), " m (",
+      esq ? Math.abs(kc.desde).toFixed(2) + (kc.desde < 0 ? " izq." : " der.") + " a " + Math.abs(kc.hasta).toFixed(2) + (kc.hasta < 0 ? " izq." : " der.") : kc.desde.toFixed(2) + " a " + kc.hasta.toFixed(2) + " " + (p.lado === "izquierdo" ? "izq." : "der."), ") · área ",
       r3(kc.ancho * kc.fondo).toFixed(2), " m²") : React.createElement("div", { style: { color: C.warn, fontWeight: 700, marginBottom: 4 } }, "Llena desde, hasta y fondo para ubicarlo.")),
     "Ancho de trabajo: ", anchoP.toFixed(2), " + ", sobreanchoParq(p).toFixed(2), " = ", /*#__PURE__*/React.createElement("strong", null, r3(anchoP + sobreanchoParq(p)).toFixed(2), " m"),
     sobreanchoExtremosParq(p) > 0 ? " · largo " + r3((pf - pi || 0) + 2 * sobreanchoExtremosParq(p)).toFixed(2) + " m" : "",
@@ -6690,12 +6830,20 @@ function EditorParq({
     }
   }, /*#__PURE__*/React.createElement(Label, null, "Modo de cota"), /*#__PURE__*/React.createElement(Sel, {
     value: p.modo,
-    onChange: e => upd("modo", e.target.value)
-  }, /*#__PURE__*/React.createElement("option", {
+    onChange: e => {
+      const v = e.target.value;
+      if (v === "esquinas" && !p.desdeX && !p.hastaX) {
+        // pasar la ubicación de la forma anterior (lado + desde/hasta) a desde/hasta con lado
+        const l = p.lado === "izquierdo" ? "izq" : "der";
+        onChange({ ...p, modo: v, desdeX: p.desde || "0", desdeLado: l, hastaX: p.hasta || "", hastaLado: l });
+      } else upd("modo", v);
+    }
+  }, cab && React.createElement("option", { value: "esquinas" }, "Cotas de las 4 esquinas (recomendado)"), /*#__PURE__*/React.createElement("option", {
     value: "diferencia"
   }, "Cota del lateral + diferencia fija"), /*#__PURE__*/React.createElement("option", {
     value: "independiente"
-  }, "Rasante propia con tramos y PI"))), p.modo === "diferencia" && /*#__PURE__*/React.createElement("div", {
+  }, "Rasante propia con tramos y PI"))), esq && (ge.ok ? React.createElement(DiagramaEsquinas, { p, g: ge, borde, anchos, tabla, onChange })
+    : React.createElement("div", { style: { color: C.warn, fontWeight: 700, fontSize: 13, marginBottom: 10 } }, "Llena desde, hasta y fondo: luego aparece el dibujo para poner las cotas de las 4 esquinas.")), p.modo === "diferencia" && /*#__PURE__*/React.createElement("div", {
     style: {
       background: C.bg,
       borderRadius: 8,
@@ -8223,6 +8371,7 @@ function App() {
     capasVia: proy.capas,
     rango: rangoVia(proy),
     anchos: anchosProyecto(proy),
+    tabla: tabla,
     onChange: np => {
       const ps = [...proy.parqueaderos];
       ps[i] = np;
