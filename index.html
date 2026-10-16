@@ -906,9 +906,12 @@ function generarTabla(proyecto) {
   const absIni = parseFloat(absInicio) || 0;
   const tramosR = resolverTodos(tramos);
   if (!tramosR.length || !tramosR[0].completo) return [];
-  // las abscisas con lecturas de nivelación siempre van en la tabla (si se cambia el abscisado, no se pierden)
+  // las abscisas con lecturas de nivelación escritas siempre van en la tabla (si se cambia el abscisado, no se
+  // pierden); las filas en blanco de una cartera no cuentan
   const extras = (intermedias || []).map(i => i.valor).filter(Boolean)
-    .concat((proyecto.nivelaciones || []).flatMap(n => (n.lecturas || []).filter(l => l && typeof l.abs === "number").map(l => l.abs)));
+    .concat((proyecto.nivelaciones || []).flatMap(n => (n.lecturas || [])
+      .filter(l => l && typeof l.abs === "number" && ["parqDer", "der", "eje", "izq", "parqIzq"].some(k => l[k] !== undefined && l[k] !== null && String(l[k]).trim() !== ""))
+      .map(l => l.abs)));
   const abscisas = generarAbscisas(absInicio, tramosR, extras, parqueaderos, pasoAbscisado(proyecto));
   const pisSet = getPIAbscisas(absInicio, tramosR);
   // ─ ESTRUCTURAS: la de la vía y, si un parqueadero tiene estructura propia, la suya.
@@ -1599,7 +1602,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "55";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "56";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
