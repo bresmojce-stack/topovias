@@ -1603,7 +1603,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "57";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "58";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -1850,6 +1850,61 @@ async function nubeBorrar(id) {
   await nubeApi(NUBE_API + "/files/" + id, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trashed: true }) });
 }
 const nubeNombreVia = p => (p.libre ? "Dibujos libres" : "Vía - " + (p.nombre || "sin nombre")).replace(/[\\/:*?"<>|]/g, "-") + ".json";
+// ── Fotos de la bitácora: van a la subcarpeta "Fotos" (una vez cada una, con su id en appProperties.f).
+// Se suben al sincronizar; en otro equipo se bajan cuando se abre la bitácora que las muestra.
+const NUBE_FOTOS = "Fotos";
+async function nubeCarpetaFotos(m) {
+  if (m.fotosCarpeta) {
+    try { const r = await nubeApi(NUBE_API + "/files/" + m.fotosCarpeta + "?fields=id,trashed,parents"); const f = await r.json(); if (!f.trashed && (f.parents || []).indexOf(m.carpeta) >= 0) return m.fotosCarpeta; }
+    catch (e) { if (e.sesion || e.status !== 404) throw e; }
+  }
+  const q = encodeURIComponent("name='" + NUBE_FOTOS + "' and '" + m.carpeta + "' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false");
+  const l = ((await (await nubeApi(NUBE_API + "/files?q=" + q + "&fields=files(id)")).json()).files) || [];
+  if (l.length) return l[0].id;
+  const c = await nubeApi(NUBE_API + "/files?fields=id", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: NUBE_FOTOS, mimeType: "application/vnd.google-apps.folder", parents: [m.carpeta] }) });
+  return (await c.json()).id;
+}
+async function nubeSubirFoto(carpeta, id, blob) {
+  const b = "tv" + Math.random().toString(36).slice(2);
+  const meta = { name: "foto_" + id + ".jpg", mimeType: "image/jpeg", parents: [carpeta], appProperties: { f: id } };
+  const cuerpo = new Blob(["--" + b + "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n" + JSON.stringify(meta) + "\r\n--" + b + "\r\nContent-Type: image/jpeg\r\n\r\n", blob, "\r\n--" + b + "--"]);
+  await nubeApi(NUBE_SUBIR + "/files?uploadType=multipart&fields=id", { method: "POST", headers: { "Content-Type": "multipart/related; boundary=" + b }, body: cuerpo });
+}
+const fotosDeVias = vias => { const s = new Set(); (vias || []).forEach(p => (p.bitacora || []).forEach(a => (a.fotos || []).forEach(f => s.add(f)))); return s; };
+// después de sincronizar las vías: sube las fotos que falten y manda a la papelera las que ya nadie usa
+async function nubeFotos(m, vias) {
+  if (!DATOS.idb) return { subidas: 0 };
+  const usadas = fotosDeVias(vias);
+  const carpeta = await nubeCarpetaFotos(m);
+  if (carpeta !== m.fotosCarpeta) { const mm = nubeMeta(); mm.fotosCarpeta = carpeta; nubeGuardarMeta(mm); m.fotosCarpeta = carpeta; }
+  const enNube = {};
+  (await nubeListar(carpeta)).forEach(f => { const id = f.appProperties && f.appProperties.f; if (id) enNube[id] = f; });
+  let subidas = 0;
+  for (const id of usadas) {
+    if (enNube[id]) continue;
+    const blob = await TVDB.get("foto_" + id).catch(() => null);
+    if (!blob) continue;                                   // está en otro equipo: la sube ese equipo
+    await nubeSubirFoto(carpeta, id, blob); subidas++;
+  }
+  // una foto que ya no está en ninguna anotación (y no es recién subida desde otro equipo) va a la papelera de Drive
+  for (const id of Object.keys(enNube)) {
+    if (usadas.has(id) || Date.now() - (Date.parse(enNube[id].modifiedTime) || Date.now()) < 15 * 60000) continue;
+    await nubeBorrar(enNube[id].id);
+  }
+  return { subidas };
+}
+// trae de Drive una foto que no está en este equipo (al abrir la bitácora)
+async function nubeTraerFoto(id) {
+  const m = nubeMeta();
+  if (!m.conectado || !nubeTokenVivo(m) || !m.carpeta || !DATOS.idb) return null;
+  const q = encodeURIComponent("appProperties has { key='f' and value='" + String(id).replace(/[^a-z0-9]/gi, "") + "' } and trashed=false");
+  const l = ((await (await nubeApi(NUBE_API + "/files?q=" + q + "&fields=files(id)")).json()).files) || [];
+  if (!l.length) return null;
+  const blob = await (await nubeApi(NUBE_API + "/files/" + l[0].id + "?alt=media")).blob();
+  await TVDB.set("foto_" + id, blob);
+  return blob;
+}
 
 // Sincroniza todo. interactivo = lo pidió el usuario tocando un botón (puede abrir la ventana de Google).
 async function nubeSincronizar(interactivo) {
@@ -1950,7 +2005,15 @@ async function nubeSincronizar(interactivo) {
       histAvisar("nube");
     }
     m = nubeMeta(); m.items = nuevoS; m.ultima = Date.now(); m.conectado = true; nubeGuardarMeta(m);
-    nubeAvisar("listo", subidas || bajadas ? (subidas ? subidas + " subido" + (subidas > 1 ? "s" : "") : "") + (subidas && bajadas ? " · " : "") + (bajadas ? bajadas + " traído" + (bajadas > 1 ? "s" : "") + " de otro equipo" : "") : "Todo al día.");
+    // fotos de la bitácora (si fallan, lo demás ya quedó sincronizado)
+    let fotosMsg = "";
+    try { const rf = await nubeFotos(m, vias); if (rf.subidas) fotosMsg = rf.subidas + " foto" + (rf.subidas > 1 ? "s" : "") + " subida" + (rf.subidas > 1 ? "s" : ""); }
+    catch (e) { if (e.sesion) throw e; console.warn("Nube fotos:", e); fotosMsg = "las fotos no se pudieron subir (se intenta en la próxima)"; }
+    const partes = [];
+    if (subidas) partes.push(subidas + " subido" + (subidas > 1 ? "s" : ""));
+    if (bajadas) partes.push(bajadas + " traído" + (bajadas > 1 ? "s" : "") + " de otro equipo");
+    if (fotosMsg) partes.push(fotosMsg);
+    nubeAvisar("listo", partes.length ? partes.join(" · ") : "Todo al día.");
   } catch (e) {
     if (e.sesion) nubeAvisar("toca", "Toca Sincronizar para seguir guardando en Drive.");
     else { console.warn("Nube:", e); nubeAvisar("error", e.message || "No se pudo sincronizar."); }
@@ -8912,10 +8975,16 @@ async function guardarFoto(file) {
   urlsFotos.set(id, URL.createObjectURL(blob));
   return id;
 }
-async function urlFoto(id) {
-  if (urlsFotos.has(id)) return urlsFotos.get(id);
+const fotosEnCamino = new Map();   // id → promesa (para no pedir la misma foto dos veces a la vez)
+function urlFoto(id) {
+  if (urlsFotos.has(id)) return Promise.resolve(urlsFotos.get(id));
+  if (!fotosEnCamino.has(id)) fotosEnCamino.set(id, urlFotoTraer(id).finally(() => fotosEnCamino.delete(id)));
+  return fotosEnCamino.get(id);
+}
+async function urlFotoTraer(id) {
   if (!DATOS.idb) return null;
-  const b = await TVDB.get("foto_" + id).catch(() => null);
+  let b = await TVDB.get("foto_" + id).catch(() => null);
+  if (!b) b = await nubeTraerFoto(id).catch(() => null);   // tomada en otro equipo: se trae de Drive
   if (!b) return null;
   const u = URL.createObjectURL(b); urlsFotos.set(id, u); return u;
 }
@@ -8927,7 +8996,7 @@ function Miniatura({ id, onClick, onQuitar, grande }) {
   return React.createElement("div", { style: { position: "relative", width: lado, height: lado, flex: "0 0 auto" } },
     u ? React.createElement("img", { src: u, onClick, alt: "foto", style: { width: lado, height: lado, objectFit: "cover", borderRadius: 8, cursor: "pointer", border: `1px solid ${C.border}`, display: "block" } })
       : React.createElement("div", { style: { width: lado, height: lado, borderRadius: 8, background: "#E2E8F0", color: C.muted, fontSize: 10.5, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 4, boxSizing: "border-box" } },
-          falta ? "foto guardada en otro equipo" : "…"),
+          falta ? (nubeConectada() ? "foto en otro equipo: sincroniza para verla" : "foto guardada en otro equipo") : "…"),
     onQuitar && React.createElement("button", { onClick: onQuitar, title: "Quitar foto", style: { position: "absolute", top: -6, right: -6, width: 24, height: 24, borderRadius: 12, border: "none", background: C.danger, color: "#fff", fontWeight: 800, cursor: "pointer", lineHeight: "24px", padding: 0 } }, "✕"));
 }
 function VisorFotos({ ids, inicio, onCerrar }) {
@@ -9003,7 +9072,7 @@ function Bitacora({ proy, onChange }) {
       a.creada && a.creada !== a.fecha && h("div", { style: { fontSize: 11.5, color: C.muted, marginTop: 6 } }, "apuntado el " + fechaLarga(a.creada).toLowerCase())));
   });
   return h(Card, { title: "Bitácora — " + (proy.nombre || "vía") },
-    h("div", { style: { fontSize: 13, color: C.muted, marginTop: -6, marginBottom: 10 } }, "Registro de la vía por fechas, lo más reciente arriba. Las fotos se guardan en este equipo."),
+    h("div", { style: { fontSize: 13, color: C.muted, marginTop: -6, marginBottom: 10 } }, "Registro de la vía por fechas, lo más reciente arriba." + (nubeConectada() ? " Las fotos se guardan en este equipo y en tu Drive (carpeta TopoVías / Fotos)." : " Las fotos se guardan en este equipo; conecta Drive para tenerlas también en la nube.")),
     !ed && !bloqueada && h(Btn, { onClick: () => abrir(null), style: { width: "100%", padding: "12px 16px", fontSize: 15 } }, "+ Agregar anotación"),
     bloqueada && h("div", { style: { fontSize: 13, color: "#B45309", fontWeight: 600 } }, "Vía bloqueada: puedes ver la bitácora pero no cambiarla."),
     editor,
