@@ -25,6 +25,7 @@ async function leerXlsx(p, path) {
   await p.reload(); await p.waitForTimeout(500);
   // UI: estructura propia del parqueadero
   await (p.click('.tv-tabs button[data-tab=via]'), p.click('.tv-subvia button[data-sub=parq]'));
+  await p.waitForTimeout(200); for (const bt of await p.$$('.tv-despl-cab[aria-expanded=false]')) await bt.click();
   await p.selectOption('select:near(:text("Estructura del parqueadero"))', 'propia');
   await p.fill('input[placeholder="Concreto, Base, Sub-base…"]', 'Concreto');
   await p.fill('input[placeholder="ej. 0.150"]', '0.15');

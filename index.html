@@ -1270,6 +1270,18 @@ const Btn = ({
     ...style
   }
 }, children);
+// Tarjeta que se abre y se cierra tocando su encabezado (nombre en color y un resumen de una línea)
+const Desplegable = ({ titulo, color, resumen, abierto0, borde, fondo, children }) => {
+  const [ab, setAb] = React.useState(!!abierto0);
+  const h = React.createElement;
+  return h("div", { className: "tv-despl", style: { background: fondo || C.panel, border: `${borde ? 2 : 1}px solid ${borde || C.border}`, borderRadius: 12, marginBottom: 12, overflow: "hidden" } },
+    h("button", { onClick: () => setAb(!ab), "aria-expanded": ab, className: "tv-despl-cab", style: { width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, background: "none", border: "none", padding: "12px 14px", cursor: "pointer", textAlign: "left", fontFamily: "inherit" } },
+      h("span", { style: { minWidth: 0 } },
+        h("span", { style: { fontWeight: 800, fontSize: 15, color } }, (ab ? "▾ " : "▸ ") + titulo),
+        resumen && h("span", { style: { display: "block", fontSize: 12, color: C.muted, marginTop: 2 } }, resumen)),
+      h("span", { style: { fontSize: 12, fontWeight: 700, color, flex: "0 0 auto" } }, ab ? "Cerrar" : "Abrir")),
+    ab && h("div", { style: { padding: "0 14px 14px" } }, children));
+};
 const Card = ({
   title,
   children,
@@ -1628,7 +1640,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "64";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "65";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -2413,17 +2425,22 @@ function svgPerfil(d) {
     const color = esExc ? GP.excTeorica : m.linea, fin = linea(ptsCapa(i), color, esExc && !conSitio ? 3.4 : esExc ? 2.2 : 2, false);
     if (fin) nombres.push([esExc ? "Excavación teórica" : capas0[i].nombre, color, fin[0], fin[1]]);
   }
-  if (conSitio) { const fin = linea(d.exc.map(t => [t.abs, t.cota]), GP.excSitio, 3.4, true); if (fin) nombres.push(["Excavación en sitio", GP.excSitio, fin[0], fin[1]]); }
-  if (d.tn.length > 1) { const fin = linea(d.tn.map(t => [t.abs, t.cota]), GP.tn, 3.4, true); if (fin) nombres.push(["Terreno natural", GP.tn, fin[0], fin[1]]); }
+  // el nombre que tiene la nivelación (si no tiene, el de su tipo)
+  const nomNiv = (n, def) => (n || "").trim() || def;
+  if (conSitio) { const fin = linea(d.exc.map(t => [t.abs, t.cota]), GP.excSitio, 3.4, true); if (fin) nombres.push([nomNiv(d.excNombre, "Excavación en sitio"), GP.excSitio, fin[0], fin[1]]); }
+  if (d.tn.length > 1) { const fin = linea(d.tn.map(t => [t.abs, t.cota]), GP.tn, 3.4, true); if (fin) nombres.push([nomNiv(d.nivNombre, "Terreno natural"), GP.tn, fin[0], fin[1]]); }
   nombres.push(["Rasante" + (nCap ? " (" + capas0[0].nombre + ")" : ""), GC.rasante, d.filas[d.filas.length - 1].abs, d.filas[d.filas.length - 1].cotaEje]);
   o.push(`<polyline points="${d.filas.map(r => X(r.abs).toFixed(1) + "," + Y(r.cotaEje).toFixed(1)).join(" ")}" fill="none" stroke="${GC.rasante}" stroke-width="3"/>`);
   o.push(`<line x1="${PL}" x2="${W - PR}" y1="${H - PB}" y2="${H - PB}" stroke="${GC.texto}"/>`, svgT(6, PT - 6, "Cota (m)", `font-size="11" fill="${GC.gris}"`));
   // nombres a la derecha, a la altura donde termina cada línea; si se juntan se corren y una rayita los une
-  const et = nombres.map(([t, c, x, y]) => ({ t, c, x: X(x), y: Y(y), yy: Y(y) })).sort((a, b) => a.y - b.y);
-  et.forEach((e, k) => { if (k) e.yy = Math.max(e.y, et[k - 1].yy + 15); });
-  const tope = H - PB - 4; for (let k = et.length - 1; k >= 0; k--) { const lim = k === et.length - 1 ? tope : et[k + 1].yy - 15; if (et[k].yy > lim) et[k].yy = lim; }
+  // un nombre largo se parte en renglones de hasta ~18 letras para que quepa en el margen
+  const renglones = t => String(t).split(/\s+/).reduce((l, w) => { const u = l[l.length - 1]; if (u && (u + " " + w).length <= 18) l[l.length - 1] = u + " " + w; else l.push(w); return l; }, []);
+  const et = nombres.map(([t, c, x, y]) => ({ r: renglones(t), c, x: X(x), y: Y(y), yy: Y(y) })).sort((a, b) => a.y - b.y);
+  const alto = e => 14 * (e.r.length - 1) + 15;
+  et.forEach((e, k) => { if (k) e.yy = Math.max(e.y, et[k - 1].yy + alto(et[k - 1])); });
+  const tope = H - PB - 4; for (let k = et.length - 1; k >= 0; k--) { const lim = (k === et.length - 1 ? tope : et[k + 1].yy - 15) - 14 * (et[k].r.length - 1); if (et[k].yy > lim) et[k].yy = lim; }
   et.forEach(e => o.push(`<polyline points="${e.x.toFixed(1)},${e.y.toFixed(1)} ${(W - PR + 6).toFixed(1)},${e.y.toFixed(1)} ${(W - PR + 14).toFixed(1)},${e.yy.toFixed(1)}" fill="none" stroke="${e.c}" stroke-width="1.2"/>`,
-    svgT(W - PR + 18, e.yy + 4, e.t, `font-size="12" font-weight="bold" fill="${e.c}"`)));
+    `<text x="${(W - PR + 18).toFixed(1)}" y="${(e.yy + 4).toFixed(1)}" font-size="12" font-weight="bold" fill="${e.c}">${e.r.map((l, i) => `<tspan x="${(W - PR + 18).toFixed(1)}" dy="${i ? 14 : 0}">${escXml(l)}</tspan>`).join("")}</text>`));
   // agua por tramo: de la cota alta a la baja, con la pendiente
   for (let i = 1; i < d.PI.length; i++) {
     const A = d.PI[i - 1], B = d.PI[i], pend = (B.cota - A.cota) / ((B.abs - A.abs) || 1) * 100;
@@ -3020,11 +3037,11 @@ function GraficosVia({ proyecto, tabla, onChange }) {
         !d.tn.length && React.createElement("span", { style: { color: C.muted, fontSize: 12 } }, "Sin nivelación de terreno natural con cotas: se muestra solo el diseño.")),
       React.createElement("div", { className: "tv-grafica", dangerouslySetInnerHTML: { __html: perfil.svg } }),
       ley([["Rasante (eje)", linea(GC.rasante)],
-        ["Terreno natural" + (d.nivNombre && claveCapa(d.nivNombre) !== claveCapa("Terreno natural") ? " (" + d.nivNombre + ")" : ""), linea(GP.tn, { borderTopWidth: 3, borderTopStyle: "dashed" })],
+        [(d.nivNombre || "").trim() || "Terreno natural", linea(GP.tn, { borderTopWidth: 3, borderTopStyle: "dashed" })],
         ["Terreno (hojitas)", caja("#CFE6BE", "#8BBF6A")],
         ...(d.filas[0].capas || []).filter(c => !c.esExcavacion).map((c, i) => [c.nombre, caja(materialCapa(c.nombre, i).muestra, materialCapa(c.nombre, i).linea)]),
         ["Excavación teórica", linea(GP.excTeorica, { borderTopWidth: 2 })],
-        ...(d.exc && d.exc.length > 1 ? [["Excavación en sitio" + (d.excNombre && claveCapa(d.excNombre) !== claveCapa("Excavación en sitio") ? " (" + d.excNombre + ")" : ""), linea(GP.excSitio, { borderTopWidth: 3, borderTopStyle: "dashed" })], ["Excavado de más", caja("#C9B8B1", "#4E342E")]] : []),
+        ...(d.exc && d.exc.length > 1 ? [[(d.excNombre || "").trim() || "Excavación en sitio", linea(GP.excSitio, { borderTopWidth: 3, borderTopStyle: "dashed" })], ["Excavado de más", caja("#C9B8B1", "#4E342E")]] : []),
         ["Sentido del agua", linea(GC.agua)], ["PI", { width: 10, height: 10, borderRadius: "50%", background: GC.rasante, display: "inline-block" }]])),
     React.createElement(Card, { title: "Planta — abscisado y drenaje", accent: GC.rasante },
       React.createElement("div", { className: "tv-grafica", dangerouslySetInnerHTML: { __html: planta.svg } }),
@@ -7105,9 +7122,11 @@ function EditorLateral({
       tramos: t
     });
   };
-  return /*#__PURE__*/React.createElement(Card, {
-    title: `Lateral ${label}`,
-    accent: C.accent2
+  const resumenLat = !lat.ancho ? "falta el ancho" : (parseFloat(lat.ancho) || 0).toFixed(2) + " m · " + (lat.modo === "longitudinal"
+    ? "rasante propia · " + (lat.tramos || []).length + ((lat.tramos || []).length === 1 ? " tramo" : " tramos")
+    : lat.modoT === "pendiente" ? "pendiente " + (lat.pendienteT || "?") + " %" : "diferencia " + (lat.diferencia || "0") + " m");
+  return React.createElement(Desplegable, {
+    titulo: "Lateral " + label.toLowerCase(), color: "#0369A1", resumen: resumenLat, abierto0: !lat.ancho
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
@@ -7357,14 +7376,13 @@ function EditorParq({
   const cbc = cab ? cubreCab(p, wLat) : null;
   const campo = (label, k, ph) => React.createElement("div", null, React.createElement(Label, null, label), React.createElement(Input, {
     value: p[k] || "", onChange: e => upd(k, e.target.value), placeholder: ph, inputMode: "decimal" }));
-  return /*#__PURE__*/React.createElement("div", {
-    style: {
-      border: `2px solid ${C.parq}`,
-      borderRadius: 10,
-      padding: 14,
-      marginBottom: 12,
-      background: "#FAF5FF"
-    }
+  const modoTxt = esq ? "4 esquinas" : p.modo === "independiente" ? "rasante propia" : "lateral + diferencia";
+  const resumenParq = cab
+    ? "CABECERA " + (p.ubicacion === "inicio" ? "INICIO" : "FIN") + (kc.ok ? " · fondo " + kc.fondo.toFixed(2) + " m · ancho " + kc.ancho.toFixed(2) + " m" : " · falta ubicarlo") + " · " + modoTxt
+    : (p.lado === "izquierdo" ? "IZQ" : "DER") + (!isNaN(pi) && !isNaN(pf) ? " · " + formatoAbscisa(pi) + " → " + formatoAbscisa(pf) : " · faltan las abscisas") + (anchoP ? " · " + anchoP.toFixed(2) + " m" : "") + " · " + modoTxt;
+  return React.createElement(Desplegable, {
+    titulo: p.nombre || "Parqueadero", color: C.parq, borde: C.parq, fondo: "#FAF5FF", resumen: resumenParq,
+    abierto0: cab ? !(kc && kc.ok) : isNaN(pi) || isNaN(pf)
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",

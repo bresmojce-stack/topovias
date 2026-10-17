@@ -41,19 +41,19 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 | EXCEL CON ESTILO | `exportarExcel`, `exportarLibroObra` |
 | DIBUJO (mini CAD de obra) | `TabDibujo`, `DIB`, `EJE`, `crearDXF`; herramientas en `DIB_GRUPOS` (Dibujar/Medir/Editar/Ver); "Seleccionar varios" usa `selSet` (tocar o recuadro) y pasa la selección a mover/copiar/girar, borrar, color o unir (`unirObjetos`) |
 | CALCULADORAS | `evaluarExpresion`, `CalcNormal`, `CalcCoordenadas`, `Calculadora` |
-| EDITOR LATERAL / EDITOR PARQUEADERO | `EditorLateral` (modo transversal o "rasante propia" con PI), `EditorParq` (lateral o cabecera) |
+| EDITOR LATERAL / EDITOR PARQUEADERO | `EditorLateral` (modo transversal o "rasante propia" con PI), `EditorParq` (lateral o cabecera); los dos son `Desplegable` (junto a `Card`): cerrados en una línea con el nombre en color y un resumen, abiertos si les faltan datos |
 | FALLOS (antes de "Excel no acepta") | `calcFallo`, `cotaSuperficieEn` (interpola la superficie elegida en abscisa y desplazamiento), `SeccionFallos` (Nivelaciones); suma a "Excavación" con desglose y da "Relleno de fallos — material"; sección FALLO en `construirHojaVia` |
 | HELPERS NIVELACIONES / TAB VOLÚMENES | `resolverAI`, `alinearLecturas`, `calcCotasNivelacion`, `exportarCartera`, `TabVolumenes` |
 | BITÁCORA (antes de `FalloApp`) | `Bitacora` (anotaciones `proy.bitacora` = {id, fecha, texto, fotos[], creada}; más reciente arriba), fotos achicadas con `achicarFoto` y guardadas aparte en IndexedDB como `foto_<id>` (`guardarFoto`, `urlFoto`, `borrarFotos`), `Miniatura`, `VisorFotos`. En Drive: `nubeFotos` (al sincronizar sube las que falten a TopoVías/Fotos con appProperties.f = id y manda a la papelera las que ya nadie usa) y `nubeTraerFoto` (las baja al mostrarlas en otro equipo) |
 | APP | `App` (pestañas en `TABS`, `upd` recalcula, `updSinRecalcular` no), `FalloApp` (pantalla de rescate). Pestañas: Vía, Cotas y lecturas, Nivelaciones, Cantidades, Dibujo, Calculadora, Bitácora (id "memoria"). Apartados por pestaña en `APARTADOS` (`BarraApartados`, estado `sub`, `enVia`/`enApartado`): Vía = Estructura, Eje y tramos, Laterales, Parqueaderos, Sardinel, Plano; Cotas = tabla de cotas, lecturas de replanteo; Cantidades = volúmenes, cantidades. Iconos a color en `ICONOS_VIA` (`IconoVia`) |
 
-## Estado (versión 64) y lo que sigue
-- Hecho y publicado: perfil con tramas y colores por material (C2); editor en planta completo (eje, laterales y parqueaderos; punto nuevo dentro de un tramo; "Pasar a rasante propia" / "Pasar a puntos"; esquinas de cabecera); pestañas con iconos y apartados; editor en planta (eje y laterales); parqueaderos de
+## Estado (versión 65) y lo que sigue
+- Hecho y publicado: laterales y parqueaderos desplegables; en el perfil, el nombre que tiene cada nivelación; perfil con tramas y colores por material (C2); editor en planta completo (eje, laterales y parqueaderos; punto nuevo dentro de un tramo; "Pasar a rasante propia" / "Pasar a puntos"; esquinas de cabecera); pestañas con iconos y apartados; editor en planta (eje y laterales); parqueaderos de
   cabecera con 4 esquinas; laterales repartidos en quiebres; abscisado por vía (5/10/20/otro); abscisa
   acumulada por tramo; bitácora con fotos (y fotos en Drive); fallos; sardinel; rellenos que se suman a su
   capa con desglose; Excel sin "Resumen de volúmenes" (el libro de obra conserva su RESUMEN consolidado).
-- Aprobado en boceto, por hacer: laterales y parqueaderos como desplegables (nombre en color, "Abrir/Cerrar
-  todos"). Temas (claro, oscuro, agua, fuego, tierra, aire): Brian preguntó; mostrado en boceto, sin aprobar.
+- Temas (claro, oscuro, agua, fuego, tierra, aire inspirados en Avatar): Brian los quiere; falta el boceto con
+  inspiración de la serie y aprobarlo. Antes hay que pasar los ~530 colores fijos de la UI a la paleta `C`.
 - Pendiente posible (Brian dijo "si algún día"): puntos intermedios en el fondo de una cabecera.
 - Ideas mostradas en boceto, sin aprobar: modo sol (alto contraste), modo campo para replanteo, tablero de
   la vía, un color por material. Play Store: Brian dijo "aún no".

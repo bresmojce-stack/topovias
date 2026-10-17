@@ -27,6 +27,7 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
   filas.forEach(f => console.log('   ', f));
   console.log('volumen:', await p.$$eval('main span', ss => ss.map(s => s.innerText).filter(t => /m³$/.test(t))));
   await (p.click('.tv-tabs button[data-tab=via]'), p.click('.tv-subvia button[data-sub=parq]'));
+  await p.waitForTimeout(200); for (const bt of await p.$$('.tv-despl-cab[aria-expanded=false]')) await bt.click();
   console.log('editor parq:', await p.innerText('text=/Ancho de trabajo: 5/'));
   await p.selectOption('select:near(:text("Estructura del parqueadero"))', 'propia');
   await p.click('text=Copiar capas de la vía');
