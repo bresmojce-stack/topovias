@@ -1619,7 +1619,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "60";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "61";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -2648,6 +2648,22 @@ function lateralAPropia(proy, lado) {
   const largo = k => { if (!G || !G.real) return le[k]; const p = G.Q(ab[k], o), q = G.Q(ab[k + 1], o); return r3(Math.hypot(q.x - p.x, q.y - p.y)); };
   return { ...lat, modo: "longitudinal", absInicio: "", tramos: le.map((l, k) => ({ ...tramoVacio(), cotaInicio: String(cota(ab[k])), cotaFin: String(cota(ab[k + 1])), distancia: String(largo(k)), parte: !!rs[k].parte })) };
 }
+// Parqueadero lateral "lateral + diferencia" → rasante propia: un punto en el inicio, el fin y cada quiebre
+// de la rasante del lateral (PI del eje y puntos del lateral) con la cota que tiene hoy.
+function parqAPuntos(proy, p) {
+  const pi = parseFloat(p.absInicio), pf = parseFloat(p.absFin);
+  if (isNaN(pi) || isNaN(pf) || pf - pi <= 0.0005) return null;
+  const lat = p.lado === "izquierdo" ? proy.lateralIzq : proy.lateralDer, rs = resolverTodos(proy.tramos || []);
+  let x = parseFloat(proy.absInicio) || 0;
+  const cortes = [x].concat(largosTramos(rs).map(l => (x = r3(x + l))));
+  if (lat && lat.modo === "longitudinal") { let d = 0; largosTramos(resolverTodos(lat.tramos || [])).forEach(l => { d += l; cortes.push(r3(abscisaEjeDeLateral(proy, lat, d))); }); }
+  const ab = [pi, pf].concat(cortes.filter(a => a > pi + 0.0005 && a < pf - 0.0005)).sort((a, b) => a - b).filter((a, i, l) => !i || a - l[i - 1] > 0.0005);
+  const t = generarTabla({ ...proy, intermedias: [...(proy.intermedias || []), ...ab.map(a => ({ valor: String(a) }))] });
+  const k = p.lado === "izquierdo" ? "parqIzqCota" : "parqDerCota";
+  const cota = a => { const f = t.find(r => !r.fueraVia && Math.abs(r.abs - a) < 0.0006); return f ? f[k] : null; };
+  if (ab.some(a => cota(a) === null || cota(a) === undefined)) return null;
+  return { ...p, modo: "independiente", tramos: ab.slice(0, -1).map((a, i) => ({ ...tramoVacio(), cotaInicio: String(cota(a)), cotaFin: String(cota(ab[i + 1])), distancia: String(r3(ab[i + 1] - a)) })) };
+}
 const cotaDePI = (rs, k) => k === 0 ? (rs[0] ? rs[0].cotaInicio : null) : (rs[k - 1] ? rs[k - 1].cotaFin : null);
 // abscisa del eje frente a una distancia recorrida en un lateral con rasante propia
 function abscisaEjeDeLateral(proy, lat, d) {
@@ -2670,7 +2686,7 @@ function PuntoNuevo({ desde, largo, onCrear }) {
     h("div", { style: { fontSize: 11.5, color: err ? C.danger : C.muted, marginTop: 4, fontWeight: err ? 700 : 400 } }, err ||
       (largo ? "Entre 0 y " + largo.toFixed(3) + " m. " : "") + "El tramo se parte en dos y el punto nace con la cota que ya tiene la rasante ahí; luego le pones la cota."));
 }
-function EditorPlanta({ proy, modo, onEje, onLat }) {
+function EditorPlanta({ proy, modo, onEje, onLat, onParq }) {
   const [abierto, setAbierto] = React.useState(() => { try { return localStorage.getItem("tv_planta_ed") !== "0"; } catch (_) { return true; } });
   const [sel, setSel] = React.useState(null);   // { tipo: "pi"|"tramo"|"lpi"|"ltramo"|"borde", lado, k }
   const alternar = () => { const v = !abierto; setAbierto(v); try { localStorage.setItem("tv_planta_ed", v ? "1" : "0"); } catch (_) {} };
@@ -2690,9 +2706,29 @@ function EditorPlanta({ proy, modo, onEje, onLat }) {
     ll.forEach((l, k) => { d += l; pts.push({ d, cota: cotaDePI(rs, k + 1) }); });
     return { lado, lat, sg, rs, pts: pts.map(q => ({ ...q, abs: abscisaEjeDeLateral(proy, lat, q.d), absLat: (parseFloat(lat.absInicio || proy.absInicio) || 0) + q.d })), largo: ll.reduce((a, b) => a + b, 0) };
   });
+  // parqueaderos (cabecera ya ubicada con proyCalc; las dos mitades de una que cruza el eje van juntas)
+  const parqs = [];
+  if (modo === "parq") (proyCalc(proy).parqueaderos || []).forEach(pc => {
+    const raw = (proy.parqueaderos || []).find(x => x.id === (pc.idBase || pc.id)); if (!raw || parqs.some(q => q.raw === raw)) return;
+    const sg = pc.lado === "izquierdo" ? -1 : 1, w = sg < 0 ? A.anchoIzq : A.anchoDer;
+    if (!esCabecera(pc)) {
+      const pi = parseFloat(pc.absInicio), pf = parseFloat(pc.absFin), an = parseFloat(pc.ancho) || 0;
+      if (isNaN(pi) || isNaN(pf) || pf - pi <= 0.0005 || an <= 0) return;
+      const o2 = sg * (w + an), rs = resolverTodos(raw.tramos || []);
+      let a = pi; const pts = raw.modo === "independiente" ? [{ abs: pi, cota: cotaDePI(rs, 0) }].concat(largosTramos(rs).map((l, k) => ({ abs: (a = r3(a + l)), cota: cotaDePI(rs, k + 1) }))) : [];
+      parqs.push({ raw, cab: false, sg, a: pi, b: pf, o1: sg * w, o2, pts, rs, poly: G.franja(pi, pf, sg * w, o2) });
+    } else if (pc.__esq) {
+      const e = pc.__esq, a = Math.min(e.aB, e.aF), b = Math.max(e.aB, e.aF);
+      parqs.push({ raw, cab: true, e, a, b, o1: e.x0, o2: e.x1, poly: G.franja(a, b, e.x0, e.x1) });
+    } else {
+      const k = datosCabecera(pc), a = parseFloat(pc.absInicio), b = parseFloat(pc.absFin);
+      if (!k.ok || isNaN(a) || isNaN(b)) return;
+      parqs.push({ raw, cab: true, a, b, o1: sg * k.desde, o2: sg * k.hasta, poly: G.franja(a, b, sg * k.desde, sg * k.hasta) });
+    }
+  });
   // a pantalla
-  const fr = G.franja(G.ini, G.fin, -A.anchoIzq, A.anchoDer);
-  const xs = fr.map(q => q.x), ys = fr.map(q => q.y);
+  const fr = G.franja(G.ini, G.fin, -A.anchoIzq, A.anchoDer), todo = fr.concat(...parqs.map(q => q.poly));
+  const xs = todo.map(q => q.x), ys = todo.map(q => q.y);
   const mnx = Math.min(...xs), mxx = Math.max(...xs), mny = Math.min(...ys), mxy = Math.max(...ys);
   const W = 720, M = 86;
   const ex = (W - 2 * M) / ((mxx - mnx) || 1);
@@ -2710,6 +2746,8 @@ function EditorPlanta({ proy, modo, onEje, onLat }) {
   if (sel && sel.tipo === "pi" && G.Ab[sel.k] !== undefined) { const q = G.Q(G.Ab[sel.k], 0); ocupados["pi" + (sel.k % 2)] = [{ x: X(q), y: Y(q) }]; }
   if (sel && sel.tipo === "lpi") { const L = ptsLat.find(x => x.lado === sel.lado), pt = L && L.pts[sel.k];
     if (pt) { const q = G.Q(pt.abs, L.sg * (L.sg < 0 ? A.anchoIzq : A.anchoDer)); ocupados["l" + sel.lado] = [{ x: X(q), y: Y(q) }]; } }
+  if (sel && sel.tipo === "ppi") { const q = parqs.find(x => x.raw.id === sel.id), pt = q && q.pts && q.pts[sel.k];
+    if (pt) { const qq = G.Q(pt.abs, q.o2); ocupados["p" + sel.id] = [{ x: X(qq), y: Y(qq) }]; } }
   const cabe = (grupo, q, act, dmin) => { const l = ocupados[grupo] = ocupados[grupo] || [];
     if (act) return true; if (l.some(o => Math.hypot(o.x - X(q), o.y - Y(q)) < (dmin || 120))) return false; l.push({ x: X(q), y: Y(q) }); return true; };
   const largoPx = (a, b, o) => { const p0 = G.Q(a, o), p1 = G.Q(b, o); return Math.hypot(X(p1) - X(p0), Y(p1) - Y(p0)); };
@@ -2732,6 +2770,43 @@ function EditorPlanta({ proy, modo, onEje, onLat }) {
         h("text", { x: X(q), y: Y(q) + 6, textAnchor: "middle", fontSize: 16, fontWeight: 800, fill: "#fff" }, k + 1)));
       const c = cotaDePI(rsEje, k);
       if (cabe("pi" + (k % 2), q, act)) el.push(etiqueta("pl" + k, G.Q(a, k % 2 === 0 ? -A.anchoIzq : A.anchoDer), [formatoAbscisa(a) + (g > 0.05 ? " · " + g.toFixed(0) + "°" : ""), fmt(c)], k % 2 === 0, c === null ? "#DC2626" : null));
+    });
+  } else if (modo === "parq") {
+    [-A.anchoIzq, A.anchoDer].forEach((o, i) => o && el.push(h("polyline", { key: "bd" + i, points: pl(G.curva(G.ini, G.fin, o)), fill: "none", stroke: "#0369A1", strokeWidth: 3, style: { pointerEvents: "none" } })));
+    const esDe = (q, tipo, k) => sel && sel.id === q.raw.id && sel.tipo === tipo && (k === undefined || sel.k === k);
+    parqs.forEach(q => {
+      const id = q.raw.id, m = G.Q((q.a + q.b) / 2, (q.o1 + q.o2) / 2);
+      el.push(h("polygon", { key: "pq" + id, points: pl(q.poly), fill: "#EDE9FE", stroke: esDe(q, "parq") ? "#F59E0B" : "#6D28D9", strokeWidth: esDe(q, "parq") ? 5 : 2.5, style: { cursor: "pointer" }, onClick: () => setSel({ tipo: "parq", id }) }));
+      el.push(h("text", { key: "pn" + id, x: X(m), y: Y(m) + 6, textAnchor: "middle", fontSize: 17, fontWeight: 800, fill: "#5B21B6", style: { pointerEvents: "none" } }, q.raw.nombre || "Parqueadero"));
+      if (!q.cab && q.pts.length > 1) {
+        q.pts.slice(0, -1).forEach((p0, k) => {
+          const p1 = q.pts[k + 1], r = q.rs[k], act = esDe(q, "ptramo", k);
+          el.push(h("polyline", { key: "pt" + id + k, points: pl(G.curva(p0.abs, p1.abs, q.o2)), fill: "none", stroke: act ? "#F59E0B" : "#6D28D9", strokeWidth: act ? 20 : 6, strokeOpacity: act ? 0.7 : 1, strokeLinecap: "round", style: { cursor: "pointer" }, onClick: () => setSel({ tipo: "ptramo", id, k }) }));
+          const mm = G.Q((p0.abs + p1.abs) / 2, q.o2);
+          if (largoPx(p0.abs, p1.abs, q.o2) > 120 || act) el.push(h("text", { key: "ptl" + id + k, x: X(mm), y: Y(mm) + (q.sg < 0 ? -12 : 26), textAnchor: "middle", fontSize: 16, fontWeight: 700, fill: "#5B21B6", style: { pointerEvents: "none" } },
+            r3(p1.abs - p0.abs).toFixed(2) + " m · " + (r && r.pendiente !== null && !isNaN(r.pendiente) ? (r.pendiente > 0 ? "+" : "") + r.pendiente.toFixed(2) + " %" : "? %") + flecha(r && r.pendiente)));
+        });
+        q.pts.forEach((p, k) => {
+          const pq = G.Q(p.abs, q.o2), act = esDe(q, "ppi", k);
+          el.push(h("g", { key: "pp" + id + k, onClick: () => setSel({ tipo: "ppi", id, k }), style: { cursor: "pointer" } },
+            h("circle", { cx: X(pq), cy: Y(pq), r: 26, fill: "transparent" }),
+            h("circle", { cx: X(pq), cy: Y(pq), r: act ? 15 : 11, fill: act ? "#F59E0B" : "#6D28D9", stroke: act ? "#92400E" : "#fff", strokeWidth: 3 })));
+          if (cabe("p" + id, pq, act)) el.push(etiqueta("ppl" + id + k, G.Q(p.abs, q.o2 + q.sg * 0.6), [formatoAbscisa(p.abs), fmt(p.cota)], q.sg < 0, p.cota === null ? "#DC2626" : null));
+        });
+      }
+      if (q.e) {
+        const e = q.e, esq = q.raw.esq || {};
+        [["A", e.aF, e.x0], ["B", e.aB, e.x0], ["C", e.aB, e.x1], ["D", e.aF, e.x1]].forEach(([k, ab, xo]) => {
+          const pq = G.Q(ab, xo), act = esDe(q, "esq", k), v = parseFloat(esq[k]);
+          el.push(h("g", { key: "e" + id + k, onClick: () => setSel({ tipo: "esq", id, k }), style: { cursor: "pointer" } },
+            h("circle", { cx: X(pq), cy: Y(pq), r: 26, fill: "transparent" }),
+            h("circle", { cx: X(pq), cy: Y(pq), r: act ? 16 : 13, fill: act ? "#F59E0B" : "#6D28D9", stroke: act ? "#92400E" : "#fff", strokeWidth: 3 }),
+            h("text", { x: X(pq), y: Y(pq) + 5, textAnchor: "middle", fontSize: 14, fontWeight: 800, fill: "#fff" }, k)));
+          // las del borde de la vía un renglón más afuera que las del fondo, para que no se monten
+          const arriba = Y(G.Q(ab, e.x0)) <= Y(G.Q(ab, e.x1)) ? xo === e.x0 : xo === e.x1, lejos = k === "B" || k === "C" ? 19 : 0;
+          el.push(h("text", { key: "el" + id + k, x: X(pq), y: Y(pq) + (arriba ? -22 - lejos : 36 + lejos), textAnchor: "middle", fontSize: 15, fontWeight: 700, fontFamily: "monospace", fill: isNaN(v) ? "#DC2626" : "#1E293B", style: { pointerEvents: "none" } }, isNaN(v) ? "falta" : v.toFixed(3)));
+        });
+      }
     });
   } else {
     ptsLat.forEach(({ lado, lat, sg, rs, pts }) => {
@@ -2764,7 +2839,8 @@ function EditorPlanta({ proy, modo, onEje, onLat }) {
   }
   // largos
   const largoEje = r3(G.fin - G.ini);
-  const resumen = modo === "eje" ? "Largo del eje " + largoEje.toFixed(3) + " m · " + G.le.length + (G.le.length === 1 ? " tramo" : " tramos")
+  const resumen = modo === "parq" ? (parqs.length ? parqs.length + (parqs.length === 1 ? " parqueadero" : " parqueaderos") + " · eje " + largoEje.toFixed(3) + " m" : "Sin parqueaderos ubicados todavía")
+    : modo === "eje" ? "Largo del eje " + largoEje.toFixed(3) + " m · " + G.le.length + (G.le.length === 1 ? " tramo" : " tramos")
     : ["IZQ", "DER"].map((t, i) => { const L = ptsLat[i]; return t + " " + (L.largo !== null ? r3(L.largo).toFixed(3) + " m" : "a lo largo del eje"); }).join(" · ") + " · eje " + largoEje.toFixed(3) + " m";
   // panel de edición
   let panel = null;
@@ -2816,6 +2892,60 @@ function EditorPlanta({ proy, modo, onEje, onLat }) {
         h(PuntoNuevo, { key: "pn" + sel.lado + k, desde: "el punto " + (k + 1), largo, onCrear: partir }));
     }
   }
+  if (sel && modo === "parq") {
+    const q = parqs.find(x => x.raw.id === sel.id), p = q && q.raw, nombre = p && (p.nombre || "Parqueadero");
+    const set = np => onParq(p.id, np);
+    const campo = (label, k, ph) => h("div", null, h(Label, null, label), h(Input, { value: p[k] || "", onChange: e => set({ ...p, [k]: e.target.value }), placeholder: ph, inputMode: "decimal" }));
+    const rejilla = (...hijos) => h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 } }, ...hijos);
+    const nota = t => h("div", { style: { fontSize: 11.5, color: C.muted, marginTop: 6 } }, t);
+    if (!q) panel = null;
+    else if (sel.tipo === "parq" && !q.cab) {
+      panel = cajaPanel(titulo(nombre + " · lateral " + (p.lado === "izquierdo" ? "izquierdo" : "derecho")),
+        rejilla(campo("Abscisa inicio (m)", "absInicio", "ej. 25.73"), campo("Abscisa fin (m)", "absFin", "ej. 58.5"), campo("Ancho (m)", "ancho", "ej. 5"),
+          h("div", null, h(Label, null, "Modo de cota"), h(Sel, { value: p.modo, onChange: e => set({ ...p, modo: e.target.value }) },
+            h("option", { value: "diferencia" }, "Cota del lateral + diferencia fija"), h("option", { value: "independiente" }, "Rasante propia con tramos y PI"))),
+          p.modo === "diferencia" && campo("Diferencia desde el lateral (m)", "diferencia", "ej. 0.05")),
+        p.modo === "diferencia" ? h("div", { style: { borderTop: "1px dashed #F59E0B", marginTop: 10, paddingTop: 8 } },
+          h(Btn, { small: true, color: C.parq, onClick: () => {
+            const np = parqAPuntos(proy, p);
+            if (!np) { alert("Faltan las abscisas del parqueadero o cotas de la vía en ese tramo."); return; }
+            if (!confirm("¿Pasar «" + nombre + "» a puntos?\n\nSe crea un punto en el inicio, el fin y cada quiebre, con la cota que tiene hoy; luego puedes meter puntos nuevos en el borde de afuera y cambiar cotas.")) return;
+            set(np); setSel(null);
+          } }, "Pasar a puntos"), nota("Para poner cotas punto por punto en el borde de afuera."))
+          : nota("El borde de adentro es la cota del lateral. Toca un punto o un tramo del borde de afuera para editarlo."));
+    } else if (sel.tipo === "parq" && q.e) {
+      panel = cajaPanel(titulo(nombre + " · cabecera al " + (p.ubicacion === "inicio" ? "inicio" : "fin")),
+        rejilla(h(CampoLado, { label: "Desde (m del eje)", valor: p.desdeX, lado: p.desdeLado || "izq", ph: "ej. 3.00", onValor: v => set({ ...p, desdeX: v }), onLado: v => set({ ...p, desdeLado: v }) }),
+          h(CampoLado, { label: "Hasta (m del eje)", valor: p.hastaX, lado: p.hastaLado || "der", ph: "ej. 3.00", onValor: v => set({ ...p, hastaX: v }), onLado: v => set({ ...p, hastaLado: v }) }),
+          campo("Fondo (m)", "fondo", "ej. 5.00")),
+        nota("Toca una esquina (A, B, C o D) para poner su cota."));
+    } else if (sel.tipo === "parq") {
+      panel = cajaPanel(titulo(nombre + " · cabecera"), nota("Va con cota del lateral + diferencia fija. Para tocar sus 4 esquinas, cambia su modo a «Cotas de las 4 esquinas» en la lista de abajo."));
+    } else if (sel.tipo === "ppi" && q.pts[sel.k]) {
+      const k = sel.k, t0 = p.tramos[k - 1], t1 = p.tramos[k];
+      const v = k === 0 ? (t1 && t1.cotaInicio) : (t0 && valorTramo(t0.cotaFin) ? t0.cotaFin : t1 && t1.cotaInicio) || "";
+      panel = cajaPanel(titulo(nombre + " · borde de afuera · punto " + (k + 1) + " · " + formatoAbscisa(q.pts[k].abs)), campoCota(v || "", nv => set({ ...p, tramos: ponerCotaPI(p.tramos, k, nv) })));
+    } else if (sel.tipo === "ptramo" && p.tramos[sel.k]) {
+      const k = sel.k, largo = q.rs[k] && q.rs[k].distancia;
+      const partir = d => { const r = partirTramo(p.tramos, k, d); if (r.error) return r.error;
+        const c = partirCoords(p.coords, k, r3(parseFloat(String(d).replace(",", "."))) / largo);
+        set({ ...p, tramos: r.tramos, ...(c ? { coords: c } : {}) }); setSel({ tipo: "ppi", id: p.id, k: k + 1 }); };
+      panel = cajaPanel(titulo(nombre + " · borde de afuera · " + formatoAbscisa(q.pts[k].abs) + " → " + formatoAbscisa(q.pts[k + 1].abs)),
+        h(CamposTramo, { t: p.tramos[k], onChange: nt => { const tr = [...p.tramos]; tr[k] = nt; set({ ...p, tramos: tr }); } }),
+        h(PuntoNuevo, { key: "pn" + p.id + k, desde: formatoAbscisa(q.pts[k].abs), largo, onCrear: partir }));
+    } else if (sel.tipo === "esq" && q.e) {
+      const e = q.e, k = sel.k, esq = p.esq || {}, xo = k === "A" || k === "B" ? e.x0 : e.x1, ab = k === "B" || k === "C" ? e.aB : e.aF;
+      const traer = () => {
+        const c = cotaViaEnBorde(generarTabla(proy), e.aB, xo, A);
+        if (c === null) { alert("No hay cota de la vía en " + formatoAbscisa(e.aB) + "."); return; }
+        set({ ...p, esq: { ...esq, [k]: c.toFixed(3) } });
+      };
+      panel = cajaPanel(titulo(nombre + " · esquina " + k + " · " + NOMBRE_ESQ[k] + " · " + Math.abs(xo).toFixed(2) + (xo < 0 ? " izq." : xo > 0 ? " der." : " (eje)") + " · " + formatoAbscisa(ab)),
+        h("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
+          h(Input, { value: esq[k] || "", onChange: ev => set({ ...p, esq: { ...esq, [k]: ev.target.value } }), placeholder: "cota, ej. 955.256", inputMode: "decimal", style: { flex: "1 1 140px", maxWidth: 220 } }),
+          (k === "B" || k === "C") && h(Btn, { small: true, color: "#0369A1", onClick: traer }, "⇩ Cota de la vía")));
+    }
+  }
   const agregarPI = () => { const ult = resolverTramo(proy.tramos[proy.tramos.length - 1]);
     onEje([...proy.tramos, { ...tramoVacio(), cotaInicio: ult.cotaFin !== null && !isNaN(ult.cotaFin) ? String(ult.cotaFin) : "" }]); setSel({ tipo: "tramo", k: proy.tramos.length }); };
   return h("div", { style: { marginBottom: 14 } }, cab,
@@ -2825,7 +2955,7 @@ function EditorPlanta({ proy, modo, onEje, onLat }) {
         modo === "eje" && h(Btn, { small: true, color: C.success, onClick: agregarPI }, "+ PI al final")),
       h("svg", { viewBox: `0 0 ${W} ${H.toFixed(0)}`, style: { width: "100%", maxWidth: 760, display: "block", margin: "0 auto", touchAction: "manipulation" } }, el),
       !G.real && h("div", { style: { fontSize: 11.5, color: C.muted } }, "Dibujo recto: con las coordenadas de los PI (Eje y tramos → Distancias por coordenadas) se ve con sus quiebres."),
-      panel || h("div", { style: { fontSize: 12.5, color: C.muted, marginTop: 6 } }, modo === "eje" ? "Toca un PI para poner su cota, o un tramo para su distancia o pendiente." : "Toca un punto o un tramo del borde para editarlo (o el borde, si va con diferencia).")));
+      panel || h("div", { style: { fontSize: 12.5, color: C.muted, marginTop: 6 } }, modo === "parq" ? (parqs.length ? "Toca un parqueadero para sus datos, o un punto, tramo o esquina para su cota." : "Agrega un parqueadero y llena sus abscisas (o fondo y desde/hasta si es de cabecera) para verlo aquí.") : modo === "eje" ? "Toca un PI para poner su cota, o un tramo para su distancia o pendiente." : "Toca un punto o un tramo del borde para editarlo (o el borde, si va con diferencia).")));
 }
 function GraficosVia({ proyecto, tabla, onChange }) {
   const d = datosGraficos(proyecto, tabla);
@@ -8812,7 +8942,10 @@ function App() {
       fontWeight: 700,
       color: C.danger
     }
-  }, "Profundidad total de excavación: ", r3(proy.capas.filter(c => c.nombre && c.espesor).reduce((s, c) => s + (parseFloat(c.espesor) || 0), 0)).toFixed(3), " m"))), enVia("sard") && React.createElement(TabSardinel, { proy, upd, updSinRecalcular }), enVia("parq") && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, "Profundidad total de excavación: ", r3(proy.capas.filter(c => c.nombre && c.espesor).reduce((s, c) => s + (parseFloat(c.espesor) || 0), 0)).toFixed(3), " m"))), enVia("sard") && React.createElement(TabSardinel, { proy, upd, updSinRecalcular }), enVia("parq") && /*#__PURE__*/React.createElement("div", null, React.createElement(EditorPlanta, { proy, modo: "parq", onParq: (id, np) => {
+    const viejo = proy.parqueaderos.find(x => x.id === id), igual = viejo && JSON.stringify({ ...np, coords: null }) === JSON.stringify({ ...viejo, coords: null });
+    (igual ? updSinRecalcular : upd)({ parqueaderos: proy.parqueaderos.map(x => x.id === id ? np : x) });
+  } }), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 12
     }
