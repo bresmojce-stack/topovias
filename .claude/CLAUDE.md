@@ -66,8 +66,10 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 Recordarle a Brian si quiere correr `/ponytail-audit` cuando pasen **1 semana o 5 versiones** desde la
 última (lo que llegue primero), en una línea al final de la respuesta, sin correrla sin su permiso. Primero
 se le muestran los hallazgos y él decide qué se arregla. Al hacerla, actualizar aquí la fecha.
-- Última auditoría: 2026-10-15 (arreglos publicados en la versión 44).
-- **Pendiente: Brian pidió hacerla al empezar el próximo chat** (versión 59; ya pasaron 15 versiones). Brian pidió hacerla después de la entrega de parqueaderos en planta (ya publicada en la 61): es lo siguiente.
+- Última auditoría: 2026-10-17 (versión 61). Hallazgos mostrados a Brian, esperando que decida cuáles se
+  arreglan: 1 deshacer tras borrar anotación pierde sus fotos; 2 capa llamada "Excavación" descuadra el Excel;
+  3 la copia de seguridad no lleva las fotos; 4 `memoria`/`setMemoria` en App sin uso; 5 sin un solo comando
+  para correr las pruebas; 6 encabezados de sección vacíos (PERFIL/CORTE/PLANO EN PLANTA).
 
 ## Pendientes conocidos (auditoría, Brian decidió dejarlos por ahora)
 Estación sin V+ usa la AI de la anterior (Brian lo quiere así: si necesita otra estación la crea); tramo
