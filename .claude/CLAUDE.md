@@ -32,7 +32,7 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 | DESHACER / REHACER | `HIST` (atras/adelante/crudo/oyentes), `histAvisar` |
 | VÍAS BLOQUEADAS | `protegerBloqueadas`, `useLocalProyectos`, `useLocalObras`, `viaValida` |
 | SINCRONIZAR CON GOOGLE DRIVE | `nubeSincronizar` (un archivo por vía + Obras.json en la carpeta TopoVías; permiso drive.file; ID de cliente en `NUBE_CLIENTE`) |
-| CANTIDADES DE LA VÍA | `calcAreas`, `calcCantidades` |
+| CANTIDADES DE LA VÍA | `calcAreas`, `calcCantidades`. Lo que se suma a una capa (volumen con su nombre, relleno de sobre-excavación o de fallo con el material de esa capa) va dentro de la capa con desglose: "X teórica (área × espesor)" + cada extra (`esCapa`/`sumarACapa`; en el Excel `capaX`/`extraCapa`). El Excel de la vía ya no tiene "Resumen de volúmenes"; el RESUMEN del libro de obra sí (consolidado por vía, enlazado a las hojas) |
 | GRÁFICOS | `svgPerfil`, `svgPlanta` (texto de usuario siempre con `escXml`); `geoVia` (geometría en planta: real con `coordsEje` o recta; `Q(abs, desplazamiento)`), `svgPlantaReal` dibuja la forma real con quiebres |
 | EDITAR EN PLANTA (antes de `GraficosVia`) | `EditorPlanta` (desplegable en Eje y tramos y en Laterales: tocar PI/tramo/borde y editar; mismos datos), `ponerCotaPI`, `abscisaEjeDeLateral` |
 | INSTALAR / COPIA DE SEGURIDAD | `crearCopiaSeguridad`, `leerCopiaSeguridad`, `BotonNube`, `PanelNube`, `CopiasAutomaticas` |

@@ -1603,7 +1603,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "58";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "59";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -2104,6 +2104,7 @@ function calcCantidades(proy, tabla) {
     if (!capas.some(x => x.clave === k)) capas.push({ clave: k, nombre: c.nombre.trim(), incluida: !excluidas.includes(k) });
     if (excluidas.includes(k) || area <= 0) return;
     const it = add(c.nombre, "m³", area * esp, `${quien}${area.toFixed(3)} m² × ${esp.toFixed(3)} m`);
+    it.baseExacto = (it.baseExacto || 0) + area * esp;   // lo teórico (área × espesor), sin lo que se le sume
     // para la tabla: área total y espesor de la capa (si una estructura propia usa otro espesor, queda "varios")
     it.areaExacta = (it.areaExacta || 0) + area;
     it.area = r3(it.areaExacta);
@@ -2129,18 +2130,26 @@ function calcCantidades(proy, tabla) {
       });
     });
   }
+  // lo que se suma a una capa (un volumen con su nombre, el relleno de la sobre-excavación o de un fallo
+  // con el material de esa capa) queda explicado debajo: la capa teórica y cada cosa que se le sumó
+  const esCapa = nombre => { const it = items.find(x => x.clave === claveCapa(nombre) + "|m³"); return it && it.baseExacto !== undefined ? it : null; };
+  const sumarACapa = (it, nombre, valor) => { it.extras = (it.extras || []).concat([{ nombre, valor: r3(valor) }]); };
   (proy.volumenes || []).forEach(v => {
     const r = calcVolumenTotal(v, proy, tabla);
     if (!r) return;
+    const capaDestino = r.tipo !== "excavacion" && esCapa(destinoVolumen(v));
     const it = add(destinoVolumen(v), "m³", r.volTotalExacto, `volumen "${v.nombre || "Volumen"}" ${r.volTotal.toFixed(3)} m³`);
     it.conVolumen = true;
+    if (capaDestino) sumarACapa(it, v.nombre || "Volumen", r.volTotalExacto);
     // Excavación en dos cortes: el total se muestra dividido en teórica + sobre-excavación, y la
     // sobre-excavación se repone con el material elegido (ítem aparte, mismo volumen)
     const c1 = r.partes.find(x => x.parte.clave === "corte1"), c2 = r.partes.find(x => x.parte.clave === "corte2");
     if (r.tipo === "excavacion" && c1 && c2) {
       it.desglose = (it.desglose || []).concat([{ nombre: "Excavación teórica", valor: c1.r.volTotal }, { nombre: "Sobre-excavación", valor: c2.r.volTotal }]);
       const mat = (v.materialRelleno || "").trim();
-      if (mat) add(nombreRellenoSobreexc(mat), "m³", Math.max(0, c2.r.volTotalExacto), "sobre-excavación").esRelleno = true;
+      const capaRel = mat && esCapa(mat);
+      if (capaRel) { const ic = add(capaRel.nombre, "m³", Math.max(0, c2.r.volTotalExacto), "relleno de la sobre-excavación"); ic.conVolumen = true; sumarACapa(ic, "Relleno por sobre-excavación", Math.max(0, c2.r.volTotalExacto)); }
+      else if (mat) add(nombreRellenoSobreexc(mat), "m³", Math.max(0, c2.r.volTotalExacto), "sobre-excavación").esRelleno = true;
     }
   });
   // fallos: su excavación suma a la excavación total (con su línea aparte) y sale el relleno por material
@@ -2149,8 +2158,12 @@ function calcCantidades(proy, tabla) {
     const it = add("Excavación", "m³", r.volExacto, `fallo "${f.nombre || "Fallo"}" ${r.vol.toFixed(3)} m³`);
     it.conVolumen = true;
     it.desglose = (it.desglose || []).concat([{ nombre: "Fallos: " + (f.nombre || "Fallo"), valor: r.vol }]);
-    const rel = add(nombreRellenoFallo(f), "m³", r.volExacto, `fallo "${f.nombre || "Fallo"}"`); rel.conVolumen = true; rel.esRelleno = true;
+    const capaF = esCapa(materialFallo(f));
+    if (capaF) { const ic = add(capaF.nombre, "m³", r.volExacto, `relleno del fallo "${f.nombre || "Fallo"}"`); ic.conVolumen = true; sumarACapa(ic, "Relleno de fallos: " + (f.nombre || "Fallo"), r.volExacto); }
+    else { const rel = add(nombreRellenoFallo(f), "m³", r.volExacto, `fallo "${f.nombre || "Fallo"}"`); rel.conVolumen = true; rel.esRelleno = true; }
   });
+  // capa con algo sumado: debajo, "Capa teórica (área × espesor)" y lo que se le sumó
+  items.forEach(it => { if (it.extras && it.extras.length) it.desglose = [{ nombre: it.nombre + " teórica (área × espesor)", valor: r3(it.baseExacto) }].concat(it.extras); });
   (cfg.extras || []).forEach(x => { if (x.nombre && x.nombre.trim()) add(x.nombre, "m²", areaConf, "= área conformada"); });
   return { areas, areaConf, usaManual, capas, items };
 }
@@ -2212,7 +2225,7 @@ function TabCantidades({ proyecto, tabla, onChange }) {
                 React.createElement("td", { style: { ...num, color: C.muted } }, d.valor.toFixed(3) + " m³"))));
           })))),
       q.items.some(it => it.conVolumen && it.area !== undefined) && React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 8 } },
-        "* Incluye además un volumen de 📦 Volúmenes sumado a esa capa.")),
+        "* A esa capa se le suma un volumen o un relleno: debajo está lo teórico y lo que se le sumó.")),
     React.createElement(Card, { title: "Ítems por área (m²)" },
       React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 8 } }, "Cantidades que son igual al área conformada, por ejemplo un geotextil."),
       (cfg.extras || []).map((x, i) => React.createElement("div", { key: x.id, style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 6 } },
@@ -4530,7 +4543,7 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
       wsData[rt][cD] = "TOTAL"; wsData[rt][cV] = F(`SUM(${ref(cV, r0)}:${ref(cV, rt - 1)})`, r.vol);
       for (let c = 0; c < cV; c++) if (wsData[rt][c] == null) wsData[rt][c] = "";
       boldRows.add(rt);
-      falloRefs.push({ fa, ref: ref(cV, rt), val: r.vol });
+      falloRefs.push({ fa, ref: ref(cV, rt), val: r.vol, exacto: r.volExacto });
       blank();
     });
 
@@ -4573,21 +4586,29 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
         P_(k + "|m³").areas.push([sp === "0" ? `${P.L}*${P.A}` : `IF(${sp}>0,${P.L}+2*${P.EXTR},${P.L})*(${P.A}+${sp})`, esp]);
       });
     });
+    // a una capa se le suma un volumen o un relleno: queda explicado debajo (capa teórica + cada cosa)
+    const capaX = nombre => { const k = claveCapa(nombre) + "|m³"; return partes[k] && partes[k].areas.length ? partes[k] : null; };
+    const extraCapa = (p, nombre, f, val) => { p.vols.push(f); p.extras = (p.extras || []).concat([{ nombre, ref: f, val }]); };
     resumenData.forEach(rd => {
       const p = P_(claveCapa(destinoVolumen(rd.vol)) + "|m³");
-      p.vols.push(rd.totalRef);
+      if (rd.tipo !== "excavacion" && p.areas.length) extraCapa(p, rd.vol.nombre || "Volumen", rd.totalRef, rd.totalVal);
+      else p.vols.push(rd.totalRef);
       const c1 = rd.partes.find(x => x.clave === "corte1"), c2 = rd.partes.find(x => x.clave === "corte2");
       if (rd.tipo === "excavacion" && c1 && c2) {
         p.desglose = (p.desglose || []).concat([{ nombre: "Excavación teórica", ref: c1.ref, val: c1.val }, { nombre: "Sobre-excavación", ref: c2.ref, val: c2.val }]);
-        const mat = (rd.vol.materialRelleno || "").trim();
-        if (mat) P_(claveCapa(nombreRellenoSobreexc(mat)) + "|m³").f.push(`MAX(0,${c2.ref})`);
+        const mat = (rd.vol.materialRelleno || "").trim(), pc = mat && capaX(mat);
+        if (pc) extraCapa(pc, "Relleno por sobre-excavación", `MAX(0,${c2.ref})`, Math.max(0, c2.val));
+        else if (mat) P_(claveCapa(nombreRellenoSobreexc(mat)) + "|m³").f.push(`MAX(0,${c2.ref})`);
       }
     });
     falloRefs.forEach(fr => {
+      if (!fr.exacto) return;   // igual que la app: un fallo sin volumen no suma nada
       const pe = P_(claveCapa("Excavación") + "|m³");
       pe.vols.push(fr.ref);
       pe.desglose = (pe.desglose || []).concat([{ nombre: "Fallos: " + (fr.fa.nombre || "Fallo"), ref: fr.ref, val: fr.val }]);
-      P_(claveCapa(nombreRellenoFallo(fr.fa)) + "|m³").vols.push(fr.ref);
+      const pc = capaX(materialFallo(fr.fa));
+      if (pc) extraCapa(pc, "Relleno de fallos: " + (fr.fa.nombre || "Fallo"), fr.ref, fr.val);
+      else P_(claveCapa(nombreRellenoFallo(fr.fa)) + "|m³").vols.push(fr.ref);
     });
     (cfg.extras || []).forEach(x => { if (x.nombre && x.nombre.trim()) P_(claveCapa(x.nombre) + "|m²").f.push(areaRef); });
     q.items.forEach(it => {
@@ -4608,8 +4629,15 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
       pushRow(fila);
       pinta(r, 0, { bold: true });
       cantRefs[it.clave] = ref(4, r);
-      // excavación: debajo, su división en números (teórica + sobre-excavación)
-      (p.desglose || []).forEach(d => {
+      // excavación: debajo, su división en números (teórica + sobre-excavación); capa con algo sumado:
+      // lo teórico (área × espesor de esta fila) y cada cosa que se le sumó
+      const sub = (p.desglose || []).slice();
+      if (p.extras && p.extras.length && p.areas.length) {
+        const dApp = it.desglose || [];
+        sub.push({ nombre: it.nombre + " teórica (área × espesor)", ref: p.areas.every(a => a[1] === p.areas[0][1]) ? `${ref(2, r)}*${ref(3, r)}` : p.areas.map(a => `(${a[0]})*${a[1]}`).join("+"), val: dApp[0] ? dApp[0].valor : 0 });
+        p.extras.forEach(x => sub.push(x));
+      }
+      sub.forEach(d => {
         const rd = pushRow(["   · " + d.nombre, "m³", "", "", F(d.ref, d.val)]);
         pintaRango(rd, 0, 4, { txt: "5D6D7E" });
       });
@@ -4649,14 +4677,7 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
       });
     }
 
-    // ── 7. RESUMEN DE VOLÚMENES ─────────────────────────────────
-    if (resumenData.length) {
-      barra("RESUMEN DE VOLÚMENES", ANCHO_HOJA);
-      headerRows.add(pushRow(["N°", "VOLUMEN / ACTIVIDAD", "TOTAL (m³)"]));
-      const ini = row;
-      resumenData.forEach((rd, i) => filasConNumeroDeOrden.add(pushRow([i + 1, rd.nombre, F(rd.totalRef, rd.totalVal)])));
-      boldRows.add(pushRow(["", "TOTAL GENERAL", F(`SUM(${ref(2, ini)}:${ref(2, row - 1)})`, r3(resumenData.reduce((s, rd) => s + rd.totalVal, 0)))]));
-    }
+    // (sin "Resumen de volúmenes": cada volumen ya queda en Cantidades, junto a su material)
 
     return { wsData, merges, boldRows, headerRows, filasConNumeroDeOrden, titleRow, cantRefs, cant: q, estilos, anchoUniforme: true };
 }
@@ -7884,7 +7905,7 @@ function TabVolumenes({ proyecto, tabla, onChange }) {
               React.createElement(Input,{value:vol.materialRelleno||"",placeholder:"ej. Rajón, Roca muerta, Sub-base",list:"tv-materiales",
                 onChange:function(e){updVol(idx,{materialRelleno:e.target.value});}}),
               ayudaCampo(vol.fuenteTeorica && vol.fuenteInf
-                ? "Lo sobre-excavado se repone con este material: sale en Cantidades con el mismo volumen de la sobre-excavación."
+                ? "Lo sobre-excavado se repone con este material, con el mismo volumen de la sobre-excavación. Si es una capa de la estructura (ej. Roca), se suma a esa capa y queda explicado debajo."
                 : "Se usa cuando hay cota teórica y excavación en sitio (corte 2)."))
           : React.createElement("div",null,
               React.createElement(Label,null,"Nombre en Cantidades"),
