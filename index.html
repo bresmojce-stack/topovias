@@ -1657,7 +1657,7 @@ function ponerTema(t) {
   const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", TEMAS[t].barra);
 }
 if (typeof document !== "undefined") ponerTema(leerTema());
-const TV_VERSION = "67";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "68";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -3033,7 +3033,7 @@ function EditorPlanta({ proy, modo, onEje, onLat, onParq }) {
       h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 } },
         h("div", { style: { fontSize: 13, fontWeight: 700, color: "#334155" } }, resumen),
         modo === "eje" && h(Btn, { small: true, color: C.success, onClick: agregarPI }, "+ PI al final")),
-      h("svg", { viewBox: `0 0 ${W} ${H.toFixed(0)}`, style: { width: "100%", maxWidth: 760, display: "block", margin: "0 auto", touchAction: "manipulation" } }, el),
+      h("svg", { viewBox: `0 0 ${W} ${H.toFixed(0)}`, style: { width: "100%", maxWidth: 760, display: "block", margin: "0 auto", touchAction: "manipulation", background: "#fff" } }, el),
       !G.real && h("div", { style: { fontSize: 11.5, color: C.muted } }, "Dibujo recto: con las coordenadas de los PI (Eje y tramos → Distancias por coordenadas) se ve con sus quiebres."),
       panel || h("div", { style: { fontSize: 12.5, color: C.muted, marginTop: 6 } }, modo === "parq" ? (parqs.length ? "Toca un parqueadero para sus datos, o un punto, tramo o esquina para su cota." : "Agrega un parqueadero y llena sus abscisas (o fondo y desde/hasta si es de cabecera) para verlo aquí.") : modo === "eje" ? "Toca un PI para poner su cota, o un tramo para su distancia o pendiente." : "Toca un punto o un tramo del borde para editarlo (o el borde, si va con diferencia).")));
 }

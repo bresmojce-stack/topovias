@@ -48,7 +48,7 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 | TEMA (antes de `TV_VERSION`) | `TEMAS` (claro, oscuro), `leerTema`/`ponerTema` (localStorage `tv_tema`, atributo `data-tema` en `<html>`, color de la barra); `SelectorTema` en la pantalla de inicio. El oscuro es CSS al final de `<style>`: invierte la página en la raíz y devuelve a su color fotos, íconos, gráficas, encabezado y pestañas |
 | APP | `App` (pestañas en `TABS`, `upd` recalcula, `updSinRecalcular` no), `FalloApp` (pantalla de rescate). Pestañas: Vía, Cotas y lecturas, Nivelaciones, Cantidades, Dibujo, Calculadora, Bitácora (id "memoria"). Apartados por pestaña en `APARTADOS` (`BarraApartados`, estado `sub`, `enVia`/`enApartado`): Vía = Estructura, Eje y tramos, Laterales, Parqueaderos, Sardinel, Plano; Cotas = tabla de cotas, lecturas de replanteo; Cantidades = volúmenes, cantidades. Iconos a color en `ICONOS_VIA` (`IconoVia`) |
 
-## Estado (versión 67) y lo que sigue
+## Estado (versión 68) y lo que sigue
 - Hecho y publicado: tema claro/oscuro escogido en el inicio; sardinel (total en ml) en Cantidades, en el Excel y en el RESUMEN del libro; laterales y parqueaderos desplegables; en el perfil, el nombre que tiene cada nivelación; perfil con tramas y colores por material (C2); editor en planta completo (eje, laterales y parqueaderos; punto nuevo dentro de un tramo; "Pasar a rasante propia" / "Pasar a puntos"; esquinas de cabecera); pestañas con iconos y apartados; editor en planta (eje y laterales); parqueaderos de
   cabecera con 4 esquinas; laterales repartidos en quiebres; abscisado por vía (5/10/20/otro); abscisa
   acumulada por tramo; bitácora con fotos (y fotos en Drive); fallos; sardinel; rellenos que se suman a su

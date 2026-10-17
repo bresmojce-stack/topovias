@@ -1,0 +1,10 @@
+const { chromium } = require('/opt/node-tools/node_modules/playwright');
+(async () => { const W = +(process.env.W || 390); const b = await chromium.launch(); const errs = [];
+  const p = await b.newPage({ viewport: { width: W, height: 844 } }); p.on('pageerror', e => errs.push(e.message));
+  await p.goto('file://' + process.argv[2]); await p.waitForSelector('header.tv-header');
+  await p.evaluate(() => { localStorage.clear(); localStorage.setItem('tv_tema', 'oscuro'); localStorage.setItem('topovias_standalone_obras', '[]'); localStorage.setItem('topovias_standalone', '[]'); });
+  await p.reload(); await p.waitForSelector('header.tv-header');
+  await p.click('button[data-herramienta=dibujo]'); await p.click('button:has-text("Crear el primer dibujo")'); await p.waitForTimeout(400);
+  await p.screenshot({ path: '../out/dib_oscuro.png' });
+  await p.goto('file://' + process.argv[2]); await p.waitForSelector('header.tv-header');
+  console.log(errs.join('\n') || 'no errors'); await b.close(); })();
