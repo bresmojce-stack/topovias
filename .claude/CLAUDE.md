@@ -62,10 +62,11 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 - Brian revisa todo en el Excel: valores, carteras y fórmulas deben quedar enlazados.
 
 ## Auditoría con /ponytail-audit (a Brian le ha servido)
-Recordarle a Brian si quiere correr `/ponytail-audit` cuando pasen **2 semanas o 8 versiones** desde la
+Recordarle a Brian si quiere correr `/ponytail-audit` cuando pasen **1 semana o 5 versiones** desde la
 última (lo que llegue primero), en una línea al final de la respuesta, sin correrla sin su permiso. Primero
 se le muestran los hallazgos y él decide qué se arregla. Al hacerla, actualizar aquí la fecha.
 - Última auditoría: 2026-10-15 (arreglos publicados en la versión 44).
+- **Pendiente: Brian pidió hacerla al empezar el próximo chat** (versión 59; ya pasaron 15 versiones).
 
 ## Pendientes conocidos (auditoría, Brian decidió dejarlos por ahora)
 Estación sin V+ usa la AI de la anterior (Brian lo quiere así: si necesita otra estación la crea); tramo
