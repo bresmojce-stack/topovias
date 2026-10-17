@@ -47,6 +47,20 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 | BITÁCORA (antes de `FalloApp`) | `Bitacora` (anotaciones `proy.bitacora` = {id, fecha, texto, fotos[], creada}; más reciente arriba), fotos achicadas con `achicarFoto` y guardadas aparte en IndexedDB como `foto_<id>` (`guardarFoto`, `urlFoto`, `borrarFotos`), `Miniatura`, `VisorFotos`. En Drive: `nubeFotos` (al sincronizar sube las que falten a TopoVías/Fotos con appProperties.f = id y manda a la papelera las que ya nadie usa) y `nubeTraerFoto` (las baja al mostrarlas en otro equipo) |
 | APP | `App` (pestañas en `TABS`, `upd` recalcula, `updSinRecalcular` no), `FalloApp` (pantalla de rescate). Pestañas: Vía, Cotas y lecturas, Nivelaciones, Cantidades, Dibujo, Calculadora, Bitácora (id "memoria"). Apartados por pestaña en `APARTADOS` (`BarraApartados`, estado `sub`, `enVia`/`enApartado`): Vía = Estructura, Eje y tramos, Laterales, Parqueaderos, Sardinel, Plano; Cotas = tabla de cotas, lecturas de replanteo; Cantidades = volúmenes, cantidades. Iconos a color en `ICONOS_VIA` (`IconoVia`) |
 
+## Estado (versión 59) y lo que sigue
+- Hecho y publicado: pestañas con iconos y apartados; editor en planta (eje y laterales); parqueaderos de
+  cabecera con 4 esquinas; laterales repartidos en quiebres; abscisado por vía (5/10/20/otro); abscisa
+  acumulada por tramo; bitácora con fotos (y fotos en Drive); fallos; sardinel; rellenos que se suman a su
+  capa con desglose; Excel sin "Resumen de volúmenes" (el libro de obra conserva su RESUMEN consolidado).
+- Pendiente aprobado: tercera entrega del editor en planta = parqueaderos laterales con 4 esquinas en el
+  mismo dibujo.
+- Ideas mostradas en boceto, sin aprobar: modo sol (alto contraste), modo campo para replanteo, tablero de
+  la vía, un color por material. Play Store: Brian dijo "aún no".
+- Antes de cada publicación: probar con Playwright (Chromium en /opt/pw-browsers) cotas, Excel (fórmulas
+  recalculadas = valores de la app), volúmenes, Drive simulado y celular 390 px. Las pruebas viven en el
+  scratchpad de cada sesión: si no están, volver a escribirlas.
+- Brian revisa todo en el Excel: valores, carteras y fórmulas deben quedar enlazados.
+
 ## Pendientes conocidos (auditoría, Brian decidió dejarlos por ahora)
 Estación sin V+ usa la AI de la anterior (Brian lo quiere así: si necesita otra estación la crea); tramo
 intermedio incompleto inventa cotas; texto suelto en un tramo da NaN; parqueaderos que se montan o con
