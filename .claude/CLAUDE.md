@@ -57,9 +57,15 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 - Ideas mostradas en boceto, sin aprobar: modo sol (alto contraste), modo campo para replanteo, tablero de
   la vía, un color por material. Play Store: Brian dijo "aún no".
 - Antes de cada publicación: probar con Playwright (Chromium en /opt/pw-browsers) cotas, Excel (fórmulas
-  recalculadas = valores de la app), volúmenes, Drive simulado y celular 390 px. Las pruebas viven en el
-  scratchpad de cada sesión: si no están, volver a escribirlas.
+  recalculadas = valores de la app), volúmenes, Drive simulado y celular 390 px. Los scripts están en
+  `pruebas/` (ver `pruebas/LEEME.md`); copiarlos al scratchpad para correrlos.
 - Brian revisa todo en el Excel: valores, carteras y fórmulas deben quedar enlazados.
+
+## Auditoría con /ponytail-audit (a Brian le ha servido)
+Recordarle a Brian si quiere correr `/ponytail-audit` cuando pasen **2 semanas o 8 versiones** desde la
+última (lo que llegue primero), en una línea al final de la respuesta, sin correrla sin su permiso. Primero
+se le muestran los hallazgos y él decide qué se arregla. Al hacerla, actualizar aquí la fecha.
+- Última auditoría: 2026-10-15 (arreglos publicados en la versión 44).
 
 ## Pendientes conocidos (auditoría, Brian decidió dejarlos por ahora)
 Estación sin V+ usa la AI de la anterior (Brian lo quiere así: si necesita otra estación la crea); tramo
