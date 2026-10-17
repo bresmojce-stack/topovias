@@ -47,7 +47,7 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 | BITÁCORA (antes de `FalloApp`) | `Bitacora` (anotaciones `proy.bitacora` = {id, fecha, texto, fotos[], creada}; más reciente arriba), fotos achicadas con `achicarFoto` y guardadas aparte en IndexedDB como `foto_<id>` (`guardarFoto`, `urlFoto`, `borrarFotos`), `Miniatura`, `VisorFotos`. En Drive: `nubeFotos` (al sincronizar sube las que falten a TopoVías/Fotos con appProperties.f = id y manda a la papelera las que ya nadie usa) y `nubeTraerFoto` (las baja al mostrarlas en otro equipo) |
 | APP | `App` (pestañas en `TABS`, `upd` recalcula, `updSinRecalcular` no), `FalloApp` (pantalla de rescate). Pestañas: Vía, Cotas y lecturas, Nivelaciones, Cantidades, Dibujo, Calculadora, Bitácora (id "memoria"). Apartados por pestaña en `APARTADOS` (`BarraApartados`, estado `sub`, `enVia`/`enApartado`): Vía = Estructura, Eje y tramos, Laterales, Parqueaderos, Sardinel, Plano; Cotas = tabla de cotas, lecturas de replanteo; Cantidades = volúmenes, cantidades. Iconos a color en `ICONOS_VIA` (`IconoVia`) |
 
-## Estado (versión 63) y lo que sigue
+## Estado (versión 64) y lo que sigue
 - Hecho y publicado: perfil con tramas y colores por material (C2); editor en planta completo (eje, laterales y parqueaderos; punto nuevo dentro de un tramo; "Pasar a rasante propia" / "Pasar a puntos"; esquinas de cabecera); pestañas con iconos y apartados; editor en planta (eje y laterales); parqueaderos de
   cabecera con 4 esquinas; laterales repartidos en quiebres; abscisado por vía (5/10/20/otro); abscisa
   acumulada por tramo; bitácora con fotos (y fotos en Drive); fallos; sardinel; rellenos que se suman a su

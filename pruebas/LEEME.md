@@ -10,5 +10,5 @@ No se ejecutan desde aquí: se copian a una carpeta de trabajo con una carpeta h
 
 Las más usadas: e2e, export, exportx, formulas, excsitio, excsitio2, nivcotas, cabecera, cabecera2, cab4,
 sardinel, libro, libro2, bloqueo, compartir, fallos, relcapa, copiarestr, parq, subvia, acum, quiebre, ped,
-paso, bitacora, nube, nube2, nubefotos, partir (punto nuevo en planta), exp_partir (Excel con tramos partidos), parqplanta (parqueaderos en planta), exp_parq (Excel con parqueadero en puntos), perfil2 (perfil con tramas; SIN=1 sin excavación en sitio), exp_exc y avisoexc (capa llamada "Excavación"). Las fotos de prueba (foto0.jpg, foto1.jpg) se generan con PIL
+paso, bitacora, nube, nube2, nubefotos, partir (punto nuevo en planta), exp_partir (Excel con tramos partidos), parqplanta (parqueaderos en planta), exp_parq (Excel con parqueadero en puntos), perfil2 (perfil con tramas; SIN=1 sin excavación en sitio), exp_exc y avisoexc (capa llamada "Excavación"), tnotra (el perfil solo toma como terreno natural una nivelación de ese tipo). Las fotos de prueba (foto0.jpg, foto1.jpg) se generan con PIL
 (ver el comienzo de la conversación de la bitácora) o con cualquier jpg grande.

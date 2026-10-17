@@ -1628,7 +1628,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "63";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "64";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -2276,7 +2276,8 @@ function nivelacionTN(proy, tabla) {
   const elegida = nivs.find(n => String(n.id) === String(proy.graficoTN));
   if (elegida) return elegida;
   const conCotas = n => calcCotasNivelacion(n, tabla).some(c => c.cotaEje !== null);
-  return nivs.find(n => tipoNivelacion(n) === "tn" && conCotas(n)) || nivs.find(n => tipoNivelacion(n) !== "excavacion" && conCotas(n)) || null;
+  // automático: solo una nivelación de terreno natural (otra superficie medida, ej. limpieza de sub-base, no lo es)
+  return nivs.find(n => tipoNivelacion(n) === "tn" && conCotas(n)) || null;
 }
 // Excavación en sitio para el perfil: la última nivelación de ese tipo con cotas
 function nivelacionExcavacion(proy, tabla) {
@@ -3016,7 +3017,7 @@ function GraficosVia({ proyecto, tabla, onChange }) {
           React.createElement("option", { value: "" }, "Automático (primera de terreno natural)"),
           nivs.filter(n => tipoNivelacion(n) !== "excavacion").map(n => React.createElement("option", { key: n.id, value: String(n.id) }, etiquetaNivelacion(n))),
           React.createElement("option", { value: "ninguna" }, "No mostrar")),
-        !d.tn.length && React.createElement("span", { style: { color: C.muted, fontSize: 12 } }, "Sin nivelación con cotas: se muestra solo el diseño.")),
+        !d.tn.length && React.createElement("span", { style: { color: C.muted, fontSize: 12 } }, "Sin nivelación de terreno natural con cotas: se muestra solo el diseño.")),
       React.createElement("div", { className: "tv-grafica", dangerouslySetInnerHTML: { __html: perfil.svg } }),
       ley([["Rasante (eje)", linea(GC.rasante)],
         ["Terreno natural" + (d.nivNombre && claveCapa(d.nivNombre) !== claveCapa("Terreno natural") ? " (" + d.nivNombre + ")" : ""), linea(GP.tn, { borderTopWidth: 3, borderTopStyle: "dashed" })],
