@@ -1619,7 +1619,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "61";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "62";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -2282,14 +2282,11 @@ function datosGraficos(proy, tabla) {
   const PI = filas.filter(r => [...pisSet].some(a => Math.abs(a - r.abs) < 0.0005)).map(r => ({ abs: r.abs, cota: r.cotaEje, fila: r }));
   const niv = nivelacionTN(proy, tabla);
   const tn = niv ? calcCotasNivelacion(niv, tabla).filter(c => c.cotaEje !== null).map(c => ({ abs: c.abs, cota: c.cotaEje })) : [];
-  // fondos de capa en el eje: el fondo de cada capa es el tope de la siguiente; la última, la excavación
-  const nombres = (filas[0].capas || []).map(c => c.nombre);
-  const fondos = nombres.slice(0, -1).map((n, i) => ({ nombre: n, cota: r => { const c = (r.capas || [])[i + 1]; return c ? c.eje : null; } }));
   // punto bajo: PI más bajo que sus vecinos (el agua llega de ambos lados o de su único vecino)
   const bajos = PI.filter((p, i) => (i === 0 || PI[i - 1].cota > p.cota + 0.0005) && (i === PI.length - 1 || PI[i + 1].cota > p.cota + 0.0005) && PI.length > 1);
   const nivE = nivelacionExcavacion(proy, tabla);
   const exc = nivE ? calcCotasNivelacion(nivE, tabla).filter(c => c.cotaEje !== null).map(c => ({ abs: c.abs, cota: c.cotaEje })) : [];
-  return { proy, filas, PI, tn, nivNombre: niv ? niv.nombre : null, exc, excNombre: nivE ? nivE.nombre : null, fondos, bajos,
+  return { proy, filas, PI, tn, nivNombre: niv ? niv.nombre : null, exc, excNombre: nivE ? nivE.nombre : null, bajos,
     absMin: filas[0].abs, absMax: filas[filas.length - 1].abs };
 }
 const interp = (pts, x, k) => {
@@ -2314,9 +2311,29 @@ function marcasAbscisa(absMin, absMax, paso, X, minPx) {
   return m;
 }
 
+// Color y trama de cada capa según su material (convención de planos INVIAS): asfalto negro, base gris claro
+// con piedra triturada, sub-base gris medio con puntos, roca muerta / afirmado café claro; otra capa, uno de reserva.
+const TRAMAS_PERFIL = `<defs>
+<pattern id="tvpBase" width="16" height="12" patternUnits="userSpaceOnUse"><rect width="16" height="12" fill="#E3E6E8"/><path d="M3 9 L6 4 L9 9 Z" fill="none" stroke="#7E868C"/><circle cx="12.5" cy="4" r="1.1" fill="#7E868C"/></pattern>
+<pattern id="tvpSub" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#C9CDD1"/><circle cx="2" cy="2" r="0.9" fill="#5F676D"/><circle cx="6" cy="5.5" r="0.9" fill="#5F676D"/></pattern>
+<pattern id="tvpRoca" width="14" height="10" patternUnits="userSpaceOnUse"><rect width="14" height="10" fill="#D8BC94"/><circle cx="3" cy="3" r="1.4" fill="#9C7A4C"/><circle cx="10" cy="7" r="1" fill="#9C7A4C"/><path d="M7 2 h2" stroke="#9C7A4C"/></pattern>
+<pattern id="tvpExc" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="10" height="10" fill="#A1887F" fill-opacity="0.45"/><line x1="0" y1="0" x2="0" y2="10" stroke="#4E342E" stroke-width="1.6"/></pattern>
+<pattern id="tvpTN" width="22" height="18" patternUnits="userSpaceOnUse"><rect width="22" height="18" fill="#E4F1DA"/><path d="M4 12 q3 -7 8 -6 q-2 6 -8 6 z" fill="#8BBF6A"/><path d="M4 12 l6 -4" stroke="#4C8C2B" stroke-width="0.7"/><path d="M15 16 q2 -5 6 -4 q-2 4 -6 4 z" fill="#A5CF85"/><path d="M13 5 v-3 M13 5 l-2 -2 M13 5 l2 -2" stroke="#6AA84F" stroke-width="0.8"/></pattern>
+</defs>`;
+const MAT_RESERVA = [{ fill: "#CFE3F0", linea: "#3A6F8F" }, { fill: "#EAD9EA", linea: "#7A4F7A" }, { fill: "#F3E3B5", linea: "#8A6D12" }, { fill: "#D5EDE6", linea: "#2F7A64" }];
+function materialCapa(nombre, i) {
+  const k = claveCapa(nombre).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (/asfalt|rodadura|mezcla|mdc/.test(k)) return { fill: "#2B2B2B", linea: "#2B2B2B", muestra: "#2B2B2B" };
+  if (/sub.?base/.test(k)) return { fill: "url(#tvpSub)", linea: "#4F565B", muestra: "#C9CDD1" };
+  if (/base/.test(k)) return { fill: "url(#tvpBase)", linea: "#6E767C", muestra: "#E3E6E8" };
+  if (/roca|recebo|afirmado|mejoramiento|rajon|piedra/.test(k)) return { fill: "url(#tvpRoca)", linea: "#8D6E4A", muestra: "#D8BC94" };
+  const r = MAT_RESERVA[i % MAT_RESERVA.length];
+  return { fill: r.fill, linea: r.linea, muestra: r.fill };
+}
+const GP = { tn: "#4C8C2B", excTeorica: "#4E342E", excSitio: "#111111" };
 function svgPerfil(d) {
   // PB incluye la franja de abajo con la cota de la rasante cada 10 m (texto vertical)
-  const W = 1100, PL = 64, PR = 26, PB = 44 + 62;
+  const W = 1100, PL = 64, PR = 150, PB = 44 + 62;
   const xsPI = d.PI.map(p => PL + (p.abs - d.absMin) / ((d.absMax - d.absMin) || 1) * (W - PL - PR));
   const nivE = nivelesEtiquetas(xsPI, 150);
   const dosFilas = nivE.some(n => n === 1);
@@ -2328,7 +2345,7 @@ function svgPerfil(d) {
   (d.exc || []).forEach(t => ys.push(t.cota));
   const yMin = Math.min(...ys) - 0.12, yMax = Math.max(...ys) + 0.2;
   const X = x => PL + (x - d.absMin) / ((d.absMax - d.absMin) || 1) * (W - PL - PR), Y = y => PT + (yMax - y) / ((yMax - yMin) || 1) * (H - PT - PB);
-  const o = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Arial, Helvetica, sans-serif">`, flechaDef("fp"),
+  const o = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Arial, Helvetica, sans-serif">`, flechaDef("fp"), TRAMAS_PERFIL,
     `<rect x="0" y="0" width="${W}" height="${H}" fill="#FFFFFF"/>`];
   // rejilla de cotas
   for (let k = 0; k <= 4; k++) { const y = yMin + (yMax - yMin) * k / 4;
@@ -2355,32 +2372,47 @@ function svgPerfil(d) {
       o.push(`<text x="${xx.toFixed(1)}" y="${yy}" transform="rotate(-90 ${xx.toFixed(1)} ${yy})" text-anchor="middle" font-size="11" fill="${GC.rasante}"${extremo ? ' font-weight="bold"' : ""}>${c.toFixed(3)}</text>`);
     });
   }
-  // corte / relleno entre terreno natural y fondo de excavación
-  if (d.tn.length > 1) {
-    const tnEn = x => interp(d.tn, x);
-    const fondoEn = x => interp(d.filas, x, fondoExc);
-    const xs = [...new Set(d.filas.map(r => r.abs).concat(d.tn.map(t => t.abs)))].filter(x => x >= d.tn[0].abs && x <= d.tn[d.tn.length - 1].abs).sort((a, b) => a - b);
-    for (let i = 1; i < xs.length; i++) {
-      let a = xs[i - 1], b = xs[i];
-      const da = tnEn(a) - fondoEn(a), db = tnEn(b) - fondoEn(b);
-      if ([da, db].some(v => v === null || isNaN(v))) continue;
-      const tramo = (x0, x1, corte) => o.push(`<polygon points="${[[x0, tnEn(x0)], [x1, tnEn(x1)], [x1, fondoEn(x1)], [x0, fondoEn(x0)]].map(([x, y]) => X(x).toFixed(1) + "," + Y(y).toFixed(1)).join(" ")}" fill="${corte ? GC.corte : GC.relleno}" fill-opacity="0.38"/>`);
-      if (da * db < 0) { const xc = a + (b - a) * da / (da - db); tramo(a, xc, da > 0); tramo(xc, b, db > 0); } else tramo(a, b, (da + db) > 0);
-    }
+  // franjas: entre dos curvas (función de la abscisa), en las abscisas de ambas, solo donde las dos tienen cota
+  const pt = (x, y) => X(x).toFixed(1) + "," + Y(y).toFixed(1);
+  const franja = (xs, arriba, abajo, fill) => {
+    let tramo = [];
+    const cerrar = () => { if (tramo.length > 1) o.push(`<polygon points="${tramo.map(([x, a]) => pt(x, a)).concat(tramo.slice().reverse().map(([x, , b]) => pt(x, b))).join(" ")}" fill="${fill}"/>`); tramo = []; };
+    xs.forEach(x => { const a = arriba(x), b = abajo(x); if (a === null || b === null || isNaN(a) || isNaN(b)) cerrar(); else tramo.push([x, a, b]); });
+    cerrar();
+  };
+  const absFilas = d.filas.map(r => r.abs);
+  const unir = (pts, ini, fin) => [...new Set(absFilas.concat(pts.map(t => t.abs)))].filter(x => x >= ini - 1e-9 && x <= fin + 1e-9).sort((a, b) => a - b);
+  const rasEn = x => interp(d.filas, x, r => r.cotaEje);
+  const capas0 = d.filas[0].capas || [], nCap = capas0.length;
+  const capaEn = i => x => interp(d.filas, x, r => { const c = (r.capas || [])[i]; return c && c.eje !== null && c.eje !== undefined ? c.eje : null; });
+  const conSitio = d.exc && d.exc.length > 1;
+  // terreno natural: hojitas entre el terreno y la rasante (en corte y en relleno)
+  if (d.tn.length > 1) franja(unir(d.tn, Math.max(d.tn[0].abs, d.absMin), Math.min(d.tn[d.tn.length - 1].abs, d.absMax)), x => interp(d.tn, x), rasEn, "url(#tvpTN)");
+  // estructura: cada capa entre su cota y la de la siguiente (la última llega a la excavación teórica)
+  for (let i = 0; i < nCap - 1; i++) franja(absFilas, i === 0 ? rasEn : capaEn(i), capaEn(i + 1), materialCapa(capas0[i].nombre, i).fill);
+  // excavado de más: entre la excavación teórica y la de sitio
+  if (conSitio && fondoExc(d.filas[0]) !== null) franja(unir(d.exc, Math.max(d.exc[0].abs, d.absMin), Math.min(d.exc[d.exc.length - 1].abs, d.absMax)), x => interp(d.filas, x, fondoExc), x => interp(d.exc, x), "url(#tvpExc)");
+  // líneas: tope de cada capa con su color, la excavación teórica café oscuro; la de más abajo y el terreno, gruesas y punteadas
+  const nombres = [];   // [texto, color, x final, y final]
+  const linea = (pts, color, ancho, punteada) => { if (pts.length < 2) return null;
+    o.push(`<polyline points="${pts.map(([x, y]) => pt(x, y)).join(" ")}" fill="none" stroke="${color}" stroke-width="${ancho}"${punteada ? ' stroke-dasharray="9,6"' : ""}/>`); return pts[pts.length - 1]; };
+  const ptsCapa = i => d.filas.map(r => [r.abs, ((r.capas || [])[i] || {}).eje]).filter(([, y]) => y !== null && y !== undefined);
+  for (let i = 1; i < nCap; i++) {
+    const esExc = capas0[i].esExcavacion, m = esExc ? null : materialCapa(capas0[i].nombre, i);
+    const color = esExc ? GP.excTeorica : m.linea, fin = linea(ptsCapa(i), color, esExc && !conSitio ? 3.4 : esExc ? 2.2 : 2, false);
+    if (fin) nombres.push([esExc ? "Excavación teórica" : capas0[i].nombre, color, fin[0], fin[1]]);
   }
-  // fondos de capa (punteado gris)
-  d.fondos.forEach(f => {
-    const pts = d.filas.filter(r => f.cota(r) !== null);
-    if (pts.length < 2) return;
-    o.push(`<polyline points="${pts.map(r => X(r.abs).toFixed(1) + "," + Y(f.cota(r)).toFixed(1)).join(" ")}" fill="none" stroke="${GC.capa}" stroke-width="1" stroke-dasharray="4,3"/>`,
-      svgT(W - PR - 2, Y(f.cota(pts[pts.length - 1])) + 12, "fondo " + f.nombre, `text-anchor="end" font-size="10" fill="#78909C"`));
-  });
-  // excavación en sitio (café, a trazos): cómo quedó lo excavado
-  if (d.exc && d.exc.length > 1) o.push(`<polyline points="${d.exc.map(t => X(t.abs).toFixed(1) + "," + Y(t.cota).toFixed(1)).join(" ")}" fill="none" stroke="${GC.excavacion}" stroke-width="2" stroke-dasharray="7,4"/>`);
-  // terreno natural (negro) y rasante (roja)
-  if (d.tn.length > 1) o.push(`<polyline points="${d.tn.map(t => X(t.abs).toFixed(1) + "," + Y(t.cota).toFixed(1)).join(" ")}" fill="none" stroke="${GC.tn}" stroke-width="2"/>`);
+  if (conSitio) { const fin = linea(d.exc.map(t => [t.abs, t.cota]), GP.excSitio, 3.4, true); if (fin) nombres.push(["Excavación en sitio", GP.excSitio, fin[0], fin[1]]); }
+  if (d.tn.length > 1) { const fin = linea(d.tn.map(t => [t.abs, t.cota]), GP.tn, 3.4, true); if (fin) nombres.push(["Terreno natural", GP.tn, fin[0], fin[1]]); }
+  nombres.push(["Rasante" + (nCap ? " (" + capas0[0].nombre + ")" : ""), GC.rasante, d.filas[d.filas.length - 1].abs, d.filas[d.filas.length - 1].cotaEje]);
   o.push(`<polyline points="${d.filas.map(r => X(r.abs).toFixed(1) + "," + Y(r.cotaEje).toFixed(1)).join(" ")}" fill="none" stroke="${GC.rasante}" stroke-width="3"/>`);
   o.push(`<line x1="${PL}" x2="${W - PR}" y1="${H - PB}" y2="${H - PB}" stroke="${GC.texto}"/>`, svgT(6, PT - 6, "Cota (m)", `font-size="11" fill="${GC.gris}"`));
+  // nombres a la derecha, a la altura donde termina cada línea; si se juntan se corren y una rayita los une
+  const et = nombres.map(([t, c, x, y]) => ({ t, c, x: X(x), y: Y(y), yy: Y(y) })).sort((a, b) => a.y - b.y);
+  et.forEach((e, k) => { if (k) e.yy = Math.max(e.y, et[k - 1].yy + 15); });
+  const tope = H - PB - 4; for (let k = et.length - 1; k >= 0; k--) { const lim = k === et.length - 1 ? tope : et[k + 1].yy - 15; if (et[k].yy > lim) et[k].yy = lim; }
+  et.forEach(e => o.push(`<polyline points="${e.x.toFixed(1)},${e.y.toFixed(1)} ${(W - PR + 6).toFixed(1)},${e.y.toFixed(1)} ${(W - PR + 14).toFixed(1)},${e.yy.toFixed(1)}" fill="none" stroke="${e.c}" stroke-width="1.2"/>`,
+    svgT(W - PR + 18, e.yy + 4, e.t, `font-size="12" font-weight="bold" fill="${e.c}"`)));
   // agua por tramo: de la cota alta a la baja, con la pendiente
   for (let i = 1; i < d.PI.length; i++) {
     const A = d.PI[i - 1], B = d.PI[i], pend = (B.cota - A.cota) / ((B.abs - A.abs) || 1) * 100;
@@ -2406,7 +2438,7 @@ function svgPerfil(d) {
       o.push(svgT(x, y0 + 28, "TN " + t.toFixed(3) + " · " + (t >= f ? "corte " : "relleno ") + Math.abs(t - f).toFixed(2) + " m", `${anc} font-size="10" fill="${GC.borde}"`));
   });
   const ancla = x => x > W - 90 ? 'text-anchor="end"' : x < PL + 60 ? 'text-anchor="start"' : 'text-anchor="middle"';
-  // en un extremo el texto va encima de la rasante (abajo están los nombres de los fondos de capa)
+  // en un extremo el texto va encima de la rasante (abajo está la estructura)
   d.bajos.forEach(p => { const extremo = p === d.PI[0] || p === d.PI[d.PI.length - 1];
     o.push(svgT(X(p.abs), Y(p.cota) + (extremo ? -12 : 20), "▼ punto bajo", `${ancla(X(p.abs))} font-size="12" font-weight="bold" fill="${GC.agua}"`)); });
   o.push("</svg>");
@@ -2976,9 +3008,12 @@ function GraficosVia({ proyecto, tabla, onChange }) {
           React.createElement("option", { value: "ninguna" }, "No mostrar")),
         !d.tn.length && React.createElement("span", { style: { color: C.muted, fontSize: 12 } }, "Sin nivelación con cotas: se muestra solo el diseño.")),
       React.createElement("div", { className: "tv-grafica", dangerouslySetInnerHTML: { __html: perfil.svg } }),
-      ley([["Rasante (eje)", linea(GC.rasante)], ["Terreno natural" + (d.nivNombre && claveCapa(d.nivNombre) !== claveCapa("Terreno natural") ? " (" + d.nivNombre + ")" : ""), linea(GC.tn, { borderTopWidth: 2 })],
-        ...(d.exc && d.exc.length > 1 ? [["Excavación en sitio" + (d.excNombre && claveCapa(d.excNombre) !== claveCapa("Excavación en sitio") ? " (" + d.excNombre + ")" : ""), linea(GC.excavacion, { borderTopWidth: 2, borderTopStyle: "dashed" })]] : []),
-        ["Fondo de capas", linea(GC.capa, { borderTopWidth: 1, borderTopStyle: "dashed" })], ["Corte", caja(GC.corte + "66", GC.corte)], ["Relleno", caja(GC.relleno + "66", GC.relleno)],
+      ley([["Rasante (eje)", linea(GC.rasante)],
+        ["Terreno natural" + (d.nivNombre && claveCapa(d.nivNombre) !== claveCapa("Terreno natural") ? " (" + d.nivNombre + ")" : ""), linea(GP.tn, { borderTopWidth: 3, borderTopStyle: "dashed" })],
+        ["Terreno (hojitas)", caja("#CFE6BE", "#8BBF6A")],
+        ...(d.filas[0].capas || []).filter(c => !c.esExcavacion).map((c, i) => [c.nombre, caja(materialCapa(c.nombre, i).muestra, materialCapa(c.nombre, i).linea)]),
+        ["Excavación teórica", linea(GP.excTeorica, { borderTopWidth: 2 })],
+        ...(d.exc && d.exc.length > 1 ? [["Excavación en sitio" + (d.excNombre && claveCapa(d.excNombre) !== claveCapa("Excavación en sitio") ? " (" + d.excNombre + ")" : ""), linea(GP.excSitio, { borderTopWidth: 3, borderTopStyle: "dashed" })], ["Excavado de más", caja("#C9B8B1", "#4E342E")]] : []),
         ["Sentido del agua", linea(GC.agua)], ["PI", { width: 10, height: 10, borderRadius: "50%", background: GC.rasante, display: "inline-block" }]])),
     React.createElement(Card, { title: "Planta — abscisado y drenaje", accent: GC.rasante },
       React.createElement("div", { className: "tv-grafica", dangerouslySetInnerHTML: { __html: planta.svg } }),
