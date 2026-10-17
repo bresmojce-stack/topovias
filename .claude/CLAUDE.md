@@ -45,15 +45,16 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 | FALLOS (antes de "Excel no acepta") | `calcFallo`, `cotaSuperficieEn` (interpola la superficie elegida en abscisa y desplazamiento), `SeccionFallos` (Nivelaciones); suma a "Excavación" con desglose y da "Relleno de fallos — material"; sección FALLO en `construirHojaVia` |
 | HELPERS NIVELACIONES / TAB VOLÚMENES | `resolverAI`, `alinearLecturas`, `calcCotasNivelacion`, `exportarCartera`, `TabVolumenes` |
 | BITÁCORA (antes de `FalloApp`) | `Bitacora` (anotaciones `proy.bitacora` = {id, fecha, texto, fotos[], creada}; más reciente arriba), fotos achicadas con `achicarFoto` y guardadas aparte en IndexedDB como `foto_<id>` (`guardarFoto`, `urlFoto`, `borrarFotos`), `Miniatura`, `VisorFotos`. En Drive: `nubeFotos` (al sincronizar sube las que falten a TopoVías/Fotos con appProperties.f = id y manda a la papelera las que ya nadie usa) y `nubeTraerFoto` (las baja al mostrarlas en otro equipo) |
+| TEMA (antes de `TV_VERSION`) | `TEMAS` (claro, oscuro), `leerTema`/`ponerTema` (localStorage `tv_tema`, atributo `data-tema` en `<html>`, color de la barra); `SelectorTema` en la pantalla de inicio. El oscuro es CSS al final de `<style>`: invierte la página en la raíz y devuelve a su color fotos, íconos, gráficas, encabezado y pestañas |
 | APP | `App` (pestañas en `TABS`, `upd` recalcula, `updSinRecalcular` no), `FalloApp` (pantalla de rescate). Pestañas: Vía, Cotas y lecturas, Nivelaciones, Cantidades, Dibujo, Calculadora, Bitácora (id "memoria"). Apartados por pestaña en `APARTADOS` (`BarraApartados`, estado `sub`, `enVia`/`enApartado`): Vía = Estructura, Eje y tramos, Laterales, Parqueaderos, Sardinel, Plano; Cotas = tabla de cotas, lecturas de replanteo; Cantidades = volúmenes, cantidades. Iconos a color en `ICONOS_VIA` (`IconoVia`) |
 
-## Estado (versión 66) y lo que sigue
-- Hecho y publicado: sardinel (total en ml) en Cantidades, en el Excel y en el RESUMEN del libro; laterales y parqueaderos desplegables; en el perfil, el nombre que tiene cada nivelación; perfil con tramas y colores por material (C2); editor en planta completo (eje, laterales y parqueaderos; punto nuevo dentro de un tramo; "Pasar a rasante propia" / "Pasar a puntos"; esquinas de cabecera); pestañas con iconos y apartados; editor en planta (eje y laterales); parqueaderos de
+## Estado (versión 67) y lo que sigue
+- Hecho y publicado: tema claro/oscuro escogido en el inicio; sardinel (total en ml) en Cantidades, en el Excel y en el RESUMEN del libro; laterales y parqueaderos desplegables; en el perfil, el nombre que tiene cada nivelación; perfil con tramas y colores por material (C2); editor en planta completo (eje, laterales y parqueaderos; punto nuevo dentro de un tramo; "Pasar a rasante propia" / "Pasar a puntos"; esquinas de cabecera); pestañas con iconos y apartados; editor en planta (eje y laterales); parqueaderos de
   cabecera con 4 esquinas; laterales repartidos en quiebres; abscisado por vía (5/10/20/otro); abscisa
   acumulada por tramo; bitácora con fotos (y fotos en Drive); fallos; sardinel; rellenos que se suman a su
   capa con desglose; Excel sin "Resumen de volúmenes" (el libro de obra conserva su RESUMEN consolidado).
-- Temas (claro, oscuro, agua, fuego, tierra, aire inspirados en Avatar): Brian los quiere; falta el boceto con
-  inspiración de la serie y aprobarlo. Antes hay que pasar los ~530 colores fijos de la UI a la paleta `C`.
+- Temas de Avatar (agua, fuego, tierra, aire): boceto mostrado; Brian dijo "por ahora" solo claro y oscuro.
+  Para esos haría falta pasar los ~530 colores fijos de la UI a la paleta `C` (el oscuro no lo necesitó).
 - Pendiente posible (Brian dijo "si algún día"): puntos intermedios en el fondo de una cabecera.
 - Ideas mostradas en boceto, sin aprobar: modo sol (alto contraste), modo campo para replanteo, tablero de
   la vía, un color por material. Play Store: Brian dijo "aún no".

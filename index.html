@@ -121,6 +121,13 @@
     .tv-calc-dec { min-width: 36px; min-height: 32px; }
     .tv-dib-btn { min-height: 34px; }
   }
+  /* ── Tema oscuro: se invierten los colores de toda la página (en la raíz, así lo fijo sigue fijo) y se
+        devuelven a su color las fotos, íconos y gráficas; el encabezado y las pestañas ya son oscuros ── */
+  html[data-tema="oscuro"] { filter: invert(1) hue-rotate(180deg); background: #fff; }
+  html[data-tema="oscuro"] :is(img, video, canvas, svg:not(svg svg)) { filter: invert(1) hue-rotate(180deg); }
+  html[data-tema="oscuro"] :is(.tv-header, .tv-tabs) { filter: invert(1) hue-rotate(180deg); }
+  html[data-tema="oscuro"] :is(.tv-header, .tv-tabs) :is(img, video, canvas, svg:not(svg svg)) { filter: none; }
+  html[data-tema="oscuro"] .tv-tabs button.activa { background: #0A0D12; color: #38BDF8; }
 </style>
 </head>
 <body>
@@ -1640,7 +1647,17 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "66";   // igual que CACHE_VERSION en sw.js
+// Tema de la pantalla (claro u oscuro): se recuerda en este equipo y se aplica antes de dibujar
+const TEMAS = { claro: { nombre: "☀️ Claro", barra: "#0F172A" }, oscuro: { nombre: "🌙 Oscuro", barra: "#0A0D12" } };
+function leerTema() { try { const t = localStorage.getItem("tv_tema"); return TEMAS[t] ? t : "claro"; } catch (_) { return "claro"; } }
+function ponerTema(t) {
+  if (!TEMAS[t]) t = "claro";
+  try { localStorage.setItem("tv_tema", t); } catch (_) {}
+  document.documentElement.setAttribute("data-tema", t);
+  const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", TEMAS[t].barra);
+}
+if (typeof document !== "undefined") ponerTema(leerTema());
+const TV_VERSION = "67";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -3242,12 +3259,21 @@ function PanelDatos({ obras, proyectos, onRestaurar, onArchivo }) {
       "La copia de seguridad es un archivo con todas tus obras y vías. Guárdala o compártela (correo, WhatsApp, Drive) y en otro equipo usa \"Restaurar copia\" para pasarlas."));
 }
 
+function SelectorTema() {
+  const [t, setT] = React.useState(leerTema());
+  const h = React.createElement;
+  return h("div", { className: "tv-selector-tema", style: { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, marginBottom: 10 } },
+    h("span", { style: { fontSize: 12, fontWeight: 800, color: C.muted, letterSpacing: 0.6 } }, "TEMA"),
+    Object.keys(TEMAS).map(k => h("button", { key: k, "data-tema-btn": k, onClick: () => { ponerTema(k); setT(k); },
+      style: { border: `1px solid ${t === k ? C.accent : C.border}`, background: t === k ? C.accent : C.panel, color: t === k ? "#fff" : C.text, borderRadius: 16, padding: "5px 12px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" } }, TEMAS[k].nombre)));
+}
 function PantallaObras({ obras, proyectos, onAbrir, onNueva, onRestaurar, onArchivo, onHerramienta }) {
   const herramienta = (id, icono, titulo, texto) => React.createElement("button", { key: id, "data-herramienta": id, onClick: () => onHerramienta(id),
     style: { ...tarjetaS, display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "flex-start", textAlign: "left", gap: 12, borderLeft: `4px solid ${C.accent2}` } },
     React.createElement("span", { style: { width: 42, height: 42, borderRadius: 12, background: "#EEF2FF", color: C.accent2, display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" } }, React.createElement(Icono, { n: icono, size: 22 })),
     React.createElement("span", { style: { textAlign: "left" } }, React.createElement("div", { style: { fontSize: 15.5, fontWeight: 800, color: C.text } }, titulo), React.createElement("div", { style: { fontSize: 12.5, color: C.muted } }, texto)));
   return React.createElement("div", null,
+    React.createElement(SelectorTema, null),
     React.createElement("div", { style: { fontSize: 12, fontWeight: 800, color: C.muted, letterSpacing: 0.6, margin: "2px 0 8px" } }, "🧰 HERRAMIENTAS RÁPIDAS (sin crear obra ni vía)"),
     React.createElement("div", { style: { ...gridTarjetas, marginBottom: 18 } },
       herramienta("calc", "calculator", "Calculadora", "Normal (Pol, Rec, raíces…), cotas, distancias y coordenadas"),
