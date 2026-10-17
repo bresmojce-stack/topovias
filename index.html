@@ -1640,7 +1640,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "65";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "66";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -2203,6 +2203,9 @@ function calcCantidades(proy, tabla) {
   // capa con algo sumado: debajo, "Capa teórica (área × espesor)" y lo que se le sumó
   items.forEach(it => { if (it.extras && it.extras.length) it.desglose = [{ nombre: it.nombre + " teórica (área × espesor)", valor: r3(it.baseExacto) }].concat(it.extras); });
   (cfg.extras || []).forEach(x => { if (x.nombre && x.nombre.trim()) add(x.nombre, "m²", areaConf, "= área conformada"); });
+  // sardinel: el total en metros lineales (el detalle por lado está en Vía › Sardinel y en su sección del Excel)
+  const sd = calcSardinel(proy);
+  if (sd && sd.total > 0) add("Sardinel", "ml", sd.total, "total del sardinel (Vía › Sardinel)", { esSardinel: true });
   return { areas, areaConf, usaManual, capas, items };
 }
 
@@ -4896,9 +4899,11 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
       else P_(claveCapa(nombreRellenoFallo(fr.fa)) + "|m³").vols.push(fr.ref);
     });
     (cfg.extras || []).forEach(x => { if (x.nombre && x.nombre.trim()) P_(claveCapa(x.nombre) + "|m²").f.push(areaRef); });
+    let filaSardinel = -1;   // la cantidad del sardinel apunta al TOTAL de su sección (más abajo)
     q.items.forEach(it => {
       const p = partes[it.clave] || { areas: [], vols: [], f: [] };
       const r = row;
+      if (it.esSardinel) filaSardinel = r;
       const fila = [it.nombre, it.unidad, "", "", ""];
       if (p.areas.length) {
         // área = suma de las partes; si todas usan la misma celda de espesor: cantidad = área × espesor
@@ -4939,6 +4944,7 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
       const rT = pushRow(["TOTAL", F(`SUM(${ref(1, r1)}:${ref(1, row - 1)})`, sdR.total), F(`SUM(${ref(2, r1)}:${ref(2, row - 1)})`, sdR.ejec),
         F(`${ref(1, row)}-${ref(2, row)}`, sdR.falta), F(`IF(${ref(1, row)}>0,ROUND(${ref(2, row)}/${ref(1, row)}*100,1),0)`, sdR.total > 0 ? Math.round(sdR.ejec / sdR.total * 1000) / 10 : 0)]);
       boldRows.add(rT); pintaRango(rT, 0, 4, { fill: PAL.caja, bold: true });
+      if (filaSardinel >= 0) wsData[filaSardinel][4] = F(ref(1, rT), sdR.total);
       blank();
       // detalle de lo ejecutado (cada tramo cuenta solo lo que no se había contado)
       const tramos = sdR.tramos.filter(t => sdRango(t) && sdR.lados.some(l => l.key === t.lado));
