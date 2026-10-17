@@ -1469,7 +1469,8 @@ const TVDB = (function() {
   }
   return {
     get: function(k) { return tx("readonly", function(st) { return st.get(k); }); },
-    set: function(k, v) { return tx("readwrite", function(st) { return st.put(v, k); }); }
+    set: function(k, v) { return tx("readwrite", function(st) { return st.put(v, k); }); },
+    del: function(k) { return tx("readwrite", function(st) { return st.delete(k); }); }
   };
 })();
 const DATOS = { idb: false, valores: {} };
@@ -1602,7 +1603,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "56";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "57";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -8269,7 +8270,7 @@ function App() {
     { id: "cant", label: "Cantidades", icono: "cant" },
     { id: "dibujo", label: "Dibujo", icono: "dib" },
     { id: "verif", label: "Calculadora", corto: "Calcul.", icono: "calc" },
-    { id: "memoria", label: "Memoria", icono: "bit" }];
+    { id: "memoria", label: "Bitácora", icono: "bit" }];
   return /*#__PURE__*/React.createElement("div", {
     style: {
       color: C.text,
@@ -8882,71 +8883,133 @@ function App() {
     proyecto: proy,
     tabla: tabla,
     onChange: function(cambios) { updSinRecalcular(cambios); }
-  }), tab === "verif" && React.createElement(Calculadora, null), tab === "dibujo" && React.createElement(TabDibujo, { key: proy.id, proy, onChange: d => updSinRecalcular({ dibujos: d }), onArchivo: setArchivo }), tab === "memoria" && /*#__PURE__*/React.createElement(Card, {
-    title: "Memoria de Proyectos"
-  }, memoria.length === 0 && /*#__PURE__*/React.createElement("div", {
-    style: {
-      color: C.muted,
-      fontSize: 13
-    }
-  }, "Aún no se han calculado proyectos en esta sesión."), memoria.map(m => /*#__PURE__*/React.createElement("div", {
-    key: m.id,
-    style: {
-      border: `1px solid ${C.border}`,
-      borderRadius: 8,
-      padding: 12,
-      marginBottom: 10,
-      background: "#fff"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "flex-start"
-    }
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 700,
-      fontSize: 14,
-      color: C.accent
-    }
-  }, m.nombre), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: C.muted
-    }
-  }, m.fecha)), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 6,
-      flexWrap: "wrap"
-    }
-  }, /*#__PURE__*/React.createElement(Tag, {
-    color: C.accent
-  }, m.filas, " abscisas"), /*#__PURE__*/React.createElement(Tag, {
-    color: C.success
-  }, "i mín ", m.pendMin.toFixed(3), "%"), /*#__PURE__*/React.createElement(Tag, {
-    color: C.danger
-  }, "i máx ", m.pendMax.toFixed(3), "%"))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginTop: 8
-    }
-  }, /*#__PURE__*/React.createElement(Btn, {
-    small: true,
-    color: C.accent2,
-    onClick: () => {
-      const np = {
-        ...m.proyecto,
-        id: Date.now(),
-        nombre: m.nombre + " (copia)",
-        bloqueada: false
-      };
-      setProyectos(prev => [...prev, np]);
-      setActivoId(np.id);
-      setTabla(null);
-      setTab("via");
-    }
-  }, "Cargar como nuevo proyecto"))))))));
+  }), tab === "verif" && React.createElement(Calculadora, null), tab === "dibujo" && React.createElement(TabDibujo, { key: proy.id, proy, onChange: d => updSinRecalcular({ dibujos: d }), onArchivo: setArchivo }), tab === "memoria" && React.createElement(Bitacora, { key: proy.id, proy, onChange: b => updSinRecalcular({ bitacora: b }) }))));
+}
+
+// ─── BITÁCORA ─────────────────────────────────────────────────────────────────
+// Registro de la vía por fechas (lo más reciente arriba). Cada anotación: fecha (editable), texto y fotos.
+// Las fotos se achican (lado mayor 1600 px, JPEG) y se guardan APARTE en la base de datos del equipo
+// ("foto_<id>"), no dentro de la vía: así guardar, las copias y el Excel no se vuelven pesados.
+const FOTO_LADO = 1600, FOTO_CALIDAD = 0.72;
+const urlsFotos = new Map();   // id → URL para mostrar (se reutiliza mientras la app esté abierta)
+function achicarFoto(file) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, FOTO_LADO / Math.max(img.naturalWidth, img.naturalHeight));
+      const cv = document.createElement("canvas"); cv.width = Math.round(img.naturalWidth * k); cv.height = Math.round(img.naturalHeight * k);
+      cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height); URL.revokeObjectURL(url);
+      cv.toBlob(b => b ? res(b) : rej(new Error("No se pudo preparar la foto")), "image/jpeg", FOTO_CALIDAD);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error("No se pudo leer la foto")); };
+    img.src = url;
+  });
+}
+async function guardarFoto(file) {
+  if (!DATOS.idb) throw new Error("Este equipo no tiene dónde guardar fotos (base de datos del navegador no disponible).");
+  const blob = await achicarFoto(file), id = "f" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  await TVDB.set("foto_" + id, blob);
+  urlsFotos.set(id, URL.createObjectURL(blob));
+  return id;
+}
+async function urlFoto(id) {
+  if (urlsFotos.has(id)) return urlsFotos.get(id);
+  if (!DATOS.idb) return null;
+  const b = await TVDB.get("foto_" + id).catch(() => null);
+  if (!b) return null;
+  const u = URL.createObjectURL(b); urlsFotos.set(id, u); return u;
+}
+function borrarFotos(ids) { (ids || []).forEach(id => { urlsFotos.delete(id); if (DATOS.idb) TVDB.del("foto_" + id).catch(() => {}); }); }
+function Miniatura({ id, onClick, onQuitar, grande }) {
+  const [u, setU] = React.useState(urlsFotos.get(id) || null), [falta, setFalta] = React.useState(false);
+  React.useEffect(() => { let vivo = true; if (!u) urlFoto(id).then(x => { if (!vivo) return; if (x) setU(x); else setFalta(true); }); return () => { vivo = false; }; }, [id]);
+  const lado = grande ? 96 : 72;
+  return React.createElement("div", { style: { position: "relative", width: lado, height: lado, flex: "0 0 auto" } },
+    u ? React.createElement("img", { src: u, onClick, alt: "foto", style: { width: lado, height: lado, objectFit: "cover", borderRadius: 8, cursor: "pointer", border: `1px solid ${C.border}`, display: "block" } })
+      : React.createElement("div", { style: { width: lado, height: lado, borderRadius: 8, background: "#E2E8F0", color: C.muted, fontSize: 10.5, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 4, boxSizing: "border-box" } },
+          falta ? "foto guardada en otro equipo" : "…"),
+    onQuitar && React.createElement("button", { onClick: onQuitar, title: "Quitar foto", style: { position: "absolute", top: -6, right: -6, width: 24, height: 24, borderRadius: 12, border: "none", background: C.danger, color: "#fff", fontWeight: 800, cursor: "pointer", lineHeight: "24px", padding: 0 } }, "✕"));
+}
+function VisorFotos({ ids, inicio, onCerrar }) {
+  const [i, setI] = React.useState(inicio || 0), [u, setU] = React.useState(null);
+  React.useEffect(() => { setU(null); urlFoto(ids[i]).then(setU); }, [i]);
+  const h = React.createElement, flecha = (t, d) => ids.length > 1 && h("button", { onClick: e => { e.stopPropagation(); setI((i + d + ids.length) % ids.length); },
+    style: { position: "absolute", top: "50%", [d < 0 ? "left" : "right"]: 10, transform: "translateY(-50%)", width: 48, height: 48, borderRadius: 24, border: "none", background: "rgba(255,255,255,0.85)", fontSize: 24, fontWeight: 800, cursor: "pointer" } }, t);
+  return h("div", { onClick: onCerrar, role: "dialog", style: { position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.9)", display: "flex", alignItems: "center", justifyContent: "center" } },
+    u ? h("img", { src: u, alt: "foto", style: { maxWidth: "96vw", maxHeight: "88vh", objectFit: "contain" } }) : h("div", { style: { color: "#fff" } }, "Cargando…"),
+    flecha("‹", -1), flecha("›", 1),
+    h("div", { style: { position: "absolute", top: 12, right: 16, color: "#fff", fontSize: 15, fontWeight: 700 } }, (i + 1) + " / " + ids.length + "  ✕"));
+}
+const fechaLarga = iso => { const [y, m, d] = (iso || "").split("-").map(Number); if (!y) return iso || ""; const t = new Date(y, m - 1, d).toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "short", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); };
+const mesTitulo = iso => { const [y, m] = (iso || "").split("-").map(Number); return y ? new Date(y, m - 1, 1).toLocaleDateString("es-CO", { month: "long", year: "numeric" }).toUpperCase() : ""; };
+function Bitacora({ proy, onChange }) {
+  const lista = proy.bitacora || [];
+  const bloqueada = React.useContext(BloqueoCtx);
+  const [ed, setEd] = React.useState(null);        // anotación que se está escribiendo (nueva o editada)
+  const [nuevas, setNuevas] = React.useState([]);  // fotos agregadas en esta edición (se borran si se cancela)
+  const [visor, setVisor] = React.useState(null);
+  const [ocupado, setOcupado] = React.useState(false);
+  const h = React.createElement;
+  const abrir = a => { setEd(a ? { ...a, fotos: [...(a.fotos || [])] } : { id: Date.now() + Math.random(), fecha: hoyISO(), texto: "", fotos: [], creada: hoyISO() }); setNuevas([]); };
+  const cancelar = () => { borrarFotos(nuevas); setEd(null); setNuevas([]); };
+  const guardar = () => {
+    if (!ed.texto.trim() && !ed.fotos.length) { alert("Escribe algo o agrega una foto."); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ed.fecha || "")) { alert("Pon la fecha de la anotación."); return; }
+    const antes = lista.find(x => x.id === ed.id);
+    if (antes) borrarFotos((antes.fotos || []).filter(f => !ed.fotos.includes(f)));   // las que se quitaron
+    onChange(antes ? lista.map(x => x.id === ed.id ? ed : x) : lista.concat([ed]));
+    setEd(null); setNuevas([]);
+  };
+  const borrar = a => { if (!confirm("¿Borrar la anotación del " + fechaLarga(a.fecha) + (a.fotos && a.fotos.length ? " con sus " + a.fotos.length + " foto(s)" : "") + "?")) return; borrarFotos(a.fotos); onChange(lista.filter(x => x.id !== a.id)); };
+  const agregarFotos = async files => {
+    if (!files || !files.length) return;
+    setOcupado(true);
+    try { const ids = []; for (const f of Array.from(files)) ids.push(await guardarFoto(f)); setNuevas(n => n.concat(ids)); setEd(e => ({ ...e, fotos: e.fotos.concat(ids) })); }
+    catch (e) { alert(e.message || "No se pudo guardar la foto."); }
+    setOcupado(false);
+  };
+  const quitarFoto = id => setEd(e => ({ ...e, fotos: e.fotos.filter(f => f !== id) }));
+  const archivo = (texto, extra) => h("label", { style: { flex: "1 1 140px", textAlign: "center", border: `1.5px solid ${C.accent}`, color: C.accent, borderRadius: 9, padding: "9px 6px", fontWeight: 800, fontSize: 13.5, cursor: "pointer", background: "#fff" } },
+    texto, h("input", { type: "file", accept: "image/*", style: { display: "none" }, onChange: e => { agregarFotos(e.target.files); e.target.value = ""; }, ...extra }));
+  const editor = ed && h("div", { style: { border: `2px solid ${C.accent}`, borderRadius: 12, padding: 12, background: "#F0F9FF", marginTop: 12 } },
+    h(Label, null, "Fecha"),
+    h("input", { type: "date", value: ed.fecha, onChange: e => setEd({ ...ed, fecha: e.target.value }), className: "tv-in",
+      style: { border: `1px solid ${C.border}`, borderRadius: 9, padding: "8px 11px", fontSize: 15, fontWeight: 700, background: "#fff", maxWidth: 220, width: "100%", boxSizing: "border-box" } }),
+    h("div", { style: { fontSize: 11.5, color: C.accent, marginTop: 3 } }, "Sale la fecha de hoy; cámbiala si apuntas algo de otro día."),
+    h("div", { style: { marginTop: 10 } }, h(Label, null, "Qué pasó")),
+    h("textarea", { value: ed.texto, onChange: e => setEd({ ...ed, texto: e.target.value }), rows: 4, placeholder: "Ej. Se excavó de la 0+020 a la 0+060 lado derecho…", className: "tv-in",
+      style: { width: "100%", boxSizing: "border-box", border: `1px solid ${C.border}`, borderRadius: 9, padding: "9px 11px", fontSize: 14.5, fontFamily: "inherit", resize: "vertical", background: "#fff" } }),
+    h("div", { style: { display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" } },
+      archivo("📷 Tomar foto", { capture: "environment" }), archivo("🖼 Subir foto", { multiple: true })),
+    ocupado && h("div", { style: { fontSize: 12.5, color: C.muted, marginTop: 6 } }, "Guardando foto…"),
+    ed.fotos.length > 0 && h("div", { style: { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 } },
+      ed.fotos.map((f, i) => h(Miniatura, { key: f, id: f, onClick: () => setVisor({ ids: ed.fotos, i }), onQuitar: () => quitarFoto(f) }))),
+    h("div", { style: { display: "flex", gap: 8, marginTop: 12 } },
+      h(Btn, { color: C.success, onClick: guardar, disabled: ocupado, style: { flex: 1, padding: "11px 16px", fontSize: 14.5 } }, "Guardar"),
+      h(Btn, { color: "#64748B", onClick: cancelar, style: { padding: "11px 16px" } }, "Cancelar")));
+  const orden = [...lista].sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "") || (b.id - a.id));
+  const items = []; let mes = null;
+  orden.forEach(a => {
+    const m = mesTitulo(a.fecha);
+    if (m !== mes) { mes = m; items.push(h("div", { key: "m" + m, style: { fontSize: 12, fontWeight: 800, color: C.muted, margin: "16px 0 6px", letterSpacing: 0.5 } }, m)); }
+    items.push(h("div", { key: a.id, className: "tv-bit-item", style: { border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, marginBottom: 8, background: "#fff" } },
+      h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" } },
+        h("div", { style: { fontWeight: 800, fontSize: 15 } }, fechaLarga(a.fecha)),
+        !bloqueada && h("div", { style: { display: "flex", gap: 6 } },
+          h(Btn, { small: true, color: C.accent, onClick: () => abrir(a) }, "✏️ Editar"), h(Btn, { small: true, color: C.danger, onClick: () => borrar(a) }, "🗑"))),
+      a.texto && h("div", { style: { fontSize: 14, marginTop: 6, whiteSpace: "pre-wrap", lineHeight: 1.45 } }, a.texto),
+      (a.fotos || []).length > 0 && h("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 } },
+        a.fotos.map((f, i) => h(Miniatura, { key: f, id: f, grande: true, onClick: () => setVisor({ ids: a.fotos, i }) }))),
+      a.creada && a.creada !== a.fecha && h("div", { style: { fontSize: 11.5, color: C.muted, marginTop: 6 } }, "apuntado el " + fechaLarga(a.creada).toLowerCase())));
+  });
+  return h(Card, { title: "Bitácora — " + (proy.nombre || "vía") },
+    h("div", { style: { fontSize: 13, color: C.muted, marginTop: -6, marginBottom: 10 } }, "Registro de la vía por fechas, lo más reciente arriba. Las fotos se guardan en este equipo."),
+    !ed && !bloqueada && h(Btn, { onClick: () => abrir(null), style: { width: "100%", padding: "12px 16px", fontSize: 15 } }, "+ Agregar anotación"),
+    bloqueada && h("div", { style: { fontSize: 13, color: "#B45309", fontWeight: 600 } }, "Vía bloqueada: puedes ver la bitácora pero no cambiarla."),
+    editor,
+    lista.length === 0 && !ed && h("div", { style: { color: C.muted, fontSize: 13.5, textAlign: "center", padding: "24px 8px" } }, "Aún no hay anotaciones en esta vía."),
+    items,
+    visor && h(VisorFotos, { ids: visor.ids, inicio: visor.i, onCerrar: () => setVisor(null) }));
 }
 
 // Si algo falla al mostrar la app, en vez de una pantalla en blanco se ofrece guardar los datos y recuperar
