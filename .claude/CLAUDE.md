@@ -16,7 +16,7 @@ App de topografía de vías (Colombia) para Brian Escobar, topógrafo. Un solo a
 - Revisar el despliegue: `https://api.github.com/repos/bresmojce-stack/topovias/actions/runs?per_page=1`.
 
 ## Mapa en red (artefacto)
-https://claude.ai/artifact/XNYfBVg1uuBN8sugkcosTy : las 42 piezas, sus 65 conexiones (qué alimenta a qué) y
+https://claude.ai/artifact/XNYfBVg1uuBN8sugkcosTy : las 43 piezas, sus 71 conexiones (qué alimenta a qué) y
 dónde está cada una en el código. Leerlo (Artifact, action "read") antes de un cambio que cruce varias piezas.
 Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía juntos.
 
