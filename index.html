@@ -770,16 +770,25 @@ function cotaEsquinas(p, abs, x) {
 // filas de la tabla que son de la vía (sin las de cabecera) y su largo
 const filasVia = t => (t || []).filter(r => !r.fueraVia);
 const largoVia = t => { const f = filasVia(t); return f.length > 1 ? r3(Math.abs(f[f.length - 1].abs - f[0].abs)) : 0; };
+// "Excavación" es la excavación (la teórica = rasante − todas las capas, que la app agrega sola, o la medida
+// en sitio): una capa escrita con ese nombre quedaría en la misma columna y descuadraría tabla, volúmenes y
+// Excel. Para los cálculos esa capa pasa a llamarse "Excavación (capa)"; en Estructura se avisa.
+const NOMBRE_CAPA_EXC = "Excavación (capa)";
+const esNombreExcavacion = n => claveCapa(n).normalize("NFD").replace(/[\u0300-\u036f]/g, "") === "excavacion";
+const chocaExc = cs => (cs || []).some(c => c && esNombreExcavacion(c.nombre));
+const sinChoqueExc = cs => (cs || []).map(c => c && esNombreExcavacion(c.nombre) ? { ...c, nombre: NOMBRE_CAPA_EXC } : c);
 const cacheCalc = new WeakMap();
 function proyCalc(proy) {
   if (!proy || proy.__calc) return proy;
   const c = cacheCalc.get(proy);
   if (c) return c;
-  const ps = proy.parqueaderos || [];
   let out = proy;
+  if (chocaExc(proy.capas) || (proy.parqueaderos || []).some(p => chocaExc(p.capas)))
+    out = { ...proy, __calc: true, capas: sinChoqueExc(proy.capas), parqueaderos: (proy.parqueaderos || []).map(p => chocaExc(p.capas) ? { ...p, capas: sinChoqueExc(p.capas) } : p) };
+  const ps = out.parqueaderos || [];
   if (ps.some(esCabecera)) {
     const rv = rangoVia(proy);
-    out = { ...proy, __calc: true, parqueaderos: ps.flatMap(p => {
+    out = { ...out, __calc: true, parqueaderos: ps.flatMap(p => {
       if (!esCabecera(p)) return [p];
       if (esEsquinas(p)) {
         const g = geoEsquinas(p);
@@ -1619,7 +1628,7 @@ function pedirEspacioReservado() {
 
 // === PERSISTENCIA ============================================================
 // Cada via en ObraTrack guarda su estado con su propio ID
-const TV_VERSION = "62";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "63";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -2095,6 +2104,7 @@ function calcAreas(proy, tabla) {
 const destinoVolumen = v => tipoVolumen(v) === "excavacion" ? (v.nombre || "Excavación") : ((v.concepto || "").trim() || v.nombre || "Volumen");
 const nombreRellenoSobreexc = mat => "Relleno sobre-excavación (" + mat + ")";
 function calcCantidades(proy, tabla) {
+  proy = proyCalc(proy);
   const cfg = proy.cantidades || {};
   const areas = calcAreas(proy, tabla);
   const manual = parseFloat(cfg.areaManual);
@@ -3976,6 +3986,7 @@ function sobreanchoGeneral(proy) {
 }
 const esCapaExcavacion = nombre => claveCapa(nombre) === claveCapa("Excavación");
 function sobreanchoCapa(proy, nombre) {
+  proy = proyCalc(proy);
   const c = capasDefinidas(proy.capas).find(x => claveCapa(x.nombre) === claveCapa(nombre));
   if (!c) return esCapaExcavacion(nombre) ? sobreanchoGeneral(proy) : { izq: 0, der: 0 };
   if (c.sobreancho === "general") return sobreanchoGeneral(proy);
@@ -3987,6 +3998,7 @@ function sobreanchoCapa(proy, nombre) {
 const sobreanchoParq = pq => numSA(pq && pq.sobreAncho);
 const sobreanchoExtremosParq = pq => numSA(pq && pq.saExtremos);
 function sobreanchoCapaParq(proy, pq, nombre) {
+  proy = proyCalc(proy);
   if (!pq) return 0;
   if (pq.estructura === "propia") {
     const c = capasDefinidas(pq.capas).find(x => claveCapa(x.nombre) === claveCapa(nombre));
@@ -7221,7 +7233,8 @@ function EstructuraParq({ p, capasVia, onChange }) {
       capas.map((c, i) => React.createElement("div", { key: c.id, style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8, marginBottom: 8, paddingBottom: 8, borderBottom: `1px dashed ${C.border}`, alignItems: "flex-end" } },
         React.createElement("div", null, React.createElement(Label, null, "Capa ", i + 1, i === 0 && " (= Rasante)"),
           React.createElement(Input, { value: c.nombre, placeholder: "Concreto, Base, Sub-base…",
-            onChange: e => { const cs = [...capas]; cs[i] = { ...cs[i], nombre: e.target.value }; setCapas(cs); } })),
+            onChange: e => { const cs = [...capas]; cs[i] = { ...cs[i], nombre: e.target.value }; setCapas(cs); } }),
+          esNombreExcavacion(c.nombre) && React.createElement("div", { style: { fontSize: 11.5, color: C.danger, fontWeight: 700, marginTop: 4 } }, "«Excavación» es la excavación: la teórica la calcula la app sola (rasante − todas las capas) y la de sitio sale de su nivelación. Ponle a esta capa el nombre de su material (ej. Mejoramiento, Rajón). Mientras tanto se calcula como «Excavación (capa)».")),
         React.createElement("div", null, React.createElement(Label, null, "Espesor (m)"),
           React.createElement(Input, { value: c.espesor, placeholder: "ej. 0.150", inputMode: "decimal",
             onChange: e => { const cs = [...capas]; cs[i] = { ...cs[i], espesor: e.target.value }; setCapas(cs); } })),
@@ -7551,12 +7564,7 @@ function EditorParq({
     } }));
 }
 
-// ─── PERFIL DEL EJE (linea de cotas vs abscisa, con PI marcados) ─────────────
-// ─── CORTE TRANSVERSAL (capas con colores posicionales) ──────────────────────
 
-// ─── PERFIL DEL EJE (linea de cotas vs abscisa, con PI marcados) ─────────────
-
-// ─── PLANO EN PLANTA ──────────────────────────────────────────────────────────
 
 // ─── HELPERS NIVELACIONES ─────────────────────────────────────────────────────
 // Calcula la AI efectiva para una fila dada la lista de lecturas y las estaciones
@@ -8372,7 +8380,6 @@ function App() {
   const enVia = id => tab === "via" && sub.via === id;
   const enApartado = (t, id) => tab === t && sub[t] === id;
   const [capaLectura, setCapaLectura] = React.useState("__rasante__");
-  const [memoria, setMemoria] = React.useState([]);
   const [archivo, setArchivo] = React.useState(null); // Excel generado, listo para guardar o compartir
   const [generando, setGenerando] = React.useState(""); // aviso mientras se arma el Excel
   const [aviso, setAviso] = React.useState("");          // mensaje corto abajo (ej. vía bloqueada)
@@ -8584,16 +8591,6 @@ function App() {
     const t = generarTabla(proy);
     setTabla(t);
     setTab("resultado"); setSub(s => ({ ...s, resultado: "cot" }));
-    const snap = {
-      id: Date.now(),
-      nombre: proy.nombre,
-      fecha: new Date().toLocaleString("es-CO"),
-      filas: t.length,
-      pendMin: t.length ? Math.min(...t.map(r => r.pendiente)) : 0,
-      pendMax: t.length ? Math.max(...t.map(r => r.pendiente)) : 0,
-      proyecto: JSON.parse(JSON.stringify(proy))   // copia completa: no cambia si después se edita la vía
-    };
-    setMemoria(prev => [snap, ...prev].slice(0, 20));
   };
   const areasCalc = calcAreas(proy, tabla);
   const absEje = abscisasTramos(proy.tramos, parseFloat(proy.absInicio) || 0);
@@ -8890,7 +8887,7 @@ function App() {
       });
     },
     placeholder: "Asfalto, Concreto, Base, Sub-base, Roca muerta…"
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Espesor (m)"), /*#__PURE__*/React.createElement(Input, {
+  }), esNombreExcavacion(c.nombre) && React.createElement("div", { style: { fontSize: 11.5, color: C.danger, fontWeight: 700, marginTop: 4 } }, "«Excavación» es la excavación: la teórica la calcula la app sola (rasante − todas las capas) y la de sitio sale de su nivelación. Ponle a esta capa el nombre de su material (ej. Mejoramiento, Rajón). Mientras tanto se calcula como «Excavación (capa)».")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Espesor (m)"), /*#__PURE__*/React.createElement(Input, {
     value: c.espesor,
     onChange: e => {
       const cs = [...proy.capas];

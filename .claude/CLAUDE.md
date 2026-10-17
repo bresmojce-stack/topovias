@@ -24,7 +24,7 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 | Sección (comentario `// ───`) | Qué hay |
 |---|---|
 | MATEMÁTICA: RESOLVEDOR UNIVERSAL DE TRAMO | `resolverTramo` (3 de 4 campos), `calcCotaEnAbscisa`, `generarAbscisas` (cada `pasoAbscisado(proy)` m, `proy.paso`, 5 por defecto; las abscisas con lecturas de nivelación siempre entran), `formatoAbscisa`; antes de `CamposTramo`: `abscisasTramos` (abscisa acumulada por tramo), `FranjaAbscisa`, `PieAbscisas` (eje, laterales y parqueaderos con rasante propia) |
-| PARQUEADERO DE CABECERA | `proyCalc` (convierte cabecera en abscisas/ancho; usarlo al entrar a cualquier cálculo), `rangoVia`, `datosCabecera`, `cubreCab`, `largoVia`. Modo "esquinas" (el nuevo por defecto): `geoEsquinas`, `cotaEsquinas` (bilineal entre A,B,C,D en `__esq`); si cruza el eje, `proyCalc` lo parte en dos (ids `~i`/`~d`, `nombreBase`). Editor: `DiagramaEsquinas`, `CampoLado`, `cotaViaEnBorde` |
+| PARQUEADERO DE CABECERA | `proyCalc` (convierte cabecera en abscisas/ancho y renombra una capa llamada "Excavación" a `NOMBRE_CAPA_EXC` = "Excavación (capa)" para que no choque con la excavación teórica automática, `esNombreExcavacion`; usarlo al entrar a cualquier cálculo), `rangoVia`, `datosCabecera`, `cubreCab`, `largoVia`. Modo "esquinas" (el nuevo por defecto): `geoEsquinas`, `cotaEsquinas` (bilineal entre A,B,C,D en `__esq`); si cruza el eje, `proyCalc` lo parte en dos (ids `~i`/`~d`, `nombreBase`). Editor: `DiagramaEsquinas`, `CampoLado`, `cotaViaEnBorde` |
 | SARDINEL | `piezasSardinel`, `calcSardinel` (total, ejecutado por tramos, sin doble conteo) |
 | GENERADOR DE TABLA | `generarTabla`: cotas por abscisa (eje, laterales, parqueaderos, corona del sardinel, capas, excavación); filas `fueraVia` = cabecera. Lateral con rasante propia que nace con la vía: `distEnLateral`/`repartoEjeLat` reparten cada tramo del lateral en su tramo del eje (quiebres: afuera más largo, adentro más corto); `gruposLargos` junta los tramos marcados `parte` (punto nuevo, no es quiebre) |
 | ALMACENAMIENTO / COPIAS / PERSISTENCIA | `guardarDato` (IndexedDB + localStorage), `precargarDatos`, `copiaAutomatica`, claves `TV_KEY`, `TV_KEY_OBRAS` |
@@ -47,7 +47,7 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 | BITÁCORA (antes de `FalloApp`) | `Bitacora` (anotaciones `proy.bitacora` = {id, fecha, texto, fotos[], creada}; más reciente arriba), fotos achicadas con `achicarFoto` y guardadas aparte en IndexedDB como `foto_<id>` (`guardarFoto`, `urlFoto`, `borrarFotos`), `Miniatura`, `VisorFotos`. En Drive: `nubeFotos` (al sincronizar sube las que falten a TopoVías/Fotos con appProperties.f = id y manda a la papelera las que ya nadie usa) y `nubeTraerFoto` (las baja al mostrarlas en otro equipo) |
 | APP | `App` (pestañas en `TABS`, `upd` recalcula, `updSinRecalcular` no), `FalloApp` (pantalla de rescate). Pestañas: Vía, Cotas y lecturas, Nivelaciones, Cantidades, Dibujo, Calculadora, Bitácora (id "memoria"). Apartados por pestaña en `APARTADOS` (`BarraApartados`, estado `sub`, `enVia`/`enApartado`): Vía = Estructura, Eje y tramos, Laterales, Parqueaderos, Sardinel, Plano; Cotas = tabla de cotas, lecturas de replanteo; Cantidades = volúmenes, cantidades. Iconos a color en `ICONOS_VIA` (`IconoVia`) |
 
-## Estado (versión 62) y lo que sigue
+## Estado (versión 63) y lo que sigue
 - Hecho y publicado: perfil con tramas y colores por material (C2); editor en planta completo (eje, laterales y parqueaderos; punto nuevo dentro de un tramo; "Pasar a rasante propia" / "Pasar a puntos"; esquinas de cabecera); pestañas con iconos y apartados; editor en planta (eje y laterales); parqueaderos de
   cabecera con 4 esquinas; laterales repartidos en quiebres; abscisado por vía (5/10/20/otro); abscisa
   acumulada por tramo; bitácora con fotos (y fotos en Drive); fallos; sardinel; rellenos que se suman a su
@@ -55,8 +55,6 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 - Aprobado en boceto, por hacer: laterales y parqueaderos como desplegables (nombre en color, "Abrir/Cerrar
   todos"). Temas (claro, oscuro, agua, fuego, tierra, aire): Brian preguntó; mostrado en boceto, sin aprobar.
 - Pendiente posible (Brian dijo "si algún día"): puntos intermedios en el fondo de una cabecera.
-- Visto en pruebas: una capa que se llame "Excavación" choca con el bloque automático de excavación en el
-  Excel (dos bloques "COTAS EXCAVACIÓN" y fórmulas que no dan lo de la app). Viene de antes; para la auditoría.
 - Ideas mostradas en boceto, sin aprobar: modo sol (alto contraste), modo campo para replanteo, tablero de
   la vía, un color por material. Play Store: Brian dijo "aún no".
 - Antes de cada publicación: probar con Playwright (Chromium en /opt/pw-browsers) cotas, Excel (fórmulas
@@ -68,10 +66,10 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 Recordarle a Brian si quiere correr `/ponytail-audit` cuando pasen **1 semana o 5 versiones** desde la
 última (lo que llegue primero), en una línea al final de la respuesta, sin correrla sin su permiso. Primero
 se le muestran los hallazgos y él decide qué se arregla. Al hacerla, actualizar aquí la fecha.
-- Última auditoría: 2026-10-17 (versión 61). Hallazgos mostrados a Brian, esperando que decida cuáles se
-  arreglan: 1 deshacer tras borrar anotación pierde sus fotos; 2 capa llamada "Excavación" descuadra el Excel;
-  3 la copia de seguridad no lleva las fotos; 4 `memoria`/`setMemoria` en App sin uso; 5 sin un solo comando
-  para correr las pruebas; 6 encabezados de sección vacíos (PERFIL/CORTE/PLANO EN PLANTA).
+- Última auditoría: 2026-10-17 (versión 61). Arreglados en la 63: 2 (capa "Excavación": se calcula como
+  "Excavación (capa)" y Estructura avisa; "Excavación" queda para la teórica y la de sitio, que dan los
+  rellenos), 4 (`memoria` sin uso) y 6 (encabezados vacíos). Pendientes, Brian decide: 1 deshacer tras borrar
+  anotación pierde sus fotos; 3 la copia de seguridad no lleva las fotos; 5 sin un solo comando para las pruebas.
 
 ## Pendientes conocidos (auditoría, Brian decidió dejarlos por ahora)
 Estación sin V+ usa la AI de la anterior (Brian lo quiere así: si necesita otra estación la crea); tramo
