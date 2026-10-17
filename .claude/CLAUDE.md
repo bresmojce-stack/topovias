@@ -26,7 +26,7 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 | MATEMÁTICA: RESOLVEDOR UNIVERSAL DE TRAMO | `resolverTramo` (3 de 4 campos), `calcCotaEnAbscisa`, `generarAbscisas` (cada `pasoAbscisado(proy)` m, `proy.paso`, 5 por defecto; las abscisas con lecturas de nivelación siempre entran), `formatoAbscisa`; antes de `CamposTramo`: `abscisasTramos` (abscisa acumulada por tramo), `FranjaAbscisa`, `PieAbscisas` (eje, laterales y parqueaderos con rasante propia) |
 | PARQUEADERO DE CABECERA | `proyCalc` (convierte cabecera en abscisas/ancho; usarlo al entrar a cualquier cálculo), `rangoVia`, `datosCabecera`, `cubreCab`, `largoVia`. Modo "esquinas" (el nuevo por defecto): `geoEsquinas`, `cotaEsquinas` (bilineal entre A,B,C,D en `__esq`); si cruza el eje, `proyCalc` lo parte en dos (ids `~i`/`~d`, `nombreBase`). Editor: `DiagramaEsquinas`, `CampoLado`, `cotaViaEnBorde` |
 | SARDINEL | `piezasSardinel`, `calcSardinel` (total, ejecutado por tramos, sin doble conteo) |
-| GENERADOR DE TABLA | `generarTabla`: cotas por abscisa (eje, laterales, parqueaderos, corona del sardinel, capas, excavación); filas `fueraVia` = cabecera. Lateral con rasante propia que nace con la vía: `distEnLateral`/`largosTramos` reparten cada tramo del lateral en su tramo del eje (quiebres: afuera más largo, adentro más corto) |
+| GENERADOR DE TABLA | `generarTabla`: cotas por abscisa (eje, laterales, parqueaderos, corona del sardinel, capas, excavación); filas `fueraVia` = cabecera. Lateral con rasante propia que nace con la vía: `distEnLateral`/`repartoEjeLat` reparten cada tramo del lateral en su tramo del eje (quiebres: afuera más largo, adentro más corto); `gruposLargos` junta los tramos marcados `parte` (punto nuevo, no es quiebre) |
 | ALMACENAMIENTO / COPIAS / PERSISTENCIA | `guardarDato` (IndexedDB + localStorage), `precargarDatos`, `copiaAutomatica`, claves `TV_KEY`, `TV_KEY_OBRAS` |
 | OTRA VENTANA | `BroadcastChannel`: si otra ventana guarda, esta deja de guardar (`DATOS.otraVentana`) |
 | DESHACER / REHACER | `HIST` (atras/adelante/crudo/oyentes), `histAvisar` |
@@ -34,7 +34,7 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 | SINCRONIZAR CON GOOGLE DRIVE | `nubeSincronizar` (un archivo por vía + Obras.json en la carpeta TopoVías; permiso drive.file; ID de cliente en `NUBE_CLIENTE`) |
 | CANTIDADES DE LA VÍA | `calcAreas`, `calcCantidades`. Lo que se suma a una capa (volumen con su nombre, relleno de sobre-excavación o de fallo con el material de esa capa) va dentro de la capa con desglose: "X teórica (área × espesor)" + cada extra (`esCapa`/`sumarACapa`; en el Excel `capaX`/`extraCapa`). El Excel de la vía ya no tiene "Resumen de volúmenes"; el RESUMEN del libro de obra sí (consolidado por vía, enlazado a las hojas) |
 | GRÁFICOS | `svgPerfil`, `svgPlanta` (texto de usuario siempre con `escXml`); `geoVia` (geometría en planta: real con `coordsEje` o recta; `Q(abs, desplazamiento)`), `svgPlantaReal` dibuja la forma real con quiebres |
-| EDITAR EN PLANTA (antes de `GraficosVia`) | `EditorPlanta` (desplegable en Eje y tramos y en Laterales: tocar PI/tramo/borde y editar; mismos datos), `ponerCotaPI`, `abscisaEjeDeLateral` |
+| EDITAR EN PLANTA (antes de `GraficosVia`) | `EditorPlanta` (desplegable en Eje y tramos y en Laterales: tocar PI/tramo/borde y editar; mismos datos), `ponerCotaPI`, `abscisaEjeDeLateral`. Punto nuevo dentro de un tramo: `PuntoNuevo` → `partirTramo` (sin cambiar la rasante; la 2.ª parte lleva `parte: true`) y `partirCoords` (coordenadas de los PI); `lateralAPropia` pasa un lateral con diferencia a rasante propia |
 | INSTALAR / COPIA DE SEGURIDAD | `crearCopiaSeguridad`, `leerCopiaSeguridad`, `BotonNube`, `PanelNube`, `CopiasAutomaticas` |
 | TABLA RESULTADO / TABLA DE LECTURAS | `TablaResultado` (tabla de cotas, bloque corona), `CopiarEstructura`, `TabSardinel`, `TablaLecturas` (replanteo) |
 | VOLÚMENES / SOBREANCHO / TIPOS DE VOLUMEN | `calcVolumen` (en el borde de una cabecera parte la sección en dos), `parqEn`, `sobreanchoVolumen`, `construirHojaVia` (hoja Excel con fórmulas) |
@@ -47,13 +47,15 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 | BITÁCORA (antes de `FalloApp`) | `Bitacora` (anotaciones `proy.bitacora` = {id, fecha, texto, fotos[], creada}; más reciente arriba), fotos achicadas con `achicarFoto` y guardadas aparte en IndexedDB como `foto_<id>` (`guardarFoto`, `urlFoto`, `borrarFotos`), `Miniatura`, `VisorFotos`. En Drive: `nubeFotos` (al sincronizar sube las que falten a TopoVías/Fotos con appProperties.f = id y manda a la papelera las que ya nadie usa) y `nubeTraerFoto` (las baja al mostrarlas en otro equipo) |
 | APP | `App` (pestañas en `TABS`, `upd` recalcula, `updSinRecalcular` no), `FalloApp` (pantalla de rescate). Pestañas: Vía, Cotas y lecturas, Nivelaciones, Cantidades, Dibujo, Calculadora, Bitácora (id "memoria"). Apartados por pestaña en `APARTADOS` (`BarraApartados`, estado `sub`, `enVia`/`enApartado`): Vía = Estructura, Eje y tramos, Laterales, Parqueaderos, Sardinel, Plano; Cotas = tabla de cotas, lecturas de replanteo; Cantidades = volúmenes, cantidades. Iconos a color en `ICONOS_VIA` (`IconoVia`) |
 
-## Estado (versión 59) y lo que sigue
-- Hecho y publicado: pestañas con iconos y apartados; editor en planta (eje y laterales); parqueaderos de
+## Estado (versión 60) y lo que sigue
+- Hecho y publicado: punto nuevo dentro de un tramo en planta (eje y laterales) y "Pasar a rasante propia"; pestañas con iconos y apartados; editor en planta (eje y laterales); parqueaderos de
   cabecera con 4 esquinas; laterales repartidos en quiebres; abscisado por vía (5/10/20/otro); abscisa
   acumulada por tramo; bitácora con fotos (y fotos en Drive); fallos; sardinel; rellenos que se suman a su
   capa con desglose; Excel sin "Resumen de volúmenes" (el libro de obra conserva su RESUMEN consolidado).
-- Pendiente aprobado: tercera entrega del editor en planta = parqueaderos laterales con 4 esquinas en el
-  mismo dibujo.
+- Pendiente aprobado (boceto 2 del 2026-10-17): parqueaderos en el dibujo en planta. Lateral: el borde de
+  adentro es la cota del lateral; se edita el borde de afuera con puntos (modo "Rasante propia con tramos y
+  PI", punto nuevo con `partirTramo`; si está en "diferencia", botón "Pasar a puntos"). Cabecera: sus 4
+  esquinas tocables (mismos datos que `DiagramaEsquinas`), sin puntos intermedios por ahora.
 - Ideas mostradas en boceto, sin aprobar: modo sol (alto contraste), modo campo para replanteo, tablero de
   la vía, un color por material. Play Store: Brian dijo "aún no".
 - Antes de cada publicación: probar con Playwright (Chromium en /opt/pw-browsers) cotas, Excel (fórmulas
@@ -66,7 +68,7 @@ Recordarle a Brian si quiere correr `/ponytail-audit` cuando pasen **1 semana o 
 última (lo que llegue primero), en una línea al final de la respuesta, sin correrla sin su permiso. Primero
 se le muestran los hallazgos y él decide qué se arregla. Al hacerla, actualizar aquí la fecha.
 - Última auditoría: 2026-10-15 (arreglos publicados en la versión 44).
-- **Pendiente: Brian pidió hacerla al empezar el próximo chat** (versión 59; ya pasaron 15 versiones).
+- **Pendiente: Brian pidió hacerla al empezar el próximo chat** (versión 59; ya pasaron 15 versiones). Brian pidió hacerla después de la entrega de parqueaderos en planta.
 
 ## Pendientes conocidos (auditoría, Brian decidió dejarlos por ahora)
 Estación sin V+ usa la AI de la anterior (Brian lo quiere así: si necesita otra estación la crea); tramo
