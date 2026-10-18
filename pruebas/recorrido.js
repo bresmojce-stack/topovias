@@ -1,9 +1,10 @@
-// Recorre todas las pantallas con un tema (TB=claro|oscuro) y un ancho (W): capturas en ../out/rec_<TB>_<W>_<n>.png
+// Recorre todas las pantallas con un tema (TB=claro|oscuro|agua|fuego|aire|tierra) y un ancho (W); TACTIL=1 para tablet (W=820).
+// Capturas en ../out/rec_<TB>_<W>_<n>.png; revisa que nada desborde y que cambiar de tema no toque los datos.
 const { chromium } = require('/opt/node-tools/node_modules/playwright');
 (async () => {
-  const W = +(process.env.W || 390), TB = process.env.TB || 'oscuro', movil = W < 600;
+  const W = +(process.env.W || 390), TB = process.env.TB || 'oscuro', movil = W < 600, H = +(process.env.H || (movil ? 844 : 900)), tactil = movil || !!process.env.TACTIL;
   const b = await chromium.launch(); const errs = [];
-  const ctx = await b.newContext({ acceptDownloads: true, viewport: { width: W, height: movil ? 844 : 900 }, isMobile: movil, hasTouch: movil }); const p = await ctx.newPage();
+  const ctx = await b.newContext({ acceptDownloads: true, viewport: { width: W, height: H }, isMobile: tactil, hasTouch: tactil }); const p = await ctx.newPage();
   p.on('pageerror', e => errs.push('PAGEERROR ' + e.message)); p.on('console', m => { if (m.type() === 'error') errs.push('console ' + m.text().slice(0, 150)); });
   p.on('dialog', d => d.dismiss());
   await p.goto('file://' + process.argv[2]); await p.waitForSelector('header.tv-header');

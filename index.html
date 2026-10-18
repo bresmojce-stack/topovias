@@ -1466,6 +1466,7 @@ function CamposTramo({
 const esNumeroLimpio = v => /^[-+]?(\d+\.?\d*|\.\d+)$/.test(String(v).trim());
 function avisoNumero(v) {
   if (v === "" || v === null || v === undefined || esNumeroLimpio(v)) return null;
+  if (/^[-+]?\.?$/.test(String(v).trim())) return null; // "-", "+" o "." solo: todavía se está escribiendo
   const t = String(v).trim(), n = parseFloat(t), sug = t.replace(",", ".").replace(/[^\d.+-]/g, "");
   return `"${t}" no es un número` + (isNaN(n) ? ": no se usa" : `: la app lee ${n}`) + (sug && esNumeroLimpio(sug) && sug !== String(n) ? `. Escriba ${sug}` : "");
 }
@@ -1969,7 +1970,7 @@ function ponerTema(t) {
 }
 if (typeof document !== "undefined") { hojaTemas(); const t0 = leerTema(); document.documentElement.setAttribute("data-tema", t0);
   const m0 = document.querySelector('meta[name="theme-color"]'); if (m0) m0.setAttribute("content", TEMAS[t0].colores.barra); }
-const TV_VERSION = "75";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "76";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -4506,10 +4507,8 @@ function calcVolumen(vol, proyecto, tabla) {
       };
       const ancho = r3(anchoVia + ladoAncho("izquierdo", dParqIzq, S.izq, S.escritoIzq) + ladoAncho("derecho", dParqDer, S.der, S.escritoDer));
       const area = r3(pos(p * ancho));
-      const ptsVia = [dDer, dEje, dIzq].filter(v => v !== null);
-      const areaVia = r3(pos((ptsVia.length ? prom(ptsVia) : p) * (anchoVia + saLados)));
       return { abs, absFormato: pSup.absFormato, dParqDer, dDer, dEje, dIzq, dParqIzq, prom: p, ancho, area,
-        areaParqOnly: r3(pos(area - areaVia)), tieneParqDer: dParqDer !== null, tieneParqIzq: dParqIzq !== null, sub: pSup.sub || 0 };
+        tieneParqDer: dParqDer !== null, tieneParqIzq: dParqIzq !== null, sub: pSup.sub || 0 };
     };
     const cab = () => {
       // sección del parqueadero de cabecera: solo los puntos que ocupa (eje, lateral y/o lo que
@@ -4529,7 +4528,7 @@ function calcVolumen(vol, proyecto, tabla) {
       const ancho = r3(ladoAncho(cabI, S.escritoIzq, S.izq) + ladoAncho(cabD, S.escritoDer, S.der));
       const area = r3(pos(p * ancho));
       return { abs, absFormato: pSup.absFormato, dParqDer, dDer, dEje, dIzq, dParqIzq, prom: p, ancho, area,
-        areaParqOnly: area, tieneParqDer: dParqDer !== null, tieneParqIzq: dParqIzq !== null, sub: pSup.sub || 0, cab: true, cabIzq: !!cabI, cabDer: !!cabD };
+        tieneParqDer: dParqDer !== null, tieneParqIzq: dParqIzq !== null, sub: pSup.sub || 0, cab: true, cabIzq: !!cabI, cabDer: !!cabD };
     };
     if (fuera) { const c = cab(); if (c) filas.push(c); }
     else if (cabD || cabI) {
