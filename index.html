@@ -1823,7 +1823,9 @@ function hojaTemas() {
       Object.keys(cb).forEach(n => v.push(`--c-btn-${n}: ${cb[n]};`));
       v.push(`--c-relleno: ${c.primarioFondo};`);
       hexes.forEach(x => ["t", "b", "l"].forEach(tp => v.push(`--${tp}${x}: ${t.oscuro ? colorOscuroTema(tp, x, c, k) : colorClaroTema(tp, x, c, k)};`)));
-      return `html[data-tema="${k}"] { ${v.join(" ")} }`;
+      // tema claro con barra de color (Aire): los textos grises de la barra se aclaran para leerse sobre ella
+      const barraClara = t.oscuro ? "" : `\nhtml[data-tema="${k}"] .tv-header { --t94A3B8: ${mezcla(c.barra, "#FFFFFF", 0.72)}; --nube-off: ${mezcla(c.barra, "#FFFFFF", 0.72)}; }`;
+      return `html[data-tema="${k}"] { ${v.join(" ")} }` + barraClara;
     }).join("\n");
     const st = document.createElement("style"); st.id = "tv-temas"; st.textContent = css;
     document.head.appendChild(st);
@@ -1842,7 +1844,7 @@ function ponerTema(t) {
   try { window.dispatchEvent(new Event("tv-tema")); } catch (_) {}
 }
 if (typeof document !== "undefined") { hojaTemas(); document.documentElement.setAttribute("data-tema", leerTema()); }
-const TV_VERSION = "70";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "71";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -2727,7 +2729,7 @@ function svgPlantaReal(d) {
   const H = Math.max(260, (mxy - mny) * esc + 2 * M);
   const X = q => M + (q.x - mnx) * esc + ((W - 2 * M) - (mxx - mnx) * esc) / 2, Y = q => H - M - (q.y - mny) * esc;
   const pl = arr => arr.map(q => X(q).toFixed(1) + "," + Y(q).toFixed(1)).join(" ");
-  const o = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H.toFixed(0)}" width="${W}" height="${H.toFixed(0)}" font-family="Arial, Helvetica, sans-serif">`,
+  const o = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H.toFixed(0)}" width="${W}" height="${H.toFixed(0)}" font-family="Arial, Helvetica, sans-serif">`, flechaDef("fl"),
     `<rect x="0" y="0" width="${W}" height="${H.toFixed(1)}" fill="#FFFFFF"/>`];
   formas.forEach(f => o.push(`<polygon points="${pl(f.pts)}" fill="${f.fill}" stroke="${f.stroke}" stroke-width="${f.w}"${f.dash ? ` stroke-dasharray="${f.dash}"` : ""}/>`));
   formas.filter(f => f.nombre).forEach(f => { const c = f.pts.reduce((m, q) => ({ x: m.x + q.x / f.pts.length, y: m.y + q.y / f.pts.length }), { x: 0, y: 0 });
@@ -2739,6 +2741,39 @@ function svgPlantaReal(d) {
     o.push(`<line x1="${X(a).toFixed(1)}" y1="${Y(a).toFixed(1)}" x2="${X(b).toFixed(1)}" y2="${Y(b).toFixed(1)}" stroke="${GC.rasante}" stroke-width="1.5"/>`,
       svgT(X(t), Y(t) + 4, formatoAbscisa(x), `text-anchor="middle" font-size="10" fill="${GC.texto}"`));
   }
+  // agua (lo mismo que en la planta recta, siguiendo la forma real): a lo largo por tramo, bombeo del eje a los
+  // bordes y entre parqueadero lateral y vía, siempre de lo alto a lo bajo
+  const cotaEn = (abs, k) => { let m = null; d.filas.forEach(r => { if (m === null || Math.abs(r.abs - abs) < Math.abs(m.abs - abs)) m = r; }); return m ? m[k] : null; };
+  const flechaAgua = (q1, q2, w) => `<line x1="${X(q1).toFixed(1)}" y1="${Y(q1).toFixed(1)}" x2="${X(q2).toFixed(1)}" y2="${Y(q2).toFixed(1)}" stroke="${GC.agua}" stroke-width="${w}" stroke-opacity="0.8" marker-end="url(#fl)"/>`;
+  for (let i = 1; i < d.PI.length; i++) {
+    const P0 = d.PI[i - 1], P1 = d.PI[i];
+    if (Math.abs(P1.cota - P0.cota) <= 0.0005 || (P1.abs - P0.abs) * esc <= 70) continue;
+    const alta = P1.cota > P0.cota ? P1 : P0, baja = alta === P1 ? P0 : P1;
+    const xa = alta.abs + (baja.abs - alta.abs) * 0.15, xb = alta.abs + (baja.abs - alta.abs) * 0.85;
+    [-A.anchoIzq / 2, A.anchoDer / 2].forEach(off => { const c = xa < xb ? curva(xa, xb, off) : curva(xb, xa, off).reverse();
+      o.push(`<polyline points="${pl(c)}" fill="none" stroke="${GC.agua}" stroke-width="2.5" marker-end="url(#fl)"/>`); });
+  }
+  for (let x = Math.ceil(ini / 10 - 1e-9) * 10 + 5; x < fin; x += 10) {
+    const ce = cotaEn(x, "cotaEje");
+    [["cotaLatIzq", -A.anchoIzq], ["cotaLatDer", A.anchoDer]].forEach(([k, borde]) => {
+      const cl = cotaEn(x, k), sig = Math.sign(borde);
+      if (ce === null || cl === null || !borde || Math.abs(ce - cl) < 0.0005) return;
+      const qe = Q(x, sig * 6 / esc), qb = Q(x, borde - sig * 4 / esc);
+      o.push(cl < ce ? flechaAgua(qe, qb, 1.5) : flechaAgua(qb, qe, 1.5));
+    });
+  }
+  (P.parqueaderos || []).filter(p => !esCabecera(p)).forEach(p => {
+    const a = parseFloat(p.absInicio), b = parseFloat(p.absFin), w = parseFloat(p.ancho) || 0; if (isNaN(a) || isNaN(b) || !w) return;
+    const izq = p.lado === "izquierdo", sig = izq ? -1 : 1, b0 = izq ? A.anchoIzq : A.anchoDer;
+    for (let x = Math.min(a, b) + 3; x < Math.max(a, b) - 1; x += 6) {
+      const cp = cotaEn(x, izq ? "parqIzqCota" : "parqDerCota"), cl = cotaEn(x, izq ? "cotaLatIzq" : "cotaLatDer");
+      if (cp === null || cl === null || Math.abs(cp - cl) < 0.0005) continue;
+      const qp = Q(x, sig * (b0 + w * 0.65)), qb = Q(x, sig * (b0 + 3 / esc));
+      o.push(cp > cl ? flechaAgua(qp, qb, 1.5) : flechaAgua(qb, qp, 1.5));
+    }
+  });
+  (d.bajos || []).forEach(p => { const t = Q(p.abs, -(A.anchoIzq + 44 / esc));
+    o.push(svgT(X(t), Y(t), "▼ punto bajo", `text-anchor="middle" font-size="12" font-weight="bold" fill="${GC.agua}"`)); });
   // PI con su abscisa y el ángulo del quiebre
   V.forEach((q, k) => {
     let txt = "PI " + (k + 1) + " · " + formatoAbscisa(Ab[k]);
@@ -7334,7 +7369,8 @@ function EditorLateral({
   absVia,
   finEje,
   ejeTramos,
-  onChange
+  onChange,
+  extra
 }) {
   const iniLat = parseFloat(lat.absInicio || absVia) || 0, iniVia = parseFloat(absVia) || 0;
   const absLat = abscisasTramos(lat.tramos, iniLat);
@@ -7456,7 +7492,7 @@ function EditorLateral({
       ...lat,
       tramos: [...lat.tramos, tramoVacio()]
     })
-  }, "+ Tramo lateral")));
+  }, "+ Tramo lateral")), extra ? React.createElement("div", { style: { marginTop: 14 } }, extra) : null);
 }
 
 // ─── EDITOR PARQUEADERO (nace del LATERAL) ───────────────────────────────────
@@ -9073,7 +9109,8 @@ function App() {
     ejeTramos: proy.tramos,
     onChange: v => upd({
       lateralDer: v
-    })
+    }),
+    extra: proy.lateralDer.modo === "longitudinal" && React.createElement(CalcCoordenadas, { label: "LATERAL DERECHO", prefijo: "Tramo", nTramos: proy.lateralDer.tramos.length, puntos: proy.coordsDer || [], onChange: function(arr) { updSinRecalcular({ coordsDer: arr }); }, onAplicar: function(ds) { upd({ lateralDer: Object.assign({}, proy.lateralDer, { tramos: aplicarDistancias(proy.lateralDer.tramos, ds) }) }); }})
   }), /*#__PURE__*/React.createElement(EditorLateral, {
     label: "IZQUIERDO",
     lat: proy.lateralIzq,
@@ -9082,8 +9119,9 @@ function App() {
     ejeTramos: proy.tramos,
     onChange: v => upd({
       lateralIzq: v
-    })
-  }), proy.lateralDer.modo === "longitudinal" && React.createElement(CalcCoordenadas, { label: "LATERAL DERECHO", prefijo: "Tramo", nTramos: proy.lateralDer.tramos.length, puntos: proy.coordsDer || [], onChange: function(arr) { updSinRecalcular({ coordsDer: arr }); }, onAplicar: function(ds) { upd({ lateralDer: Object.assign({}, proy.lateralDer, { tramos: aplicarDistancias(proy.lateralDer.tramos, ds) }) }); }}), proy.lateralIzq.modo === "longitudinal" && React.createElement(CalcCoordenadas, { label: "LATERAL IZQUIERDO", prefijo: "Tramo", nTramos: proy.lateralIzq.tramos.length, puntos: proy.coordsIzq || [], onChange: function(arr) { updSinRecalcular({ coordsIzq: arr }); }, onAplicar: function(ds) { upd({ lateralIzq: Object.assign({}, proy.lateralIzq, { tramos: aplicarDistancias(proy.lateralIzq.tramos, ds) }) }); }})), enVia("estr") && /*#__PURE__*/React.createElement(Card, {
+    }),
+    extra: proy.lateralIzq.modo === "longitudinal" && React.createElement(CalcCoordenadas, { label: "LATERAL IZQUIERDO", prefijo: "Tramo", nTramos: proy.lateralIzq.tramos.length, puntos: proy.coordsIzq || [], onChange: function(arr) { updSinRecalcular({ coordsIzq: arr }); }, onAplicar: function(ds) { upd({ lateralIzq: Object.assign({}, proy.lateralIzq, { tramos: aplicarDistancias(proy.lateralIzq.tramos, ds) }) }); }})
+  })), enVia("estr") && /*#__PURE__*/React.createElement(Card, {
     style: { minWidth: 0 },
     title: "Capas de Estructura de Pavimento"
   }, /*#__PURE__*/React.createElement("div", {
