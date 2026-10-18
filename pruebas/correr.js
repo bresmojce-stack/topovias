@@ -30,6 +30,7 @@ const PRUEBAS = [
   ['parqueaderos en planta', 'parqplanta', '../out/parqplanta'],
   ['desplegables', 'despl', '../out/despl'],
   ['explicaciones plegadas', 'ayuda', ''],
+  ['avisos y punticos', 'avisos', ''],
   ['pantallas celular (Claro)', 'recorrido', '', { TB: 'claro', W: '390' }],
   ['pantallas PC (Oscuro)', 'recorrido', '', { TB: 'oscuro', W: '1280' }],
   ['pantallas celular (Aire)', 'recorrido', '', { TB: 'aire', W: '390' }],

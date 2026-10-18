@@ -8,7 +8,7 @@ No se ejecutan desde aquí: se copian a una carpeta de trabajo con una carpeta h
     python3 verifica_hoja.py ../out/archivo.xlsx    # fórmulas del Excel = valores de la app
     bash lo_cmp.sh ../out/archivo.xlsx              # recalcula con LibreOffice y compara cada fórmula
 
-**Todas las principales con un solo comando** (26 pruebas, unos 4 minutos; dice cuáles fallaron):
+**Todas las principales con un solo comando** (27 pruebas, unos 4 minutos; dice cuáles fallaron):
 
     node correr.js /ruta/a/index.html
     SOLO=cant,deshacer node correr.js /ruta/a/index.html   # solo algunas, por nombre de archivo

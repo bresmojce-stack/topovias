@@ -75,6 +75,9 @@
   .tv-subvia button { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--lE2E8F0); background: var(--bF8FAFC); border-radius: 16px; padding: 4px 12px 4px 7px;
     font-size: 12px; font-weight: 700; color: var(--t475569); cursor: pointer; white-space: nowrap; }
   .tv-subvia button:hover { background: var(--bF1F5F9); }
+  .tv-subvia button { position: relative; }
+  .tv-punto { position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--bFFFFFF); pointer-events: none; }
+  .tv-punto-v { background: #16A34A; } .tv-punto-a { background: #F59E0B; } .tv-punto-r { background: #DC2626; } .tv-punto-g { background: #CBD5E1; }
   .tv-subvia button.activa { background: var(--b0369A1); border-color: var(--l0369A1); color: var(--tFFFFFF); }
   /* ── Contenido a pantalla completa ── */
   .tv-main { width: 100%; flex: 1 0 auto; padding: 24px max(28px, env(safe-area-inset-right)) calc(84px + env(safe-area-inset-bottom)) max(28px, env(safe-area-inset-left)); }
@@ -1310,10 +1313,10 @@ const Ayuda = ({ id, titulo, aviso, children }) => {
     ab && h("div", { style: { padding: "0 10px 9px", fontSize: 12, color: C.muted, lineHeight: 1.6 } }, children));
 };
 // Tarjeta que se abre y se cierra tocando su encabezado (nombre en color y un resumen de una línea)
-const Desplegable = ({ titulo, color, resumen, abierto0, borde, fondo, children }) => {
+const Desplegable = ({ id, titulo, color, resumen, abierto0, borde, fondo, children }) => {
   const [ab, setAb] = React.useState(!!abierto0);
   const h = React.createElement;
-  return h("div", { className: "tv-despl", style: { background: fondo || C.panel, border: `${borde ? 2 : 1}px solid ${borde || C.border}`, borderRadius: 12, marginBottom: 12, overflow: "hidden" } },
+  return h("div", { id, className: "tv-despl", style: { background: fondo || C.panel, border: `${borde ? 2 : 1}px solid ${borde || C.border}`, borderRadius: 12, marginBottom: 12, overflow: "hidden" } },
     h("button", { onClick: () => setAb(!ab), "aria-expanded": ab, className: "tv-despl-cab", style: { width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, background: "none", border: "none", padding: "12px 14px", cursor: "pointer", textAlign: "left", fontFamily: "inherit" } },
       h("span", { style: { minWidth: 0 } },
         h("span", { style: { fontWeight: 800, fontSize: 15, color } }, (ab ? "▾ " : "▸ ") + titulo),
@@ -1413,8 +1416,10 @@ function CamposTramo({
   colorLabel
 }) {
   const r = resolverTramo(t);
+  const llenos = ["cotaInicio", "cotaFin", "distancia", "pendiente"].filter(k => t[k] !== "" && t[k] !== null && t[k] !== undefined).length;
   const campo = (key, label, placeholder) => {
     const esCalculado = r.faltante === key && r.completo;
+    const mal = avisoNumero(t[key]), falta = !r.completo && (t[key] === "" || t[key] === null || t[key] === undefined);
     const valorMostrado = t[key] !== "" ? t[key] : esCalculado ? String(r[key]) : "";
     return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, label, esCalculado && /*#__PURE__*/React.createElement("span", {
       style: {
@@ -1427,8 +1432,9 @@ function CamposTramo({
         [key]: e.target.value
       }),
       placeholder: esCalculado ? r[key]?.toFixed(3) : placeholder,
-      highlight: esCalculado
-    }));
+      highlight: esCalculado,
+      style: mal ? { border: `2px solid ${C.danger}`, background: "var(--bFEF2F2)" } : falta ? { border: `2px dashed ${C.warn}` } : undefined
+    }), mal && React.createElement("div", { style: { fontSize: 11.5, color: C.danger, fontWeight: 700, marginTop: 3 } }, "✕ " + mal));
   };
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1436,7 +1442,9 @@ function CamposTramo({
       gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
       gap: 8
     }
-  }, campo("cotaInicio", "Cota inicio (m)", "ej. 965.390"), campo("cotaFin", "Cota fin (m)", "ej. 964.840"), campo("distancia", "Distancia (m)", "ej. 27.5"), campo("pendiente", "Pendiente (%)", "ej. -1.820")), r.inconsistente && /*#__PURE__*/React.createElement("div", {
+  }, campo("cotaInicio", "Cota inicio (m)", "ej. 965.390"), campo("cotaFin", "Cota fin (m)", "ej. 964.840"), campo("distancia", "Distancia (m)", "ej. 27.5"), campo("pendiente", "Pendiente (%)", "ej. -1.820")),
+  !r.completo && React.createElement("div", { style: { marginTop: 6, fontSize: 12, fontWeight: 700, color: C.warn } },
+    "● " + (llenos ? `Falta${3 - llenos === 1 ? "" : "n"} ${3 - llenos} dato${3 - llenos === 1 ? "" : "s"}: llene 3 de los 4 campos.` : "Llene 3 de los 4 campos.")), r.inconsistente && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 6,
       fontSize: 12,
@@ -1451,6 +1459,110 @@ function CamposTramo({
       color: C.danger || "var(--tDD3333)"
     }
   }, `⚠ ${r.error}`));
+}
+
+// ─── REVISIÓN DE DATOS (avisos y puntico de cada apartado; solo lee, no cambia ningún cálculo) ───
+// Un número tiene que ir "limpio" (12.5, -0.06, .5): parseFloat("12,5m") da 12 sin avisar.
+const esNumeroLimpio = v => /^[-+]?(\d+\.?\d*|\.\d+)$/.test(String(v).trim());
+function avisoNumero(v) {
+  if (v === "" || v === null || v === undefined || esNumeroLimpio(v)) return null;
+  const t = String(v).trim(), n = parseFloat(t), sug = t.replace(",", ".").replace(/[^\d.+-]/g, "");
+  return `"${t}" no es un número` + (isNaN(n) ? ": no se usa" : `: la app lee ${n}`) + (sug && esNumeroLimpio(sug) && sug !== String(n) ? `. Escriba ${sug}` : "");
+}
+const NOMBRE_CAMPO = { cotaInicio: "la cota inicio", cotaFin: "la cota fin", distancia: "la distancia", pendiente: "la pendiente" };
+// avisos de una lista de tramos (eje, lateral con rasante propia o borde de un parqueadero)
+function revisarTramos(tramos, donde, ir, items) {
+  (tramos || []).forEach((t, i) => {
+    const q = (donde ? donde + "tramo " : "Tramo PI ") + (i + 1);   // en el eje cada tramo se nombra por su PI de inicio, como en sus tarjetas
+    Object.keys(NOMBRE_CAMPO).forEach(k => { const m = avisoNumero(t[k]); if (m) items.push({ n: "r", t: `${q}: ${NOMBRE_CAMPO[k]} dice ${m}.`, ir: ir(i) }); });
+    const r = resolverTramo(t); if (r.completo) return;
+    const llenos = Object.keys(NOMBRE_CAMPO).filter(k => t[k] !== "" && t[k] !== null && t[k] !== undefined).length;
+    items.push(llenos ? { n: "r", t: `${q}: tiene ${llenos} de los 4 campos; necesita 3. Hoy la tabla se corta ahí.`, ir: ir(i) }
+      : { n: "a", t: `${q}: está vacío (llene 3 de los 4 campos).`, ir: ir(i) });
+  });
+}
+function revisarVia(proy) {
+  const out = {}, nivel = items => items.some(x => x.n === "r") ? "r" : items.some(x => x.n === "a") ? "a" : "v";
+  const pon = (id, items, gris) => { out[id] = { nivel: gris && !items.length ? "g" : nivel(items), items }; };
+  // Estructura
+  let it = [];
+  const capas = proy.capas || [];
+  if (!capas.some(c => c.nombre && esNumeroLimpio(c.espesor))) it.push({ n: "a", t: "Falta al menos una capa con su espesor." });
+  capas.forEach((c, i) => {
+    const q = "Capa " + (i + 1) + (c.nombre ? " (" + c.nombre + ")" : ""), m = avisoNumero(c.espesor), ir = "tv-capa-" + i;
+    if (m) it.push({ n: "r", t: `${q}: el espesor dice ${m}.`, ir });
+    else if (c.nombre && (c.espesor === "" || c.espesor === undefined)) it.push({ n: "r", t: `${q}: falta el espesor.`, ir });
+    if (!c.nombre && c.espesor !== "" && c.espesor !== undefined) it.push({ n: "a", t: `${q}: falta el nombre del material.`, ir });
+  });
+  const sg = proy.sobreancho || {};
+  [["izq", "izquierdo"], ["der", "derecho"]].forEach(([k, n]) => { const m = avisoNumero(sg[k]); if (m) it.push({ n: "r", t: `Sobreancho ${n}: dice ${m}.` }); });
+  pon("estr", it);
+  // Eje y tramos
+  it = [];
+  const mi = avisoNumero(proy.absInicio); if (mi) it.push({ n: "r", t: `Abscisa de inicio: dice ${mi}.` });
+  if (!(proy.tramos || []).length) it.push({ n: "a", t: "Falta el primer tramo." });
+  revisarTramos(proy.tramos, "", i => "tv-tramo-eje-" + i, it);
+  pon("eje", it);
+  const via = rangoVia(proy), ejeListo = (proy.tramos || []).length && resolverTodos(proy.tramos).every(r => r.completo);
+  // Laterales
+  it = [];
+  [["lateralDer", "derecho", "tv-lat-der"], ["lateralIzq", "izquierdo", "tv-lat-izq"]].forEach(([k, n, ir]) => {
+    const l = proy[k]; if (!l) return;
+    const q = "Lateral " + n, ma = avisoNumero(l.ancho);
+    if (ma) it.push({ n: "r", t: `${q}: el ancho dice ${ma}.`, ir });
+    else if (l.ancho === "" || l.ancho === undefined) it.push({ n: "a", t: `${q}: falta el ancho.`, ir });
+    if (l.modo === "longitudinal") {
+      revisarTramos(l.tramos, q + ", ", () => ir, it);
+      const mai = avisoNumero(l.absInicio); if (mai) it.push({ n: "r", t: `${q}: la abscisa de inicio dice ${mai}.`, ir });
+      const rs = resolverTodos(l.tramos || []);
+      if (ejeListo && rs.length && rs.every(r => r.completo)) {
+        const ini = parseFloat(l.absInicio) || via.ini, fin = r3(rs.reduce((a, r) => a + (r.distancia || 0), ini));
+        if (Math.abs(fin - via.fin) > 0.0005) it.push({ n: "a", t: `${q}: termina en ${formatoAbscisa(fin)} y el eje en ${formatoAbscisa(via.fin)}.`, ir });
+      }
+    } else {
+      const m = avisoNumero(l.modoT === "pendiente" ? l.pendienteT : l.diferencia);
+      if (m) it.push({ n: "r", t: `${q}: ${l.modoT === "pendiente" ? "la pendiente" : "la diferencia"} dice ${m}.`, ir });
+    }
+  });
+  pon("lat", it);
+  // Parqueaderos
+  it = [];
+  const laterales = [];
+  (proy.parqueaderos || []).forEach((pq, i) => {
+    const q = pq.nombre || "Parqueadero " + (i + 1), ir = "tv-parq-" + pq.id;
+    if (esCabecera(pq)) { if (!datosCabecera(pq).ok) it.push({ n: "a", t: `${q}: faltan datos de la cabecera (fondo y hasta dónde llega).`, ir }); return; }
+    let malo = false;
+    [["absInicio", "la abscisa de inicio"], ["absFin", "la abscisa de fin"], ["ancho", "el ancho"]].forEach(([k, n]) => {
+      const m = avisoNumero(pq[k]);
+      if (m) { it.push({ n: "r", t: `${q}: ${n} dice ${m}.`, ir }); malo = true; }
+      else if (pq[k] === "" || pq[k] === undefined) { it.push({ n: "r", t: `${q}: falta ${n}.`, ir }); malo = true; }
+    });
+    if (pq.modo === "independiente") revisarTramos(pq.tramos, q + ", borde de afuera, ", () => ir, it);
+    if (malo) return;
+    const a = parseFloat(pq.absInicio), b = parseFloat(pq.absFin);
+    if (a > b + 0.0005) { it.push({ n: "r", t: `${q}: el inicio (${formatoAbscisa(a)}) es mayor que el fin (${formatoAbscisa(b)}).`, ir }); return; }
+    if (ejeListo && (a < via.ini - 0.0005 || b > via.fin + 0.0005)) it.push({ n: "a", t: `${q}: va de ${formatoAbscisa(a)} a ${formatoAbscisa(b)} y la vía de ${formatoAbscisa(via.ini)} a ${formatoAbscisa(via.fin)}.`, ir });
+    laterales.forEach(o => { if (o.lado === (pq.lado || "derecho") && a < o.b - 0.0005 && o.a < b - 0.0005)
+      it.push({ n: "a", t: `${o.q} y ${q} se montan entre ${formatoAbscisa(Math.max(a, o.a))} y ${formatoAbscisa(Math.min(b, o.b))} (lado ${o.lado}).`, ir }); });
+    laterales.push({ q, a, b, lado: pq.lado || "derecho" });
+  });
+  pon("parq", it, true);
+  out.sard = { nivel: proy.sardinel && proy.sardinel.activo ? "v" : "g", items: [] };
+  return out;
+}
+// Lista de avisos arriba de un apartado; "Ir" lleva al dato
+function AvisosVia({ r }) {
+  if (!r || !r.items.length) return null;
+  const h = React.createElement, ir = id => { const el = id && document.getElementById(id); if (el) el.scrollIntoView({ block: "center", behavior: "smooth" }); };
+  const caja = (n, titulo, items) => items.length > 0 && h("div", { className: "tv-avisos tv-avisos-" + n, style: { background: n === "r" ? "var(--bFEF2F2)" : "var(--bFFFBEB)", border: `1px solid ${n === "r" ? C.danger : C.warn}`,
+      color: n === "r" ? C.danger : C.warn, borderRadius: 10, padding: "9px 12px", marginBottom: 12, fontSize: 13 } },
+    h("div", { style: { fontWeight: 800, marginBottom: 3 } }, titulo),
+    h("ul", { style: { margin: 0, paddingLeft: 18, lineHeight: 1.5 } }, items.map((x, k) => h("li", { key: k }, x.t,
+      x.ir && h("button", { onClick: () => ir(x.ir), style: { background: "none", border: "none", color: "var(--t0369A1)", fontWeight: 800, textDecoration: "underline", cursor: "pointer", padding: "0 4px", fontSize: 13, fontFamily: "inherit" } }, "Ir")))));
+  const rojos = r.items.filter(x => x.n === "r"), ambar = r.items.filter(x => x.n === "a");
+  return h(React.Fragment, null,
+    caja("r", "⚠ " + rojos.length + (rojos.length === 1 ? " dato para revisar" : " datos para revisar"), rojos),
+    caja("a", "● Para revisar (no impide calcular)", ambar));
 }
 
 // ─── ESTADO INICIAL ───────────────────────────────────────────────────────────
@@ -1857,7 +1969,7 @@ function ponerTema(t) {
 }
 if (typeof document !== "undefined") { hojaTemas(); const t0 = leerTema(); document.documentElement.setAttribute("data-tema", t0);
   const m0 = document.querySelector('meta[name="theme-color"]'); if (m0) m0.setAttribute("content", TEMAS[t0].colores.barra); }
-const TV_VERSION = "73";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "74";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -3943,12 +4055,15 @@ const APARTADOS = {
   cant: [["vol", "Volúmenes"], ["lista", "Cantidades"]]
 };
 const APARTADO_INICIAL = { via: "estr", resultado: "cot", cant: "vol" };
-function BarraApartados({ lista, actual, onCambiar }) {
+const NOMBRE_ESTADO = { v: "completo", a: "falta algo", r: "hay datos para revisar", g: "no se usa" };
+function BarraApartados({ lista, actual, onCambiar, estados }) {
   return React.createElement("div", { className: "tv-subvia" },
-    lista.map(([id, t, corto]) => React.createElement("button", { key: id, "data-sub": id, className: actual === id ? "activa" : undefined,
+    lista.map(([id, t, corto]) => { const e = estados && estados[id]; return React.createElement("button", { key: id, "data-sub": id, className: actual === id ? "activa" : undefined,
+      title: e ? t + ": " + NOMBRE_ESTADO[e.nivel] + (e.items.length ? " · " + e.items[0].t : "") : undefined,
       onClick: () => { onCambiar(id); try { window.scrollTo({ top: 0 }); } catch (_) {} } },
+      e && React.createElement("i", { className: "tv-punto tv-punto-" + e.nivel, "data-estado": e.nivel, "aria-label": NOMBRE_ESTADO[e.nivel] }),
       React.createElement(IconoVia, { n: id, size: 16 }),
-      corto ? [React.createElement("span", { key: "l", className: "tv-largo" }, t), React.createElement("span", { key: "c", className: "tv-corto" }, corto)] : t)));
+      corto ? [React.createElement("span", { key: "l", className: "tv-largo" }, t), React.createElement("span", { key: "c", className: "tv-corto" }, corto)] : t); }));
 }
 
 function TablaLecturas({
@@ -7409,7 +7524,7 @@ function EditorLateral({
     ? "rasante propia · " + (lat.tramos || []).length + ((lat.tramos || []).length === 1 ? " tramo" : " tramos")
     : lat.modoT === "pendiente" ? "pendiente " + (lat.pendienteT || "?") + " %" : "diferencia " + (lat.diferencia || "0") + " m");
   return React.createElement(Desplegable, {
-    titulo: "Lateral " + label.toLowerCase(), color: "var(--t0369A1)", resumen: resumenLat, abierto0: !lat.ancho
+    id: "tv-lat-" + (label === "DERECHO" ? "der" : "izq"), titulo: "Lateral " + label.toLowerCase(), color: "var(--t0369A1)", resumen: resumenLat, abierto0: !lat.ancho
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
@@ -7664,7 +7779,7 @@ function EditorParq({
     ? "CABECERA " + (p.ubicacion === "inicio" ? "INICIO" : "FIN") + (kc.ok ? " · fondo " + kc.fondo.toFixed(2) + " m · ancho " + kc.ancho.toFixed(2) + " m" : " · falta ubicarlo") + " · " + modoTxt
     : (p.lado === "izquierdo" ? "IZQ" : "DER") + (!isNaN(pi) && !isNaN(pf) ? " · " + formatoAbscisa(pi) + " → " + formatoAbscisa(pf) : " · faltan las abscisas") + (anchoP ? " · " + anchoP.toFixed(2) + " m" : "") + " · " + modoTxt;
   return React.createElement(Desplegable, {
-    titulo: p.nombre || "Parqueadero", color: C.parq, borde: C.parq, fondo: "var(--bFAF5FF)", resumen: resumenParq,
+    id: "tv-parq-" + p.id, titulo: p.nombre || "Parqueadero", color: C.parq, borde: C.parq, fondo: "var(--bFAF5FF)", resumen: resumenParq,
     abierto0: cab ? !(kc && kc.ok) : isNaN(pi) || isNaN(pf)
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -8871,6 +8986,7 @@ function App() {
   }
 
   const tramosIncompletos = resolverTodos(proy.tramos).map((r, i) => r.completo ? null : i + 1).filter(Boolean);
+  const revision = revisarVia(proy);   // avisos y punticos de los apartados de Vía (solo lee)
   const bloqueada = !!proy.bloqueada;
   const upd = cambios => {
     if (bloqueada) { avisar(AVISO_BLOQUEADA); return; }
@@ -8968,14 +9084,14 @@ function App() {
     onClick: e => { setTab(t.id); try { e.currentTarget.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }); } catch (_) {} },
     className: tab === t.id ? "activa" : undefined
   }, React.createElement(IconoVia, { n: t.icono, size: 26 }), t.corto ? [React.createElement("span", { key: "l", className: "tv-largo" }, t.label), React.createElement("span", { key: "c", className: "tv-corto" }, t.corto)] : t.label))),
-    APARTADOS[tab] && React.createElement(BarraApartados, { lista: APARTADOS[tab], actual: sub[tab], onCambiar: id => setSub(s => ({ ...s, [tab]: id })) })),
+    APARTADOS[tab] && React.createElement(BarraApartados, { lista: APARTADOS[tab], actual: sub[tab], estados: tab === "via" ? revision : null, onCambiar: id => setSub(s => ({ ...s, [tab]: id })) })),
   bloqueada && React.createElement("div", { className: "tv-banner-bloqueo" },
     React.createElement(Icono, { n: "lock", size: 16 }),
     React.createElement("span", { style: { flex: 1, minWidth: 200 } }, "Vía bloqueada: puedes ver, calcular y exportar, pero no cambiar datos."),
     React.createElement(Btn, { small: true, color: "var(--tB45309)", onClick: alternarBloqueo }, React.createElement(Icono, { n: "lock-open", size: 14 }), "Desbloquear")),
   React.createElement(BloqueoCtx.Provider, { value: bloqueada }, /*#__PURE__*/React.createElement("main", {
     className: "tv-main" + (bloqueada ? " tv-bloqueada" : ""),
-  }, enVia("eje") && React.createElement(EditorPlanta, { proy, modo: "eje", onEje: (tr, extra) => upd({ tramos: tr, ...extra }) }),
+  }, enVia("eje") && React.createElement(AvisosVia, { r: revision.eje }), enVia("eje") && React.createElement(EditorPlanta, { proy, modo: "eje", onEje: (tr, extra) => upd({ tramos: tr, ...extra }) }),
   enVia("lat") && React.createElement(EditorPlanta, { proy, modo: "lat", onLat: (lado, l, extra) => upd({ [lado === "izq" ? "lateralIzq" : "lateralDer"]: l, ...extra }) }),
   enVia("eje") && /*#__PURE__*/React.createElement("div", { style: { minWidth: 0 } }, /*#__PURE__*/React.createElement(Card, {
     title: "Proyecto"
@@ -9009,7 +9125,7 @@ function App() {
     const prevR = i > 0 ? tramosR[i - 1] : null;
     const salto = prevR?.completo && rt?.completo && Math.abs(prevR.cotaFin - rt.cotaInicio) > 0.0005 ? r3(rt.cotaInicio - prevR.cotaFin) : null;
     return /*#__PURE__*/React.createElement("div", {
-      key: t.id,
+      key: t.id, id: "tv-tramo-eje-" + i,
       style: {
         border: `1px solid ${C.border}`,
         borderRadius: 8,
@@ -9105,7 +9221,7 @@ function App() {
         valor: ""
       }]
     })
-  }, "+ Abscisa intermedia"))), enVia("lat") && /*#__PURE__*/React.createElement("div", { style: { minWidth: 0 } }, React.createElement(Ayuda, { id: "signos", titulo: "Signos de los laterales (− baja, + sube)", aviso: true }, "En ambos laterales, un valor ", /*#__PURE__*/React.createElement("strong", null, "negativo"), " indica que baja respecto al eje y uno ", /*#__PURE__*/React.createElement("strong", null, "positivo"), " que sube. Escribe directamente el valor, ej. ", /*#__PURE__*/React.createElement("code", null, "-0.060"), "."), /*#__PURE__*/React.createElement(EditorLateral, {
+  }, "+ Abscisa intermedia"))), enVia("lat") && /*#__PURE__*/React.createElement("div", { style: { minWidth: 0 } }, React.createElement(AvisosVia, { r: revision.lat }), React.createElement(Ayuda, { id: "signos", titulo: "Signos de los laterales (− baja, + sube)", aviso: true }, "En ambos laterales, un valor ", /*#__PURE__*/React.createElement("strong", null, "negativo"), " indica que baja respecto al eje y uno ", /*#__PURE__*/React.createElement("strong", null, "positivo"), " que sube. Escribe directamente el valor, ej. ", /*#__PURE__*/React.createElement("code", null, "-0.060"), "."), /*#__PURE__*/React.createElement(EditorLateral, {
     label: "DERECHO",
     lat: proy.lateralDer,
     absVia: proy.absInicio,
@@ -9128,7 +9244,7 @@ function App() {
   })), enVia("estr") && /*#__PURE__*/React.createElement(Card, {
     style: { minWidth: 0 },
     title: "Capas de Estructura de Pavimento"
-  }, React.createElement(Ayuda, { id: "estructura", titulo: "Cómo funciona la estructura" },
+  }, React.createElement(AvisosVia, { r: revision.estr }), React.createElement(Ayuda, { id: "estructura", titulo: "Cómo funciona la estructura" },
     /*#__PURE__*/React.createElement("strong", null, "La Rasante es la cota de acabado = cota superior de la primera capa"), " (ej. Asfalto).", /*#__PURE__*/React.createElement("br", null), "Cota superior de la capa siguiente = Rasante − suma de espesores de las capas ", /*#__PURE__*/React.createElement("em", null, "anteriores"), " (no la propia).", /*#__PURE__*/React.createElement("br", null), "La capa de ", /*#__PURE__*/React.createElement("strong", null, "Excavación"), " se agrega siempre automáticamente al final = Rasante − suma de TODOS los espesores.", React.createElement("div", { style: { fontSize: 11, marginTop: 6 } }, "Orden: primero la capa más superficial (ej. Asfalto o Concreto), luego Base, Sub-base, Roca muerta, etc. Si un parqueadero tiene otra estructura, se define en 🅿 Parqueaderos.")),
   React.createElement(CopiarEstructura, { proy, proyectos, obras, onCopiar: cambios => upd(cambios) }), (() => {
     // ── Sobreancho general (no cambia las cotas; solo el ancho de trabajo) ──
@@ -9150,7 +9266,7 @@ function App() {
           "Ancho de trabajo: ", plano.toFixed(3), " + ", g.izq.toFixed(3), " + ", g.der.toFixed(3), " = ",
           React.createElement("strong", null, r3(plano + g.izq + g.der).toFixed(3), " m"))));
   })(), proy.capas.map((c, i) => /*#__PURE__*/React.createElement("div", {
-    key: c.id,
+    key: c.id, id: "tv-capa-" + i,
     style: {
       display: "grid",
       gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
@@ -9260,7 +9376,7 @@ function App() {
       fontWeight: 700,
       color: C.danger
     }
-  }, "Profundidad total de excavación: ", r3(proy.capas.filter(c => c.nombre && c.espesor).reduce((s, c) => s + (parseFloat(c.espesor) || 0), 0)).toFixed(3), " m"))), enVia("sard") && React.createElement(TabSardinel, { proy, upd, updSinRecalcular }), enVia("parq") && /*#__PURE__*/React.createElement("div", null, React.createElement(EditorPlanta, { proy, modo: "parq", onParq: (id, np) => {
+  }, "Profundidad total de excavación: ", r3(proy.capas.filter(c => c.nombre && c.espesor).reduce((s, c) => s + (parseFloat(c.espesor) || 0), 0)).toFixed(3), " m"))), enVia("sard") && React.createElement(TabSardinel, { proy, upd, updSinRecalcular }), enVia("parq") && /*#__PURE__*/React.createElement("div", null, React.createElement(AvisosVia, { r: revision.parq }), React.createElement(EditorPlanta, { proy, modo: "parq", onParq: (id, np) => {
     const viejo = proy.parqueaderos.find(x => x.id === id), igual = viejo && JSON.stringify({ ...np, coords: null }) === JSON.stringify({ ...viejo, coords: null });
     (igual ? updSinRecalcular : upd)({ parqueaderos: proy.parqueaderos.map(x => x.id === id ? np : x) });
   } }), /*#__PURE__*/React.createElement("div", {
