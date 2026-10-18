@@ -1298,6 +1298,17 @@ const Btn = ({
     ...style
   }
 }, children);
+// Explicación plegada: "ⓘ Cómo funciona…" cerrada al principio; cada equipo recuerda si la dejó abierta (tv_ayuda)
+const leerAyudas = () => { try { return JSON.parse(localStorage.getItem("tv_ayuda") || "{}") || {}; } catch (_) { return {}; } };
+const Ayuda = ({ id, titulo, aviso, children }) => {
+  const [ab, setAb] = React.useState(!!leerAyudas()[id]);
+  const h = React.createElement, color = aviso ? "var(--tB45309)" : "var(--t0369A1)", borde = aviso ? C.warn : "var(--l93C5FD)";
+  const cambiar = () => { const n = !ab; setAb(n); try { localStorage.setItem("tv_ayuda", JSON.stringify({ ...leerAyudas(), [id]: n })); } catch (_) {} };
+  return h("div", { className: "tv-ayuda", style: { border: `1px solid ${borde}`, background: aviso ? "transparent" : "var(--bF0F9FF)", borderRadius: 9, marginBottom: 10 } },
+    h("button", { onClick: cambiar, "aria-expanded": ab, className: "tv-despl-cab", style: { width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, background: "none", border: "none", padding: aviso ? "5px 9px" : "7px 10px", cursor: "pointer", textAlign: "left", fontFamily: "inherit", fontSize: aviso ? 12 : 13, fontWeight: 800, color } },
+      h("span", null, "ⓘ " + titulo), h("span", { style: { fontSize: 11 } }, ab ? "▴" : "▾")),
+    ab && h("div", { style: { padding: "0 10px 9px", fontSize: 12, color: C.muted, lineHeight: 1.6 } }, children));
+};
 // Tarjeta que se abre y se cierra tocando su encabezado (nombre en color y un resumen de una línea)
 const Desplegable = ({ titulo, color, resumen, abierto0, borde, fondo, children }) => {
   const [ab, setAb] = React.useState(!!abierto0);
@@ -1846,7 +1857,7 @@ function ponerTema(t) {
 }
 if (typeof document !== "undefined") { hojaTemas(); const t0 = leerTema(); document.documentElement.setAttribute("data-tema", t0);
   const m0 = document.querySelector('meta[name="theme-color"]'); if (m0) m0.setAttribute("content", TEMAS[t0].colores.barra); }
-const TV_VERSION = "72";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "73";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -3414,20 +3425,20 @@ function CopiasAutomaticas({ onRestaurar }) {
   const [verTodas, setVerTodas] = React.useState(false);
   React.useEffect(() => { let vivo = true; leerCopiasAutomaticas().then(l => { if (vivo) setLista(l); }); return () => { vivo = false; }; }, []);
   if (!lista) return null;
-  const visibles = verTodas ? lista : lista.slice(0, 4);
+  const visibles = verTodas ? lista : lista.slice(0, 1);   // se ve la última; las demás, al desplegar
   return React.createElement("div", { style: { marginTop: 14 } },
     React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, fontWeight: 700, fontSize: 13.5, marginBottom: 4 } },
       React.createElement(Icono, { n: "history", size: 16 }), "Copias automáticas"),
     React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 6, lineHeight: 1.5 } },
-      "Cada vez que abres la app y cambias algo, antes se guarda una foto de cómo estaba todo. Se guardan las últimas " + COPIAS_MAX + "."),
+      "Una vez al día, si cambiaste algo, se guarda una foto de cómo estaba todo. Se guardan las últimas " + COPIAS_MAX + "."),
     !lista.length && React.createElement("div", { style: { fontSize: 12.5, color: C.muted } }, "Todavía no hay copias: se hace la primera con tu próximo cambio."),
     visibles.map(c => React.createElement("div", { key: c.fecha, className: "tv-copia-auto", style: { display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: `1px solid ${C.border}`, fontSize: 13, flexWrap: "wrap" } },
       React.createElement("span", { style: { flex: 1, minWidth: 160 } },
         React.createElement("strong", null, new Date(c.fecha).toLocaleString("es-CO", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })),
         React.createElement("span", { style: { color: C.muted } }, " · " + c.obras.length + (c.obras.length === 1 ? " obra" : " obras") + " · " + c.vias.filter(v => !v.libre).length + (c.vias.filter(v => !v.libre).length === 1 ? " vía" : " vías"))),
       React.createElement(Btn, { small: true, color: C.accent2, onClick: () => onRestaurar({ app: "TopoVias", fecha: c.fecha, obras: c.obras, vias: c.vias }) }, "Restaurar"))),
-    lista.length > 4 && React.createElement("button", { onClick: () => setVerTodas(!verTodas), style: { marginTop: 6, background: "none", border: "none", color: C.accent, fontWeight: 700, fontSize: 12.5, cursor: "pointer", padding: 0 } },
-      verTodas ? "Ver menos" : "Ver las " + lista.length + " copias"));
+    lista.length > 1 && React.createElement("button", { onClick: () => setVerTodas(!verTodas), "aria-expanded": verTodas, style: { marginTop: 6, background: "none", border: "none", color: C.accent, fontWeight: 700, fontSize: 12.5, cursor: "pointer", padding: 0 } },
+      verTodas ? "▾ Ocultar las copias anteriores" : "▸ Ver las " + (lista.length - 1) + " copias anteriores"));
 }
 
 function PanelDatos({ obras, proyectos, onRestaurar, onArchivo }) {
@@ -8513,7 +8524,7 @@ function TabVolumenes({ proyecto, tabla, onChange }) {
       .filter(function(c,i,a){ return a.findIndex(function(x){ return claveCapa(x)===claveCapa(c); })===i; }).map(function(c){ return React.createElement("option",{key:c,value:c}); })),
     React.createElement("datalist",{id:"tv-conceptos"}, conceptos.filter(function(c,i){ return conceptos.indexOf(c) === i; }).map(function(c){ return React.createElement("option",{key:c,value:c}); })),
     React.createElement("div",{style:{marginBottom:14}},
-      React.createElement("div",{style:{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:8}},
+      React.createElement(Ayuda,{id:"volumenes",titulo:"Cómo se calculan los volúmenes"},
         "Método: áreas promedio, solo donde las dos superficies tienen datos. ",
         React.createElement("strong",null,"Excavación")," va de arriba hacia abajo (terreno natural − excavación; con la excavación en sitio se parte en dos cortes para ver la sobre-excavación). ",
         React.createElement("strong",null,"Relleno")," va de abajo hacia arriba (de lo excavado a la cota de la capa)."),
@@ -9094,16 +9105,7 @@ function App() {
         valor: ""
       }]
     })
-  }, "+ Abscisa intermedia"))), enVia("lat") && /*#__PURE__*/React.createElement("div", { style: { minWidth: 0 } }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "var(--bFFF9E6)",
-      border: `1px solid ${C.warn}`,
-      borderRadius: 8,
-      padding: "10px 14px",
-      marginBottom: 14,
-      fontSize: 13
-    }
-  }, /*#__PURE__*/React.createElement("strong", null, "Nota sobre signos:"), " En ambos laterales, un valor ", /*#__PURE__*/React.createElement("strong", null, "negativo"), " indica que baja respecto al eje y uno ", /*#__PURE__*/React.createElement("strong", null, "positivo"), " que sube. Escribe directamente el valor, ej. ", /*#__PURE__*/React.createElement("code", null, "-0.060"), "."), /*#__PURE__*/React.createElement(EditorLateral, {
+  }, "+ Abscisa intermedia"))), enVia("lat") && /*#__PURE__*/React.createElement("div", { style: { minWidth: 0 } }, React.createElement(Ayuda, { id: "signos", titulo: "Signos de los laterales (− baja, + sube)", aviso: true }, "En ambos laterales, un valor ", /*#__PURE__*/React.createElement("strong", null, "negativo"), " indica que baja respecto al eje y uno ", /*#__PURE__*/React.createElement("strong", null, "positivo"), " que sube. Escribe directamente el valor, ej. ", /*#__PURE__*/React.createElement("code", null, "-0.060"), "."), /*#__PURE__*/React.createElement(EditorLateral, {
     label: "DERECHO",
     lat: proy.lateralDer,
     absVia: proy.absInicio,
@@ -9126,20 +9128,8 @@ function App() {
   })), enVia("estr") && /*#__PURE__*/React.createElement(Card, {
     style: { minWidth: 0 },
     title: "Capas de Estructura de Pavimento"
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: C.muted,
-      marginBottom: 12,
-      lineHeight: 1.6
-    }
-  }, /*#__PURE__*/React.createElement("strong", null, "La Rasante es la cota de acabado = cota superior de la primera capa"), " (ej. Asfalto).", /*#__PURE__*/React.createElement("br", null), "Cota superior de la capa siguiente = Rasante − suma de espesores de las capas ", /*#__PURE__*/React.createElement("em", null, "anteriores"), " (no la propia).", /*#__PURE__*/React.createElement("br", null), "La capa de ", /*#__PURE__*/React.createElement("strong", null, "Excavación"), " se agrega siempre automáticamente al final = Rasante − suma de TODOS los espesores."), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: C.muted,
-      marginBottom: 12
-    }
-  }, "Orden: primero la capa más superficial (ej. Asfalto o Concreto), luego Base, Sub-base, Roca muerta, etc. Si un parqueadero tiene otra estructura, se define en 🅿 Parqueaderos."),
+  }, React.createElement(Ayuda, { id: "estructura", titulo: "Cómo funciona la estructura" },
+    /*#__PURE__*/React.createElement("strong", null, "La Rasante es la cota de acabado = cota superior de la primera capa"), " (ej. Asfalto).", /*#__PURE__*/React.createElement("br", null), "Cota superior de la capa siguiente = Rasante − suma de espesores de las capas ", /*#__PURE__*/React.createElement("em", null, "anteriores"), " (no la propia).", /*#__PURE__*/React.createElement("br", null), "La capa de ", /*#__PURE__*/React.createElement("strong", null, "Excavación"), " se agrega siempre automáticamente al final = Rasante − suma de TODOS los espesores.", React.createElement("div", { style: { fontSize: 11, marginTop: 6 } }, "Orden: primero la capa más superficial (ej. Asfalto o Concreto), luego Base, Sub-base, Roca muerta, etc. Si un parqueadero tiene otra estructura, se define en 🅿 Parqueaderos.")),
   React.createElement(CopiarEstructura, { proy, proyectos, obras, onCopiar: cambios => upd(cambios) }), (() => {
     // ── Sobreancho general (no cambia las cotas; solo el ancho de trabajo) ──
     const sg = proy.sobreancho || {};
@@ -9148,8 +9138,8 @@ function App() {
     const plano = r3(A.anchoIzq + A.anchoDer);
     const setSG = (k, v) => updSinRecalcular({ sobreancho: { ...sg, [k]: v } });
     return React.createElement("div", { style: { background: "var(--bFFF9E6)", border: `1px solid ${C.warn}`, borderRadius: 8, padding: 12, marginBottom: 16 } },
-      React.createElement("div", { style: { fontWeight: 800, color: C.warn, marginBottom: 4 } }, "↔ Sobreancho general (excavación y conformación)"),
-      React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 10 } },
+      React.createElement("div", { style: { fontWeight: 800, color: C.warn, marginBottom: 6 } }, "↔ Sobreancho general (excavación y conformación)"),
+      React.createElement(Ayuda, { id: "sobreancho", titulo: "Qué es el sobreancho", aviso: true },
         "Las cotas se calculan con el ancho del plano. El sobreancho solo agranda el ancho de trabajo de la excavación, el área de conformación y las capas que lo lleven."),
       React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, alignItems: "flex-end" } },
         React.createElement("div", null, React.createElement(Label, null, "Sobreancho izquierdo (m)"),

@@ -6,6 +6,8 @@ module.exports = async function abrirVia(p, nombreVia) {
   if (await p.locator('.tv-tabs').count()) return;
   if (await p.locator('text=‹ Obras').count()) await p.click('text=‹ Obras');
   await p.locator('main button:has-text("📁 ")').first().click();
-  await p.getByText(nombreVia, { exact: true }).first().click();
+  // la tarjeta de la vía puede llevar un ícono delante ("🛣 EJE 5", "🔒 EJE 5")
+  const esc = nombreVia.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  await p.getByText(new RegExp('(^|\\s)' + esc + '$')).first().click();
   await p.waitForSelector('.tv-tabs'); await p.waitForTimeout(200);
 };
