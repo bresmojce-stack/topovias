@@ -1,4 +1,5 @@
 const { chromium } = require('/opt/node-tools/node_modules/playwright');
+const abrirVia = require('./abrir.js');
 (async () => {
   const b = await chromium.launch();
   const p = await (await b.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })).newPage();
@@ -9,7 +10,7 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
   const proj = { id: 1, obraId: 5, nombre: "EJE 7", absInicio: "0", tramos: [T("965.59","","-2","27.5"), T("965.04","","2","30")], intermedias: [],
     capas: [{nombre:"asfalto",espesor:"0.05",id:1},{nombre:"base",espesor:"0.15",id:2}], lateralIzq: lat, lateralDer: lat, parqueaderos: [], nivelaciones: [], volumenes: [] };
   await p.evaluate(pr => { localStorage.setItem('topovias_standalone', JSON.stringify([pr])); localStorage.setItem('topovias_standalone_obras', JSON.stringify([{id:5,nombre:'Obra'}])); localStorage.setItem('topovias_standalone_activo', '1'); localStorage.setItem('topovias_standalone_nav', JSON.stringify({vista:'via'})); localStorage.setItem('topovias_standalone__t', String(Date.now() + 100000)); localStorage.setItem('topovias_standalone_obras__t', String(Date.now() + 100000)); }, proj);
-  await p.reload(); await p.waitForSelector('header.tv-header'); await p.waitForTimeout(400);
+  await p.reload(); await abrirVia(p, 'EJE 7'); await p.click('.tv-subvia button[data-sub=eje]'); await p.waitForTimeout(300);
   const barra = async () => (await p.$('.tv-deshacer')) ? 'visible' : 'oculta';
   const dist = () => p.evaluate(() => leerDato('topovias_standalone')[0].tramos.map(t => t.distancia).join(','));
   console.log('al abrir, barra:', await barra());

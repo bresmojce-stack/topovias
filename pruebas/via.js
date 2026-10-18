@@ -1,4 +1,5 @@
 const { chromium } = require('/opt/node-tools/node_modules/playwright');
+const abrirVia = require('./abrir.js');
 (async () => {
   const b = await chromium.launch();
   for (const [w, h, m] of [[390, 844, true], [1280, 900, false]]) {
@@ -10,14 +11,14 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
     const proj = { id: 1, obraId: 5, nombre: "EJE 7", absInicio: "0", tramos: [T("965.59","","-2","27.5"), T("965.04","","2","30")], intermedias: [],
       capas: [{nombre:"asfalto",espesor:"0.05",id:1},{nombre:"base",espesor:"0.15",id:2}], lateralIzq: lat, lateralDer: lat, parqueaderos: [], nivelaciones: [], volumenes: [] };
     await p.evaluate(pr => { localStorage.setItem('topovias_standalone', JSON.stringify([pr])); localStorage.setItem('topovias_standalone_obras', JSON.stringify([{id:5,nombre:'Obra'}])); localStorage.setItem('topovias_standalone_activo', '1'); localStorage.setItem('topovias_standalone_nav', JSON.stringify({vista:'via'})); localStorage.setItem('topovias_standalone__t', String(Date.now() + 100000)); }, proj);
-    await p.reload(); await p.waitForSelector('header.tv-header'); await p.waitForTimeout(400);
+    await p.reload(); await abrirVia(p, 'EJE 7');
     console.log(w, 'pestañas:', JSON.stringify(await p.$$eval('.tv-tabs button', bs => bs.map(b => b.innerText))));
-    console.log(w, 'títulos de sección:', JSON.stringify(await p.$$eval('main > div[id^="tv-sec"]', ds => ds.map(d => d.innerText + '@' + Math.round(d.getBoundingClientRect().top)))));
+    console.log(w, 'apartados de Vía:', JSON.stringify(await p.$$eval('.tv-subvia button', bs => bs.map(b => b.dataset.sub))));
     const sobre = await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     console.log(w, 'desborde horizontal:', sobre);
     await p.screenshot({ path: process.argv[3] + '_' + w + '.png', fullPage: true });
-    await p.click('main button:has-text("③ Laterales")'); await p.waitForTimeout(700);
-    console.log(w, 'tras ir a ③, Laterales arriba en:', await p.$eval('#tv-sec-laterales', d => Math.round(d.getBoundingClientRect().top)));
+    await p.click('.tv-subvia button[data-sub=lat]'); await p.waitForTimeout(400);
+    console.log(w, 'en Laterales se ven:', JSON.stringify(await p.$$eval('.tv-despl-cab', bs => bs.map(b => b.innerText.split('\n')[0]))), '| desborde:', await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth));
     console.log(errs.join('\n') || 'no errors');
   }
   await b.close();

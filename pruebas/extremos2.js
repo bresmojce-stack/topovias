@@ -1,5 +1,6 @@
 // Casos con sobreancho a lo largo + parqueaderos (columna EXTREMOS del Excel)
 const { chromium } = require('/opt/node-tools/node_modules/playwright');
+const abrirVia = require('./abrir.js');
 (async () => {
   const b = await chromium.launch(); const ctx = await b.newContext({ acceptDownloads: true, viewport: { width: 1280, height: 900 } }); const p = await ctx.newPage();
   const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('dialog', d => d.accept());
@@ -22,9 +23,9 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
     await p.evaluate(pr => { localStorage.clear(); localStorage.setItem('topovias_standalone', JSON.stringify([pr])); localStorage.setItem('topovias_standalone__t', String(Date.now()+99999));
       localStorage.setItem('topovias_standalone_obras', JSON.stringify([{id:5,nombre:'Obra'}])); localStorage.setItem('topovias_standalone_obras__t', String(Date.now()+99999));
       localStorage.setItem('topovias_standalone_activo', '1'); localStorage.setItem('topovias_standalone_nav', JSON.stringify({vista:'via',obraId:5})); }, pr);
-    await p.reload(); await p.waitForSelector('header.tv-header'); await p.waitForTimeout(300);
+    await p.reload(); await abrirVia(p, pr.nombre);
     await p.click('button:has-text("CALCULAR")'); await p.waitForTimeout(200);
-    await p.click('.tv-tabs button[data-tab=vol]'); await p.waitForTimeout(200);
+    await p.click('.tv-tabs button[data-tab=cant]'); await p.click('.tv-subvia button[data-sub=vol]'); await p.waitForTimeout(200);
     const app = await p.$$eval('main span', ss => ss.map(s => s.innerText).filter(t => /m³$/.test(t)));
     const [dl] = await Promise.all([p.waitForEvent('download'), p.click('button:has-text("Exportar")').then(() => p.click('text=💾 Guardar en el dispositivo'))]);
     const f = process.argv[3] + '_' + i + '.xlsx'; await dl.saveAs(f);

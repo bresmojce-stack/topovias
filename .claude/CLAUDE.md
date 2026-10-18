@@ -73,7 +73,8 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 | TEMA (antes de `TV_VERSION`) | Seis temas en `TEMAS` (una sola configuración: colores por función, `icono`, `oscuro`): Claro "Plata técnica" (barra de arriba blanca: variables redefinidas solo dentro de `.tv-header`/`.tv-tabs`), Oscuro "Grafito técnico" (bloque fijo `html[data-tema="oscuro"]` del `<style>`, igual que la v69), Agua océano, Fuego volcánico y Tierra jade (oscuros) y Aire dorado (claro). Claro y Oscuro usan el `:root` y ese bloque; los de elemento se generan en `hojaTemas()` (`<style id="tv-temas">`) con `colorOscuroTema`/`colorClaroTema`/`colorBarra`/`esPizarra`, `cTema`, `cBtnTema` y `--c-relleno`. Variables semánticas `--tv-*` en todos. La paleta `C` vale `var(--c-*)`; `C.relleno` = fondo con letra blanca (en Claro/Oscuro es el mismo acento); cada color fijo de la interfaz es `var(--tHEX)`/`var(--bHEX)`/`var(--lHEX)` (HEX = color en claro; `pruebas/gen_vars_tema.py` regenera el bloque `:root` y el del oscuro si se agregan colores). `Btn` usa `--c-btn-*`. Los de elemento: tarjetas con `--tv-borde-tarjeta` y `--tv-brillo`, foco visible. `leerTema` (sin elección: la del sistema; valor inválido o sin almacenamiento → Claro), `ponerTema` (localStorage `tv_tema`, `data-tema`, evento `tv-tema`); `SelectorTema` (inicio, con símbolo) y `BotonTema` (barra, recorre los seis). No usan variables (iguales en todos): gráficas SVG, editor en planta (fondo blanco), Excel, DXF y colores de datos. Dibujo oscuro tipo AutoCAD en los temas `oscuro: true` (`DIB_OSCURO`/`cd()`) |
 | APP | `App` (pestañas en `TABS`, `upd` recalcula, `updSinRecalcular` no), `FalloApp` (pantalla de rescate). Pestañas: Vía, Cotas y lecturas, Nivelaciones, Cantidades, Dibujo, Calculadora, Bitácora (id "memoria"). Apartados por pestaña en `APARTADOS` (`BarraApartados`, estado `sub`, `enVia`/`enApartado`): Vía = Estructura, Eje y tramos, Laterales, Parqueaderos, Sardinel, Plano; Cotas = tabla de cotas, lecturas de replanteo; Cantidades = volúmenes, cantidades. Iconos a color en `ICONOS_VIA` (`IconoVia`) |
 
-## Estado (versión 71) y lo que sigue
+## Estado (versión 72) y lo que sigue
+- Versión 72 (arreglos de la auditoría del 2026-10-18): la franja de estado del celular toma el color del tema al abrir; se quitó código de temas que nunca se ejecutaba; respaldo `.tv-mezcla` (`@supports not color-mix`) para navegadores anteriores a 2023; pruebas cant, via, extremos2, saparq y deshacer al día (abren la vía con `pruebas/abrir.js`); `pruebas/correr.js` corre las 25 principales con un solo comando.
 - Versión 71: textos grises de la barra legibles en Aire (tema claro con barra de color, regla en `hojaTemas`); "Distancias por coordenadas" de cada lateral dentro de su desplegable (`EditorLateral` prop `extra`); la planta con forma real (`svgPlantaReal`) dibuja el agua como la recta (a lo largo por tramo, bombeo, parqueaderos, punto bajo), también en la imagen del Excel.
 - Versión 70: seis temas del entorno (Claro con barra blanca, Oscuro igual, Agua océano, Fuego, Aire, Tierra) según el boceto aprobado; Claro/Oscuro con colores idénticos a la v69 y Excel idéntico en los seis temas. Respaldo de la v69 en la rama `respaldo-v69`.
 - Hecho y publicado: temas claro (Plata técnica) y oscuro (Grafito técnico) con variables, botón en la barra y en el inicio, dibujo oscuro tipo AutoCAD; sardinel (total en ml) en Cantidades, en el Excel y en el RESUMEN del libro; laterales y parqueaderos desplegables; en el perfil, el nombre que tiene cada nivelación; perfil con tramas y colores por material (C2); editor en planta completo (eje, laterales y parqueaderos; punto nuevo dentro de un tramo; "Pasar a rasante propia" / "Pasar a puntos"; esquinas de cabecera); pestañas con iconos y apartados; editor en planta (eje y laterales); parqueaderos de
@@ -83,20 +84,22 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 - Pendiente posible (Brian dijo "si algún día"): puntos intermedios en el fondo de una cabecera.
 - Ideas mostradas en boceto, sin aprobar: modo sol (alto contraste), modo campo para replanteo, tablero de
   la vía, un color por material. Play Store: Brian dijo "aún no".
-- Antes de cada publicación (con el visto bueno de Brian para correrlas): probar con Playwright (Chromium en /opt/pw-browsers) cotas, Excel (fórmulas
-  recalculadas = valores de la app), volúmenes, Drive simulado y celular 390 px. Los scripts están en
-  `pruebas/` (ver `pruebas/LEEME.md`); copiarlos al scratchpad para correrlos.
+- Antes de cada publicación (con el visto bueno de Brian para correrlas): copiar `pruebas/` al scratchpad
+  (`trabajo/tools` con `trabajo/out` al lado, ver `pruebas/LEEME.md`) y correr `node correr.js <index.html>`:
+  25 pruebas (rutina, Excel y fórmulas, libro, cantidades, deshacer, planta, pantallas celular/PC, Excel igual en
+  los temas) y dice cuáles fallaron; `SOLO=a,b` corre solo algunas. Además, cuando toque: `lo_cmp.sh` (fórmulas
+  recalculadas en LibreOffice = valores de la app), Drive simulado (nube, nube2) y tablet (W=820).
 - Brian revisa todo en el Excel: valores, carteras y fórmulas deben quedar enlazados.
 
 ## Auditoría con /ponytail-audit (a Brian le ha servido)
 Recordarle a Brian si quiere correr `/ponytail-audit` cuando pasen **1 semana o 5 versiones** desde la
 última (lo que llegue primero), en una línea al final de la respuesta, sin correrla sin su permiso. Primero
 se le muestran los hallazgos y él decide qué se arregla. Al hacerla, actualizar aquí la fecha.
-- Última auditoría: 2026-10-17 1 p. m. (versión 69). Abiertos, Brian decide: 1 deshacer tras borrar
-  anotación pierde sus fotos; 2 la copia de seguridad no lleva las fotos; 3 cinco pruebas desactualizadas
-  (cant, via, extremos2, saparq, deshacer: fallan por la navegación, no por la app; deshacer sí funciona);
-  4 sin un solo comando para las pruebas; 5 `color-mix` en `Tag` y botones de acción de obra no se ve en
-  navegadores anteriores a 2023. Antes (versión 61) se arreglaron: capa "Excavación", `memoria`, encabezados.
+- Última auditoría: 2026-10-18 (versión 71). Arreglados en la 72: franja del celular, pruebas viejas, comando
+  único, código muerto de temas, `color-mix`. Abiertos, Brian dijo "no es de mucho interés por ahora": deshacer
+  tras borrar una anotación pierde sus fotos; la copia de seguridad no lleva las fotos. Sin escoger: guardar en
+  `pruebas/` las pruebas nuevas de temas y planta (temas6, cmp_v69, recorrido_tab, latcoords, plantaagua; hoy solo
+  en el scratchpad de la sesión del 2026-10-17). Antes: v61 (capa "Excavación", `memoria`, encabezados) y v69.
 
 ## Pendientes conocidos (auditoría, Brian decidió dejarlos por ahora)
 Estación sin V+ usa la AI de la anterior (Brian lo quiere así: si necesita otra estación la crea); tramo

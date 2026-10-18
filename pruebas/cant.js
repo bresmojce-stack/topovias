@@ -1,4 +1,5 @@
 const { chromium } = require('/opt/node-tools/node_modules/playwright');
+const abrirVia = require('./abrir.js');
 async function leerXlsx(p, path) {
   return p.evaluate(async b64 => {
     const wb = new ExcelJS.Workbook(); await wb.xlsx.load(Uint8Array.from(atob(b64), c => c.charCodeAt(0)));
@@ -25,10 +26,10 @@ async function leerXlsx(p, path) {
                 { id: 12, nombre: "Exc 2", fuenteSup: "tabla__rasante", fuenteInf: "tabla__Base", sobreAncho: "0", concepto: "excavación" },
                 { id: 13, nombre: "Relleno", fuenteSup: "tabla__Base", fuenteInf: "tabla__Roca", sobreAncho: "0", concepto: "base" }] };
   await p.evaluate(pr => { localStorage.setItem('topovias_standalone', JSON.stringify([pr])); localStorage.setItem('topovias_standalone_activo', '1'); localStorage.setItem('topovias_standalone_nav', JSON.stringify({vista:'via'})); }, proj);
-  await p.reload(); await p.waitForTimeout(400);
+  await p.reload(); await abrirVia(p, 'Vía A');
   const vol = await p.evaluate(() => { const pr = JSON.parse(localStorage.getItem('topovias_standalone'))[0]; const t = generarTabla(pr); return pr.volumenes.map(v => calcVolumen(v, pr, t).volTotal); });
   console.log('volúmenes individuales:', vol);
-  await p.click('button:has-text("Cantidades")');
+  await p.click('.tv-tabs button[data-tab=cant]'); await p.click('.tv-subvia button[data-sub=lista]'); await p.waitForTimeout(200);
   const leer = async () => p.$$eval('main table tbody tr', trs => trs.map(tr => [...tr.cells].slice(0, 3).map(c => c.innerText).join(' | ')));
   console.log('A. calculada:', JSON.stringify(await leer()));
   await p.uncheck('label:has-text("Asfalto") input');
@@ -40,7 +41,7 @@ async function leerXlsx(p, path) {
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click('button:has-text("Exportar")').then(() => p.click('text=💾 Guardar en el dispositivo'))]);
   const path = process.argv[3] + '.xlsx'; await dl.saveAs(path);
   const todas = (await leerXlsx(p, path))[0].filas;
-  const i = todas.findIndex(x => x[0] === '6. CANTIDADES DE LA VÍA');
+  const i = todas.findIndex(x => /^CANTIDADES/.test(String(x[0] || '')));   // título de la sección: "CANTIDADES <vía>"
   const rows = todas.slice(i, i + 8);
   rows.forEach(r => console.log('  xlsx', JSON.stringify(r.slice(0, 3))));
   console.log(errs.join('\n') || 'no errors');

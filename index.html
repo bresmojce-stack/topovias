@@ -141,6 +141,8 @@
   html:not([data-tema="claro"]):not([data-tema="oscuro"]) .tv-btn:focus-visible, html:not([data-tema="claro"]):not([data-tema="oscuro"]) .tv-tabs button:focus-visible, html:not([data-tema="claro"]):not([data-tema="oscuro"]) .tv-subvia button:focus-visible, html:not([data-tema="claro"]):not([data-tema="oscuro"]) .tv-despl-cab:focus-visible,
   html:not([data-tema="claro"]):not([data-tema="oscuro"]) .tv-btn-tema:focus-visible, html:not([data-tema="claro"]):not([data-tema="oscuro"]) [data-tema-btn]:focus-visible { outline: 2px solid var(--tv-foco); outline-offset: 2px; }
   html:not([data-tema="claro"]):not([data-tema="oscuro"]) .tv-in:disabled, html:not([data-tema="claro"]):not([data-tema="oscuro"]) .tv-in[readonly] { color: var(--tv-texto-2); }
+  /* navegadores anteriores a 2023 no entienden color-mix: fondo suave y borde del color del texto */
+  @supports not (color: color-mix(in srgb, red 50%, blue)) { .tv-mezcla { background: var(--c-sec) !important; border: 1px solid currentColor !important; } }
 </style>
 </head>
 <body>
@@ -1342,6 +1344,7 @@ const Tag = ({
   children,
   color
 }) => /*#__PURE__*/React.createElement("span", {
+  className: "tv-mezcla",
   style: {
     background: `color-mix(in srgb, ${color} 13%, transparent)`,
     color,
@@ -1755,10 +1758,9 @@ function colorBarra(tipo, x, c) {
   if (tipo === "l") return x === "1E293B" ? c.barra2 : x === "334155" ? mezcla(c.barra2, "#FFFFFF", 0.25) : null;
   return null;
 }
-// el color en un tema oscuro con identidad propia (agua, fuego, tierra): regla del oscuro con sus superficies;
+// el color en un tema oscuro con identidad propia (Agua, Fuego, Tierra): regla del oscuro con sus superficies;
 // los azules de la interfaz pasan al color principal del tema; rojo, verde, ámbar y morado conservan su significado
-function colorOscuroTema(tipo, x, c, k) {
-  if (k === "oscuro") return colorOscuro(tipo, x, c);
+function colorOscuroTema(tipo, x, c) {
   const barra = colorBarra(tipo, x, c); if (barra) return barra;
   const [h, l, s] = hexHsl("#" + x), azul = s >= 0.3 && h >= 0.52 && h <= 0.70;
   if (esPizarra(x)) {                                // grises azulados: neutros del tema
@@ -1773,10 +1775,9 @@ function colorOscuroTema(tipo, x, c, k) {
   const [, lr, sr] = hexHsl(r), [hp, , sp] = hexHsl(c.primario);
   return hslHex(hp, lr, Math.min(sr, Math.max(sp, 0.35)));   // mismo claro/oscuro, en el tono del tema
 }
-// el color en un tema claro con identidad propia (agua, fuego, aire, tierra); en el claro queda igual
+// el color en un tema claro con identidad propia (Aire)
 const AZULES_ACCION = ["0284C7", "0369A1", "2563EB", "0EA5E9", "1D4ED8", "3B82F6", "1565C0", "0F4C81"];
-function colorClaroTema(tipo, x, c, k) {
-  if (k === "claro") return "#" + x;
+function colorClaroTema(tipo, x, c) {
   const [h, l, s] = hexHsl("#" + x), azul = s >= 0.3 && h >= 0.52 && h <= 0.70, [hp, , sp] = hexHsl(c.primario);
   const barra = colorBarra(tipo, x, c); if (barra) return barra;
   if (s < 0.2 || esPizarra(x)) {                                    // neutros: los del tema
@@ -1798,14 +1799,14 @@ function colorClaroTema(tipo, x, c, k) {
   if (tipo === "t" && l < 0.62) return c.primario;
   return hslHex(hp, l, Math.min(s, Math.max(sp, 0.35)));   // azul claro/medio → mismo tono del color principal
 }
-// paleta C por tema
-const cTema = (t, c, k) => ({ bg: c.fondo, panel: c.superficie, border: c.borde, accent: c.primario, accent2: k === "oscuro" || k === "claro" ? "#0EA5E9" : c.foco,
+// paleta C de los temas de elemento (Claro y Oscuro usan sus colores fijos del <style>)
+const cTema = (t, c) => ({ bg: c.fondo, panel: c.superficie, border: c.borde, accent: c.primario, accent2: c.foco,
   success: t.oscuro ? "#16A34A" : c.exito, pi: c.texto, parq: t.oscuro ? "#A855F7" : "#9333EA", warn: t.oscuro ? "#D97706" : c.advertencia, danger: t.oscuro ? "#DC2626" : c.error,
-  text: c.texto, muted: c.texto2, row1: c.superficie, row2: k === "oscuro" ? "#202C3D" : t.oscuro ? mezcla(c.superficie, c.superficieElevada, 0.5) : c.campo, campo: c.campo, campoBorde: c.bordeCampo, sec: c.superficieElevada, lienzo: c.lienzo });
+  text: c.texto, muted: c.texto2, row1: c.superficie, row2: t.oscuro ? mezcla(c.superficie, c.superficieElevada, 0.5) : c.campo, campo: c.campo, campoBorde: c.bordeCampo, sec: c.superficieElevada, lienzo: c.lienzo });
 // fondo de los botones (letra blanca legible encima)
-const cBtnTema = (t, c, k) => ({ accent: c.primarioFondo, accent2: k === "oscuro" ? "#0284C7" : c.primarioFondo, success: "#15803D", danger: t.oscuro ? "#DC2626" : "#B91C1C",
-  warn: "#B45309", parq: "#9333EA", muted: k === "oscuro" ? "#475569" : t.oscuro ? c.bordeCampo : mezcla(c.texto2, c.texto, 0.25),
-  text: k === "oscuro" ? "#334155" : t.oscuro ? c.superficieElevada : c.barra2, pi: k === "oscuro" ? "#334155" : t.oscuro ? c.superficieElevada : c.barra2 });
+const cBtnTema = (t, c) => ({ accent: c.primarioFondo, accent2: c.primarioFondo, success: "#15803D", danger: t.oscuro ? "#DC2626" : "#B91C1C",
+  warn: "#B45309", parq: "#9333EA", muted: t.oscuro ? c.bordeCampo : mezcla(c.texto2, c.texto, 0.25),
+  text: t.oscuro ? c.superficieElevada : c.barra2, pi: t.oscuro ? c.superficieElevada : c.barra2 });
 // escribe (una sola vez) las variables de los seis temas en un <style id="tv-temas">
 function hojaTemas() {
   if (typeof document === "undefined" || document.getElementById("tv-temas")) return;
@@ -1818,11 +1819,11 @@ function hojaTemas() {
       const t = TEMAS[k], c = t.colores, v = k === "claro" || k === "oscuro" ? [] : [`color-scheme: ${t.oscuro ? "dark" : "light"};`];
       Object.keys(VARS_TEMA).forEach(n => v.push(`--tv-${VARS_TEMA[n]}: ${c[n] || (n === "bordeTarjeta" ? c.borde : "transparent")};`));
       if (k === "claro" || k === "oscuro") return `html[data-tema="${k}"] { ${v.join(" ")} }`;
-      const cc = cTema(t, c, k), cb = cBtnTema(t, c, k);
+      const cc = cTema(t, c), cb = cBtnTema(t, c);
       Object.keys(cc).forEach(n => v.push(`--c-${n}: ${cc[n]};`));
       Object.keys(cb).forEach(n => v.push(`--c-btn-${n}: ${cb[n]};`));
       v.push(`--c-relleno: ${c.primarioFondo};`);
-      hexes.forEach(x => ["t", "b", "l"].forEach(tp => v.push(`--${tp}${x}: ${t.oscuro ? colorOscuroTema(tp, x, c, k) : colorClaroTema(tp, x, c, k)};`)));
+      hexes.forEach(x => ["t", "b", "l"].forEach(tp => v.push(`--${tp}${x}: ${t.oscuro ? colorOscuroTema(tp, x, c) : colorClaroTema(tp, x, c)};`)));
       // tema claro con barra de color (Aire): los textos grises de la barra se aclaran para leerse sobre ella
       const barraClara = t.oscuro ? "" : `\nhtml[data-tema="${k}"] .tv-header { --t94A3B8: ${mezcla(c.barra, "#FFFFFF", 0.72)}; --nube-off: ${mezcla(c.barra, "#FFFFFF", 0.72)}; }`;
       return `html[data-tema="${k}"] { ${v.join(" ")} }` + barraClara;
@@ -1843,8 +1844,9 @@ function ponerTema(t) {
   const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", TEMAS[t].colores.barra);
   try { window.dispatchEvent(new Event("tv-tema")); } catch (_) {}
 }
-if (typeof document !== "undefined") { hojaTemas(); document.documentElement.setAttribute("data-tema", leerTema()); }
-const TV_VERSION = "71";   // igual que CACHE_VERSION en sw.js
+if (typeof document !== "undefined") { hojaTemas(); const t0 = leerTema(); document.documentElement.setAttribute("data-tema", t0);
+  const m0 = document.querySelector('meta[name="theme-color"]'); if (m0) m0.setAttribute("content", TEMAS[t0].colores.barra); }
+const TV_VERSION = "72";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -3547,7 +3549,7 @@ function ResumenObra({ obra, vias, onLibro }) {
 function PantallaObra({ obra, vias, onVolver, onRenombrar, onEliminar, onAbrirVia, onNuevaVia, onDuplicarVia, onEliminarVia, onExcelVia, onLibro }) {
   const [editando, setEditando] = React.useState(false);
   const accion = (txt, color, fn) => React.createElement("button", {
-    onClick: e => { e.stopPropagation(); fn(); },
+    onClick: e => { e.stopPropagation(); fn(); }, className: "tv-mezcla",
     style: { border: `1px solid color-mix(in srgb, ${color} 33%, transparent)`, background: `color-mix(in srgb, ${color} 7%, transparent)`, color, borderRadius: 6, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer" }
   }, txt);
   return React.createElement("div", null,

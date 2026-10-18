@@ -1,4 +1,5 @@
 const { chromium } = require('/opt/node-tools/node_modules/playwright');
+const abrirVia = require('./abrir.js');
 (async () => {
   const b = await chromium.launch();
   const p = await (await b.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })).newPage();
@@ -16,17 +17,17 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
     cantidades: { capasExcluidas: ["asfalto"] },
     volumenes: [{ id: 11, nombre: "contra subbase", fuenteSup: "tabla__rasante", fuenteInf: "tabla__subbase" }] };
   await p.evaluate(pr => { localStorage.setItem('topovias_standalone', JSON.stringify([pr])); localStorage.setItem('topovias_standalone_activo', '1'); localStorage.setItem('topovias_standalone_nav', JSON.stringify({vista:'via'})); }, proj);
-  await p.reload(); await p.waitForTimeout(400);
-  await p.click('button:has-text("Cantidades")');
+  await p.reload(); await abrirVia(p, 'Vía parq');
+  await p.click('.tv-tabs button[data-tab=cant]'); await p.click('.tv-subvia button[data-sub=lista]'); await p.waitForTimeout(200);
   const conf = await p.$$eval('main .tv-card', cs => cs[0].innerText.replace(/\n+/g, ' / '));
   console.log('Conformación:', conf.slice(0, 420));
   const cant = await p.$$eval('main table tbody tr', trs => trs.map(tr => [...tr.cells].map(c => c.innerText).join(' | ')));
   cant.forEach(c => console.log('   ', c));
-  await p.click('button:has-text("Volúmenes")');
+  await p.click('.tv-subvia button[data-sub=vol]'); await p.waitForTimeout(200);
   const filas = await p.$$eval('main table tbody tr', trs => trs.slice(0, 8).map(tr => tr.cells[0].innerText + ' ancho ' + tr.cells[tr.cells.length - 3].innerText + ' área ' + tr.cells[tr.cells.length - 2].innerText));
   filas.forEach(f => console.log('   ', f));
   console.log('volumen:', await p.$$eval('main span', ss => ss.map(s => s.innerText).filter(t => /m³$/.test(t))));
-  await (p.click('.tv-tabs button[data-tab=via]'), p.click('.tv-subvia button[data-sub=parq]'));
+  await p.click('.tv-tabs button[data-tab=via]'); await p.click('.tv-subvia button[data-sub=parq]');
   await p.waitForTimeout(200); for (const bt of await p.$$('.tv-despl-cab[aria-expanded=false]')) await bt.click();
   console.log('editor parq:', await p.innerText('text=/Ancho de trabajo: 5/'));
   await p.selectOption('select:near(:text("Estructura del parqueadero"))', 'propia');
