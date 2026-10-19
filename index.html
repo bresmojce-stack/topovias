@@ -2032,7 +2032,7 @@ function ponerTema(t) {
 }
 if (typeof document !== "undefined") { hojaTemas(); const t0 = leerTema(); document.documentElement.setAttribute("data-tema", t0);
   const m0 = document.querySelector('meta[name="theme-color"]'); if (m0) m0.setAttribute("content", TEMAS[t0].colores.barra); }
-const TV_VERSION = "80";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "81";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -2110,7 +2110,7 @@ const libreBase = () => ({ id: LIBRE_ID, obraId: LIBRE_ID, libre: true, nombre: 
 // llegue a una vía bloqueada se descarta aquí (última defensa, además de los avisos en pantalla).
 function avisar(texto) { setTimeout(function() { try { window.dispatchEvent(new CustomEvent("tv-aviso", { detail: texto })); } catch (_) {} }, 0); }
 const AVISO_BLOQUEADA = "🔒 Esta vía está bloqueada. Toca \"Desbloquear\" para editarla.";
-function sinBloqueo(p) { const c = Object.assign({}, p); delete c.bloqueada; return JSON.stringify(c); }
+function sinBloqueo(p) { const c = Object.assign({}, p); delete c.bloqueada; delete c.estado; return JSON.stringify(c); }
 function protegerBloqueadas(prev, next) {
   if (!prev.some(function(p) { return p.bloqueada; })) return next;
   let tocada = false;
@@ -2339,6 +2339,8 @@ async function nubeTraerFoto(id) {
 async function nubeSincronizar(interactivo) {
   if (!nubeConectada() && !interactivo) return;
   if (NUBE.ocupado || DATOS.otraVentana) return;
+  // si los datos de este equipo no se pudieron abrir, la lista está vacía: sincronizar mandaría todo a la papelera
+  if (!DATOS.cargado || (DATOS.noEscribir && Object.keys(DATOS.noEscribir).length)) return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) { nubeAvisar("pendiente", "Sin internet: se sincroniza cuando vuelva la señal."); return; }
   NUBE.ocupado = true; clearTimeout(NUBE.temporizador);
   try {
@@ -3732,7 +3734,9 @@ function ResumenObra({ obra, vias, onLibro }) {
     React.createElement(Btn, { color: C.success, style: { padding: "12px 18px", fontSize: 15 }, onClick: onLibro }, "📚 Crear libro de " + obra.nombre));
 }
 
-function PantallaObra({ obra, vias, onVolver, onRenombrar, onEliminar, onAbrirVia, onNuevaVia, onDuplicarVia, onEliminarVia, onExcelVia, onLibro }) {
+// Semáforo de cada vía: lo pone la persona (no se calcula) y se guarda en la vía, así se ve en todos los equipos
+const ESTADOS_VIA = { ok: { color: C.success, simbolo: "✓", texto: "Terminada" }, falta: { color: C.warn, simbolo: "!", texto: "Faltan datos" }, malo: { color: C.danger, simbolo: "✕", texto: "Algo malo o incompleto" } };
+function PantallaObra({ obra, vias, onVolver, onRenombrar, onEliminar, onAbrirVia, onNuevaVia, onDuplicarVia, onEliminarVia, onExcelVia, onLibro, onEstadoVia }) {
   const [editando, setEditando] = React.useState(false);
   const accion = (txt, color, fn) => React.createElement("button", {
     onClick: e => { e.stopPropagation(); fn(); }, className: "tv-mezcla",
@@ -3754,14 +3758,22 @@ function PantallaObra({ obra, vias, onVolver, onRenombrar, onEliminar, onAbrirVi
       ? React.createElement("div", { style: { textAlign: "center", color: C.muted, padding: 30, fontSize: 14 } }, "Esta obra aún no tiene vías.")
       : React.createElement("div", { style: gridTarjetas },
           vias.map(v => {
-            const r = resumenVia(v);
+            const r = resumenVia(v), est = ESTADOS_VIA[v.estado];
+            const boton = k => { const e = ESTADOS_VIA[k], act = v.estado === k;
+              return React.createElement("button", { key: k, className: "tv-estado-via", "data-estado": k, "aria-pressed": act, title: e.texto + (act ? " (toca para quitar)" : ""), "aria-label": e.texto,
+                onClick: ev => { ev.stopPropagation(); onEstadoVia(v.id, act ? null : k); },
+                style: { width: 32, height: 32, borderRadius: "50%", border: `2px solid ${e.color}`, background: act ? e.color : "transparent", color: act ? "#fff" : e.color, fontWeight: 900, fontSize: 15, cursor: "pointer", lineHeight: 1, padding: 0 } }, e.simbolo); };
             return React.createElement("div", { key: v.id, role: "button", tabIndex: 0, onClick: () => onAbrirVia(v.id),
               onKeyDown: e => { if (e.key === "Enter") onAbrirVia(v.id); },
-              style: { ...tarjetaS, borderLeft: `4px solid ${r.incompleta ? C.warn : C.success}` } },
-              React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: C.accent } }, v.bloqueada ? "🔒 " : "🛣 ", v.nombre || "(sin nombre)"),
+              style: { ...tarjetaS, borderLeft: `${est ? 6 : 4}px solid ${est ? est.color : r.incompleta ? C.warn : C.success}` } },
+              React.createElement("div", { style: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 } },
+                React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: C.accent } }, v.bloqueada ? "🔒 " : "🛣 ", v.nombre || "(sin nombre)"),
+                est && React.createElement("span", { className: "tv-estado-sello", style: { flex: "0 0 auto", background: est.color, color: "#fff", borderRadius: 999, padding: "3px 9px", fontSize: 12, fontWeight: 800, whiteSpace: "nowrap" } }, est.simbolo + " " + est.texto)),
               React.createElement("div", { style: { fontSize: 12, color: C.muted, fontFamily: "monospace" } },
                 r.largo.toFixed(3) + " m · " + r.pis + " PI" + (r.parqs ? " · " + r.parqs + " parq." : "")),
               r.incompleta && React.createElement("div", { style: { fontSize: 12, color: C.warn, fontWeight: 700 } }, "⚠ Tramos sin completar"),
+              React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", marginTop: 2 } },
+                React.createElement("span", { style: { fontSize: 11.5, color: C.muted, fontWeight: 700 } }, "Estado:"), ["ok", "falta", "malo"].map(boton)),
               React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 } },
                 accion("📊 Excel", C.accent, () => onExcelVia(v)),
                 accion("⧉ Duplicar", C.accent2, () => onDuplicarVia(v.id)),
@@ -4997,8 +5009,9 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
         });
         blank();
       }
-      const lecturas = alinearLecturas(niv, tabla);
+      const lecturas = alinearLecturas(niv, tabla, true);
       const cotas = calcCotasNivelacion(niv, tabla);
+      const filaLectura = {};   // abscisa → fila de su lectura principal (la (2) heredada apunta a ella)
       // bloque de cotas | separación | bloque de cartera (abscisa, estación, A.I., lecturas)
       const cA = 0, cK1 = 1, cL0 = cK1 + K.length + 1, cLEst = cL0 + 1, cLAI = cL0 + 2, cLK = cL0 + 3;
       const rT = pushRow([]), rH = pushRow([]);
@@ -5025,9 +5038,11 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
         fila[cLAI] = ai && cn.ai != null ? F(ai, cn.ai) : "";
         const celdas = {};
         const cotaDe = { parqDer: cn.cotaParqDer, der: cn.cotaDer, eje: cn.cotaEje, izq: cn.cotaIzq, parqIzq: cn.cotaParqIzq };
+        if (!lec.sub) filaLectura[claveAbs(lec.abs, 0)] = r;
+        const rHereda = lec.heredada ? filaLectura[claveAbs(lec.abs, 0)] : null;
         K.forEach((k, j) => {
           const l = parseFloat(lec[k]);
-          fila[cLK + j] = isNaN(l) ? "" : l;
+          fila[cLK + j] = isNaN(l) ? "" : rHereda !== null && rHereda !== undefined ? F(ref(cLK + j, rHereda), l) : l;
           if (cotaDe[k] == null) { fila[cK1 + j] = ""; return; }
           fila[cK1 + j] = fila[cLAI] ? F(`${ref(cLAI, r)}-${ref(cLK + j, r)}`, cotaDe[k]) : cotaDe[k];
           celdas[k] = ref(cK1 + j, r);
@@ -8364,7 +8379,10 @@ const lecturaEnBlanco = (abs, sub) => ({ abs, sub: sub || 0, estacionId: null, p
 const CAMPOS_LECTURA = ["parqDer", "der", "eje", "izq", "parqIzq"];
 const hoyISO = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
 const fechaCorta = iso => iso ? iso.slice(8, 10) + "/" + iso.slice(5, 7) + "/" + iso.slice(0, 4) : "";
-function alinearLecturas(niv, tabla) {
+// heredar: en una abscisa repetida de la tabla (unión de parqueaderos o cambio de ancho) la fila (2) sin lectura
+// propia toma la lectura de esa misma abscisa (es el mismo punto del terreno); así el volumen no se corta ahí.
+// La cartera en pantalla la deja en blanco (no heredar) para que se vea que no se midió.
+function alinearLecturas(niv, tabla, heredar) {
   const lecs = (niv && niv.lecturas) || [];
   const conAbs = lecs.some(l => l && typeof l.abs === "number");
   const out = [];
@@ -8372,7 +8390,8 @@ function alinearLecturas(niv, tabla) {
     const deEsta = conAbs ? lecs.filter(l => l && typeof l.abs === "number" && Math.abs(l.abs - row.abs) < 0.0005) : (lecs[i] ? [lecs[i]] : []);
     // abscisa repetida en la tabla (unión de dos parqueaderos): la fila sub 1 toma la lectura (2) de la cartera
     const sub = row.sub || 0, ultima = !tabla[i + 1] || Math.abs(tabla[i + 1].abs - row.abs) >= 0.0005;
-    const principal = deEsta.find(l => (l.sub || 0) === sub) || null;
+    let principal = deEsta.find(l => (l.sub || 0) === sub) || null;
+    if (!principal && heredar && sub > 0) { const p0 = deEsta.find(l => !l.sub); if (p0 && CAMPOS_LECTURA.some(k => hayLectura(p0[k]))) principal = { ...p0, estacionId: null, heredada: true }; }
     out.push({ ...(principal || lecturaEnBlanco(row.abs, sub)), abs: row.abs, sub, row });
     if (ultima) deEsta.filter(l => l.sub > sub).sort((a, b) => a.sub - b.sub).forEach(l => out.push({ ...l, abs: row.abs, row }));
   });
@@ -8382,7 +8401,7 @@ function alinearLecturas(niv, tabla) {
 // Devuelve array de cotas completo para una nivelación, mapeado sobre tabla
 function calcCotasNivelacion(niv, tabla) {
   if (!tabla || !tabla.length) return [];
-  const lecturas = alinearLecturas(niv, tabla);
+  const lecturas = alinearLecturas(niv, tabla, true);
   return lecturas.map((lec, i) => {
     const ai = resolverAI(lecturas, niv.estaciones || [], i);
     const calc = v => { const n = parseFloat(v); return ai !== null && !isNaN(n) ? r3(ai - n) : null; };
@@ -8406,7 +8425,7 @@ function calcCotasNivelacion(niv, tabla) {
 const puntosDiseno = r => ({ parqDer: r.parqDerCota, der: r.cotaLatDer, eje: r.cotaEje, izq: r.cotaLatIzq, parqIzq: r.parqIzqCota });
 const hayLectura = v => String(v == null ? "" : v).trim() !== "" && !isNaN(parseFloat(v));
 function avanceNivelacion(niv, tabla) {
-  const lecs = alinearLecturas(niv, tabla);
+  const lecs = alinearLecturas(niv, tabla, true);
   let total = 0, leidos = 0, ultima = null, siguiente = null;
   lecs.forEach((l, i) => {
     const d = puntosDiseno(l.row);
@@ -9290,6 +9309,7 @@ function App() {
     copia.id = Date.now() + Math.random();
     copia.nombre = v.nombre + " (copia)";
     delete copia.bloqueada;   // la copia queda lista para editar
+    delete copia.estado;      // y sin el semáforo de la original
     setProyectos(prev => [...prev, copia]);
   };
   const eliminarVia = id => {
@@ -9326,6 +9346,7 @@ function App() {
               onEliminar: () => eliminarObra(obraVista.id),
               onAbrirVia: abrirVia, onNuevaVia: n => crearVia(obraVista.id, n),
               onDuplicarVia: duplicarVia, onEliminarVia: eliminarVia,
+              onEstadoVia: (id, e) => setProyectos(prev => prev.map(p => p.id !== id ? p : e ? { ...p, estado: e } : (({ estado, ...resto }) => resto)(p))),
               onExcelVia: v => preparar("Preparando Excel…", () => exportarExcel(v, generarTabla(v))),
               onLibro: () => preparar("Preparando el libro de la obra…", () => exportarLibroObra(obraVista, viasDeObra(obraVista.id)))
             })

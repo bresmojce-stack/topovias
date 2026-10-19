@@ -56,6 +56,10 @@ const abrirVia = require('./abrir.js');
   console.log('8. un parqueadero con dos anchos: ' + rB.filas + ' | total ' + rB.total + (Math.abs(rB.total - r.total) < 0.0006 ? ' (igual a dos parqueaderos)' : ' (DISTINTO)'));
   console.log('   áreas con extremos: ' + rB.areas);
   console.log('   sardinel del parqueadero: ' + rB.sd + ' (43.9 por afuera + 5.0 + 0.4 + 5.4)');
+  // C. cartera de antes (una sola lectura en 0+041.500): la fila (2) usa esa misma lectura y el volumen no se corta
+  const rC = await p.evaluate(pr => { const v = { ...pr, nivelaciones: pr.nivelaciones.map(n => ({ ...n, lecturas: n.lecturas.filter(l => !l.sub) })) };
+    const t = generarTabla(v); return calcVolumen(v.volumenes[0], v, t).volTotal; }, pr);
+  console.log('10. sin lectura (2): total ' + rC + (Math.abs(rC - r.total) < 0.0006 ? ' (no se corta)' : ' (SE CORTA)'));
   // pantalla y Excel
   await p.click('button:has-text("CALCULAR")'); await p.waitForTimeout(200);
   await p.click('.tv-tabs button[data-tab=cotas]').catch(() => {}); await p.waitForTimeout(200);
@@ -66,7 +70,8 @@ const abrirVia = require('./abrir.js');
   // Excel del caso B (un parqueadero con dos anchos, sobreancho y extremos): se recalcula en LibreOffice (correr.js)
   const T2 = (ci, cf, di, ancho) => ({ cotaInicio: ci, cotaFin: cf, pendiente: "", distancia: di, ...(ancho ? { ancho } : {}), id: Math.random() });
   const prB = { ...pr, nombre: "Escalon B", capas: [{ nombre: "asfalto", espesor: "0.05", id: 1 }, { nombre: "base", espesor: "0.15", id: 2, sobreancho: "general" }], sobreancho: { izq: "0.5", der: "0.5" },
-    parqueaderos: [{ ...pr.parqueaderos[0], absFin: "45.4", sobreAncho: "0.5", saExtremos: "0.5", tramos: [T2("955.420", "955.200", "40"), T2("955.210", "955.190", "3.9", "5.4")] }] };
+    parqueaderos: [{ ...pr.parqueaderos[0], absFin: "45.4", sobreAncho: "0.5", saExtremos: "0.5", tramos: [T2("955.420", "955.200", "40"), T2("955.210", "955.190", "3.9", "5.4")] }],
+    nivelaciones: pr.nivelaciones.map(n => ({ ...n, lecturas: n.lecturas.filter(l => !l.sub) })) };   // sin la (2): el Excel la toma de la fila de arriba
   await p.evaluate(pr => { localStorage.setItem('topovias_standalone', JSON.stringify([pr])); localStorage.setItem('topovias_standalone__t', String(Date.now() + 99999)); }, prB);
   await p.reload(); await abrirVia(p, prB.nombre); await p.click('button:has-text("CALCULAR")'); await p.waitForTimeout(200);
   const [dl2] = await Promise.all([p.waitForEvent('download'), p.click('button:has-text("Exportar")').then(() => p.click('text=💾 Guardar en el dispositivo'))]);

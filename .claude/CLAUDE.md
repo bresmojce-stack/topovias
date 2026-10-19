@@ -41,7 +41,7 @@ App de topografía de vías (Colombia) para Brian Escobar, topógrafo. Un solo a
 - Revisar el despliegue: `https://api.github.com/repos/bresmojce-stack/topovias/actions/runs?per_page=1`.
 
 ## Mapa en red (artefacto)
-https://claude.ai/artifact/XNYfBVg1uuBN8sugkcosTy : las 46 piezas (versión 80), sus 78 conexiones (qué alimenta a qué) y
+https://claude.ai/artifact/XNYfBVg1uuBN8sugkcosTy : las 46 piezas (versión 81), sus 78 conexiones (qué alimenta a qué) y
 dónde está cada una en el código. Leerlo (Artifact, action "read") antes de un cambio que cruce varias piezas.
 Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía juntos.
 
@@ -73,7 +73,8 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 | TEMA (antes de `TV_VERSION`) | Seis temas en `TEMAS` (una sola configuración: colores por función, `icono`, `oscuro`): Claro "Plata técnica" (barra de arriba blanca: variables redefinidas solo dentro de `.tv-header`/`.tv-tabs`), Oscuro "Grafito técnico" (bloque fijo `html[data-tema="oscuro"]` del `<style>`, igual que la v69), Agua océano, Fuego volcánico y Tierra jade (oscuros) y Aire dorado (claro). Claro y Oscuro usan el `:root` y ese bloque; los de elemento se generan en `hojaTemas()` (`<style id="tv-temas">`) con `colorOscuroTema`/`colorClaroTema`/`colorBarra`/`esPizarra`, `cTema`, `cBtnTema` y `--c-relleno`. Variables semánticas `--tv-*` en todos. La paleta `C` vale `var(--c-*)`; `C.relleno` = fondo con letra blanca (en Claro/Oscuro es el mismo acento); cada color fijo de la interfaz es `var(--tHEX)`/`var(--bHEX)`/`var(--lHEX)` (HEX = color en claro; `pruebas/gen_vars_tema.py` regenera el bloque `:root` y el del oscuro si se agregan colores). `Btn` usa `--c-btn-*`. Los de elemento: tarjetas con `--tv-borde-tarjeta` y `--tv-brillo`, foco visible. `leerTema` (sin elección: la del sistema; valor inválido o sin almacenamiento → Claro), `ponerTema` (localStorage `tv_tema`, `data-tema`, evento `tv-tema`); `SelectorTema` (inicio, con símbolo) y `BotonTema` (barra, recorre los seis). No usan variables (iguales en todos): gráficas SVG, editor en planta (fondo blanco), Excel, DXF y colores de datos. Dibujo oscuro tipo AutoCAD en los temas `oscuro: true` (`DIB_OSCURO`/`cd()`) |
 | APP | `App` (pestañas en `TABS`, `upd` recalcula, `updSinRecalcular` no), `FalloApp` (pantalla de rescate). Pestañas: Vía, Cotas y lecturas, Nivelaciones, Cantidades, Dibujo, Calculadora, Bitácora (id "memoria"). Apartados por pestaña en `APARTADOS` (`BarraApartados`, estado `sub`, `enVia`/`enApartado`): Vía = Estructura, Eje y tramos, Laterales, Parqueaderos, Sardinel, Plano; Cotas = tabla de cotas, lecturas de replanteo; Cantidades = volúmenes, cantidades. Iconos a color en `ICONOS_VIA` (`IconoVia`) |
 
-## Estado (versión 80) y lo que sigue
+## Estado (versión 81) y lo que sigue
+- Versión 81 (arreglos 1 y 2 de la auditoría del 2026-10-19 y semáforo): la fila (2) de una abscisa repetida sin lectura propia toma la lectura de esa abscisa en el cálculo (`alinearLecturas(niv, tabla, true)`, `heredada`; en el Excel la lectura apunta con fórmula a la fila de arriba; la cartera en pantalla la deja en blanco). `nubeSincronizar` no corre si los datos del equipo no cargaron (`DATOS.cargado`/`noEscribir`), antes mandaba las vías de Drive a la papelera. Semáforo en las tarjetas de la obra (`ESTADOS_VIA`, `proy.estado` = ok/falta/malo, lo pone Brian, va a Drive con la vía, se puede en una vía bloqueada: `sinBloqueo` lo ignora; la copia al duplicar no lo lleva). Prueba `estadovia`.
 - Versión 80 (Brian: un solo parqueadero con un PI donde cambia el ancho): ancho por tramo en los parqueaderos con rasante propia y abscisa repetida donde cambia el ancho o donde se tocan dos parqueaderos (caso 0+041.500: 5.00 → 5.40; distancia 0 entre las dos filas, el volumen de cada lado con su ancho). Tabla, volumen, nivelaciones (la lectura "(2)" va con la 2.ª fila; `esLecturaExtra`), áreas (extremos solo en los extremos libres), Excel con fórmulas y sardinel. Prueba `escalon` (app = cuenta a mano = LibreOffice). Siguiente: lo mismo en los laterales con rasante propia.
 - Versión 79: "Tabla de puntos" en Dibujo (escribir o pegar Nombre, Norte, Este y dibujarlos todos; consecutivos o nombres propios; unir y cerrar; avisos que no paran: rojo no se dibuja, ámbar sí). Botón arriba junto a DXF; la barra de dibujos pasa a dos líneas en celulares angostos. Prueba `tablapuntos` (PC y celular).
 - Siguiente (boceto https://claude.ai/artifact/VMwQuKM3ia39ddqNeMQSrD, sin aprobar del todo): del dibujo a la vía. "Usar como eje" con flechas de sentido e "Invertir sentido" (derecha = a la derecha mirando a abscisas mayores), "Marcar lateral" (ancho por distancia al eje; si varía, aviso), "Marcar parqueadero" (proyección: inicio, fin, lado, ancho; fuera del eje = cabecera de 4 esquinas) y "Pasar a la vía" con resumen NUEVO/CAMBIA/IGUAL, un solo deshacer, no toca cotas ni capas. Botón arriba junto a DXF. Pendiente con Brian: ancho variable (promedio o primero) y si pasa las coordenadas de laterales con rasante propia. El Dibujo no cambia la vía por sí solo.
@@ -95,7 +96,7 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
   la vía, un color por material. Play Store: Brian dijo "aún no".
 - Antes de cada publicación (con el visto bueno de Brian para correrlas): copiar `pruebas/` al scratchpad
   (`trabajo/tools` con `trabajo/out` al lado, ver `pruebas/LEEME.md`) y correr `node correr.js <index.html>`:
-  42 revisiones (rutina, Excel y fórmulas, libro, cantidades, deshacer, planta, auto acotar, tabla de puntos PC y celular, abscisa repetida con 2 Excel en LibreOffice, pantallas celular/tablet/PC, seis
+  43 revisiones (rutina, semáforo, Excel y fórmulas, libro, cantidades, deshacer, planta, auto acotar, tabla de puntos PC y celular, abscisa repetida con 2 Excel en LibreOffice, pantallas celular/tablet/PC, seis
   temas, Excel igual en los temas, 3 Excel recalculados en LibreOffice = app, Claro y Oscuro iguales a la v69) y
   dice cuáles fallaron; `SOLO=a,b` corre solo algunas. Además de errores revisa los números esperados (`ESPERA`
   en correr.js): si un cambio mueve un cálculo a propósito, se revisa con Brian y se cambia ahí. Cuando toque:
@@ -107,11 +108,12 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 Recordarle a Brian si quiere correr `/ponytail-audit` cuando pasen **1 semana o 5 versiones** desde la
 última (lo que llegue primero), en una línea al final de la respuesta, sin correrla sin su permiso. Primero
 se le muestran los hallazgos y él decide qué se arregla. Al hacerla, actualizar aquí la fecha.
-- Última auditoría: 2026-10-18 (versión 75). Arreglados en la 76: `correr.js` revisa números esperados y recalcula
+- Última auditoría: 2026-10-19 (versión 80). Arreglados en la 81: fila (2) sin lectura cortaba el volumen; Drive sin datos cargados mandaba vías a la papelera. Abiertos (Brian decide): dos parqueaderos que se tocan cuentan doble sardinel y extremos en la unión (uno solo con dos anchos cuenta bien); volumen entre dos nivelaciones ignora la (2) de la de abajo (345 en vez de 360 en la prueba); fallos junto a un 2.º parqueadero o sección más ancha usan el ancho del primero (`cotaSuperficieEn`); `seccionesParq` no recorta a la abscisa fin si los tramos suman más; restaurar copia no guarda antes la copia del día; borrar foto en una vía duplicada la borra del original; pegar CSV mixto en Tabla de puntos salta filas; código muerto `__nSec`, `anchoParqDer/Izq` en `calcVolumen`.
+- Auditoría anterior: 2026-10-18 (versión 75). Arreglados en la 76: `correr.js` revisa números esperados y recalcula
   en LibreOffice; pruebas temas6, cmp_v69, latcoords, plantaagua y tablet (recorrido con TACTIL=1) guardadas en
   `pruebas/`; quitado lo que quedaba de EXTREMOS en `calcVolumen` (`areaParqOnly`); `avisoNumero` no avisa un
   "-", "+" o "." solo (se está escribiendo). Abiertos los mismos de las fotos.
-- Auditoría anterior: 2026-10-18 (versión 71). Arreglados en la 72: franja del celular, pruebas viejas, comando
+- Antes: 2026-10-18 (versión 71). Arreglados en la 72: franja del celular, pruebas viejas, comando
   único, código muerto de temas, `color-mix`. Abiertos, Brian dijo "no es de mucho interés por ahora": deshacer
   tras borrar una anotación pierde sus fotos; la copia de seguridad no lleva las fotos. Antes: v61 (capa "Excavación", `memoria`, encabezados) y v69.
 
