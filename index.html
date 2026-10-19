@@ -808,6 +808,31 @@ const esNombreExcavacion = n => claveCapa(n).normalize("NFD").replace(/[\u0300-\
 const chocaExc = cs => (cs || []).some(c => c && esNombreExcavacion(c.nombre));
 const sinChoqueExc = cs => (cs || []).map(c => c && esNombreExcavacion(c.nombre) ? { ...c, nombre: NOMBRE_CAPA_EXC } : c);
 const cacheCalc = new WeakMap();
+// Ancho de un tramo del parqueadero (rasante propia): el suyo si se escribió, si no el del parqueadero
+const anchoTramoParq = (t, p) => { const w = parseFloat(t && t.ancho); return isNaN(w) ? (parseFloat(p.ancho) || 0) : w; };
+function seccionesParq(p) {
+  if (!p || esCabecera(p) || p.modo !== "independiente" || !(p.tramos || []).some(t => String(t.ancho || "").trim() !== "")) return [p];
+  const rs = resolverTodos(p.tramos), a0 = parseFloat(p.absInicio), af = parseFloat(p.absFin);
+  if (isNaN(a0) || isNaN(af) || !rs.length || rs.some(r => !r.completo)) return [p];
+  const grupos = [];
+  let acc = a0;
+  p.tramos.forEach((t, i) => {
+    const w = anchoTramoParq(t, p), fin = r3(acc + (rs[i].distancia || 0)), u = grupos[grupos.length - 1];
+    if (u && Math.abs(u.w - w) < 0.0005) u.fin = fin; else grupos.push({ w, ini: acc, fin });
+    acc = fin;
+  });
+  if (grupos.length === 1) return [{ ...p, ancho: String(grupos[0].w) }];
+  grupos[grupos.length - 1].fin = af;
+  const n = grupos.length;
+  return grupos.map((g, k) => ({ ...p, id: k ? p.id + "~s" + (k + 1) : p.id, idBase: p.id, nombreBase: p.nombre, absInicio: String(r3(g.ini)), absFin: String(r3(g.fin)),
+    ancho: String(g.w), __a0: a0, __sec: k + 1, __nSec: n, __extN: (k === 0 ? 1 : 0) + (k === n - 1 ? 1 : 0) }));
+}
+// cota con la que EMPIEZA el tramo que nace en la abscisa abs (en un cambio de ancho la segunda fila lleva esa)
+function cotaInicioTramoEn(rs, a0, abs) {
+  let acc = a0;
+  for (let i = 0; i < rs.length; i++) { if (Math.abs(acc - abs) < 0.001) return rs[i].cotaInicio; acc = r3(acc + (rs[i].distancia || 0)); }
+  return null;
+}
 function proyCalc(proy) {
   if (!proy || proy.__calc) return proy;
   const c = cacheCalc.get(proy);
@@ -839,6 +864,9 @@ function proyCalc(proy) {
       return [{ ...p, absInicio: String(a), absFin: String(b), ancho: String(k.ancho), borde }];
     }) };
   }
+  // parqueadero con tramos de distinto ancho: para el cálculo, una sección por cada ancho (como dos parqueaderos
+  // que se tocan: la abscisa del cambio va dos veces); el editor y lo guardado siguen siendo un solo parqueadero
+  if ((out.parqueaderos || []).some(p => seccionesParq(p).length > 1)) out = { ...out, __calc: true, parqueaderos: out.parqueaderos.flatMap(seccionesParq) };
   cacheCalc.set(proy, out);
   return out;
 }
@@ -898,14 +926,19 @@ function piezasSardinel(proy) {
     });
     piezas.push({ key: k, nombre, medida: "ancho", desde: 0, hasta: W, mult: 1, base: sdRestar(sdRestar([[0, W]], tapa), sinDe(k)), puntos: [] });
   });
-  parqs.forEach(p => {
+  const secs = parqs.filter(p => p.__sec), unidos = [];
+  secs.forEach(p => { const u = unidos.find(x => x.id === p.idBase);
+    if (u) { u.absFin = p.absFin; u.escalones.push({ x: +p.absInicio, len: r3(Math.abs((parseFloat(p.ancho) || 0) - u.anchoFin)) }); u.anchoFin = parseFloat(p.ancho) || 0; }
+    else unidos.push({ ...p, id: p.idBase, nombre: p.nombreBase, anchoIni: parseFloat(p.ancho) || 0, anchoFin: parseFloat(p.ancho) || 0, escalones: [] }); });
+  parqs.filter(p => !p.__sec).concat(unidos).forEach(p => {
     const k = "pq:" + p.id;
     if (!sdActivo(s, k)) return;
     const [a, b] = rangoP(p), sin = sinDe(k), nombre = (p.nombre || "Parqueadero") + (p.lado === "izquierdo" ? " (IZQ)" : " (DER)");
     if (!esCabecera(p)) {
       const ancho = parseFloat(p.ancho) || 0;
+      const ends = p.escalones ? [{ x: a, len: p.anchoIni }, ...p.escalones, { x: b, len: p.anchoFin }] : [{ x: a, len: ancho }, { x: b, len: ancho }];
       piezas.push({ key: k, nombre, medida: "abscisa", desde: a, hasta: b, mult: 1, base: sdRestar([[a, b]], sin),
-        puntos: [{ x: a, len: ancho }, { x: b, len: ancho }].filter(q => q.len > SD_T && !sdContiene(sin, q.x)) });
+        puntos: ends.filter(q => q.len > SD_T && !sdContiene(sin, q.x)) });
     } else {
       // cabecera: sus lados a lo largo del fondo (el de adentro solo si no nace en el eje), el borde
       // del fondo y lo que se sale del lateral frente a la vía
@@ -947,6 +980,24 @@ function calcSardinel(proy) {
 }
 
 // ─── GENERADOR DE TABLA ───────────────────────────────────────────────────────
+// Uniones de parqueaderos laterales del mismo lado: abscisa donde uno termina y otro empieza
+function juntasParq(parqueaderos) {
+  const lat = (parqueaderos || []).filter(p => !esCabecera(p)).map(p => { const a = parseFloat(p.absInicio), b = parseFloat(p.absFin);
+    return isNaN(a) || isNaN(b) ? null : { p, ini: Math.min(a, b), fin: Math.max(a, b) }; }).filter(Boolean);
+  const out = [];
+  lat.forEach(A => lat.forEach(B => {
+    if (A !== B && A.p.lado === B.p.lado && Math.abs(A.fin - B.ini) < 0.001 && B.fin - B.ini > 0.001 && A.fin - A.ini > 0.001)
+      out.push({ abs: A.fin, lado: A.p.lado, antes: A.p, despues: B.p });
+  }));
+  return out;
+}
+// ¿El parqueadero p va en la fila (abs, sub)? Fuera de una unión, siempre; en la unión, el que termina va en la
+// primera fila (sub 0) y el que empieza en la segunda (sub 1 o más: también las lecturas extra de esa abscisa).
+function esParqDeFila(p, juntas, abs, sub) {
+  const j = juntas.find(x => x.lado === p.lado && Math.abs(x.abs - abs) < 0.001 && (x.antes.id === p.id || x.despues.id === p.id));
+  if (!j) return true;
+  return (sub || 0) === 0 ? j.antes.id === p.id : j.despues.id === p.id;
+}
 function generarTabla(proyecto) {
   proyecto = proyCalc(proyecto);
   const {
@@ -985,7 +1036,11 @@ function generarTabla(proyecto) {
   const sd = proyecto.sardinel && proyecto.sardinel.activo ? proyecto.sardinel : null;
   const sdRev = sd ? parseFloat(sd.revelado) || 0 : 0;
   const sdSin = k => sd ? (sd.sin || []).filter(t => t.lado === k).map(sdRango).filter(Boolean) : [];
-  for (const abs of abscisas) {
+  // Dos parqueaderos laterales del mismo lado que se tocan (uno termina donde empieza el otro, ej. uno de 5.00 m
+  // y otro de 5.40 m): esa abscisa va DOS veces, la primera con el que termina y la segunda (sub 1) con el que
+  // empieza. Entre las dos la distancia es 0, así cada volumen usa el ancho de su parqueadero.
+  const juntas = juntasParq(parqueaderos);
+  for (const abs of abscisas) for (const sub of juntas.some(j => Math.abs(j.abs - abs) < 0.001) ? [0, 1] : [0]) {
     // fuera de la vía: solo el parqueadero de cabecera (la vía no existe ahí)
     const fueraVia = abs < rv.ini - 0.0005 || abs > rv.fin + 0.0005;
     const esPI = !fueraVia && pisSet.has(abs);
@@ -1058,6 +1113,7 @@ function generarTabla(proyecto) {
       const pf = parseFloat(p.absFin);
       if (isNaN(pi) || isNaN(pf)) return;
       if (abs < pi - 0.001 || abs > pf + 0.001) return;
+      if (!esParqDeFila(p, juntas, abs, sub)) return;   // en la unión: cada fila con su parqueadero
       esParq = true;
       let cotaParq = null;
       if (esEsquinas(p)) {
@@ -1080,8 +1136,11 @@ function generarTabla(proyecto) {
       } else {
         // C: rasante propia con tramos/PI independientes
         const pR = resolverTodos(p.tramos || []);
-        if (pR.length && pR[0].completo) {
-          cotaParq = calcCotaEnAbscisa(pR, pi, abs);
+        const a0 = p.__a0 !== undefined ? p.__a0 : pi;   // una sección sigue midiendo sus tramos desde el inicio del parqueadero
+        const ci = p.__sec > 1 && Math.abs(abs - pi) < 0.001 ? cotaInicioTramoEn(pR, a0, abs) : null;
+        if (ci !== null && ci !== undefined && !isNaN(ci)) cotaParq = r3(ci);
+        else if (pR.length && pR[0].completo) {
+          cotaParq = calcCotaEnAbscisa(pR, a0, abs);
         } else if (pR.length && !pR[0].completo) {
           // intento con distancia automática si falta
           const distAuto = r3(pf - pi);
@@ -1144,7 +1203,8 @@ function generarTabla(proyecto) {
         const cubre = pq && (() => { const a = parseFloat(pq.absInicio), b = parseFloat(pq.absFin); return abs >= Math.min(a, b) - 0.001 && abs <= Math.max(a, b) + 0.001; })();
         if (pq && cubre && !fueraVia && !esCabecera(pq)) {
           // parqueadero lateral: el sardinel va por su borde de afuera
-          if (sdActivo(sd, "pq:" + pq.id) && !sdDentro(sdSin("pq:" + pq.id), abs)) corona[kP] = mas(cP);
+          const kq = "pq:" + (pq.idBase || pq.id);
+          if (sdActivo(sd, kq) && !sdDentro(sdSin(kq), abs)) corona[kP] = mas(cP);
         } else if (fueraVia) {
           const cab = (parqueaderos || []).find(p => esCabecera(p) && p.lado === sdLado(k) && abs >= parseFloat(p.absInicio) - 0.001 && abs <= parseFloat(p.absFin) + 0.001);
           if (cab && sdActivo(sd, "pq:" + cab.id) && !sdDentro(sdSin("pq:" + cab.id), abs)) {
@@ -1156,6 +1216,7 @@ function generarTabla(proyecto) {
     }
     tabla.push({
       abs,
+      ...(sub ? { sub } : {}),
       absFormato,
       fueraVia,
       corona,
@@ -1539,6 +1600,7 @@ function revisarVia(proy) {
       else if (pq[k] === "" || pq[k] === undefined) { it.push({ n: "r", t: `${q}: falta ${n}.`, ir }); malo = true; }
     });
     if (pq.modo === "independiente") revisarTramos(pq.tramos, q + ", borde de afuera, ", () => ir, it);
+    if (pq.modo === "independiente") (pq.tramos || []).forEach((t, k) => { const m = avisoNumero(t.ancho); if (m) { it.push({ n: "r", t: `${q}: el ancho del tramo ${k + 1} dice ${m}.`, ir }); } });
     if (malo) return;
     const a = parseFloat(pq.absInicio), b = parseFloat(pq.absFin);
     if (a > b + 0.0005) { it.push({ n: "r", t: `${q}: el inicio (${formatoAbscisa(a)}) es mayor que el fin (${formatoAbscisa(b)}).`, ir }); return; }
@@ -1970,7 +2032,7 @@ function ponerTema(t) {
 }
 if (typeof document !== "undefined") { hojaTemas(); const t0 = leerTema(); document.documentElement.setAttribute("data-tema", t0);
   const m0 = document.querySelector('meta[name="theme-color"]'); if (m0) m0.setAttribute("content", TEMAS[t0].colores.barra); }
-const TV_VERSION = "79";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "80";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -2421,12 +2483,12 @@ function calcAreas(proy, tabla) {
     const anchoP = parseFloat(p.ancho) || 0;
     const ext = sobreanchoParq(p), extremos = sobreanchoExtremosParq(p);
     const largoP = !isNaN(pi) && !isNaN(pf) ? r3(Math.abs(pf - pi)) : 0;
-    const largoC = r3(largoP + 2 * extremos);
+    const largoC = r3(largoP + (p.__extN !== undefined ? p.__extN : 2) * extremos);   // una sección: solo sus extremos libres
     const anchoC = r3(anchoP + ext);
     // en este tramo el borde de trabajo es el del parqueadero: no se suma el sobreancho de la vía de ese lado
     // (uno de cabecera no queda al lado de la vía: no descuenta nada)
     const saViaLado = esCabecera(p) ? 0 : p.lado === "izquierdo" ? sg.izq : sg.der;
-    return { p, nombre: p.nombre || "Parqueadero", lado: p.lado, largo: largoP, anchoPlano: anchoP, ext, extremos, largoC, ancho: anchoC,
+    return { p, nombre: (p.nombre || "Parqueadero") + (p.__sec ? " · sección " + p.__sec : ""), lado: p.lado, largo: largoP, anchoPlano: anchoP, ext, extremos, largoC, ancho: anchoC,
       area: r3(largoC * anchoC), areaPlano: r3(largoP * anchoP), descuentoVia: r3(largoP * saViaLado), saViaLado };
   });
   const via = r3(largo * anchoConf - parqs.reduce((s, x) => s + x.descuentoVia, 0));
@@ -2847,7 +2909,7 @@ function svgPlantaReal(d) {
     let o1, o2;
     if (esCabecera(p)) { const k = datosCabecera(p); if (!k.ok) return; o1 = izq ? -k.hasta : k.desde; o2 = izq ? -k.desde : k.hasta; }
     else { const w = parseFloat(p.ancho) || 0, b0 = izq ? A.anchoIzq : A.anchoDer; o1 = izq ? -(b0 + w) : b0; o2 = izq ? -b0 : b0 + w; }
-    formas.push({ pts: franja(lo, hi, o1, o2), fill: GC.parq, stroke: GC.parqBorde, w: 1, dash: "5,3", nombre: (String(p.id).slice(-2) === "~d" ? "" : p.nombreBase || p.nombre || "Parqueadero") });
+    formas.push({ pts: franja(lo, hi, o1, o2), fill: GC.parq, stroke: GC.parqBorde, w: 1, dash: "5,3", nombre: (String(p.id).slice(-2) === "~d" || p.__sec > 1 ? "" : p.nombreBase || p.nombre || "Parqueadero") });
   });
   const todos = formas.flatMap(f => f.pts).concat(V);
   const mnx = Math.min(...todos.map(q => q.x)), mxx = Math.max(...todos.map(q => q.x)), mny = Math.min(...todos.map(q => q.y)), mxy = Math.max(...todos.map(q => q.y));
@@ -2956,7 +3018,7 @@ function svgPlanta(d) {
     const izq = x.p.lado === "izquierdo", a = Math.min(x.ini, x.fin), b = Math.max(x.ini, x.fin);
     const yA = izq ? eY - x.kc.hasta * esc : eY + x.kc.desde * esc, h = x.kc.ancho * esc;
     o.push(`<rect x="${X(a).toFixed(1)}" y="${yA.toFixed(1)}" width="${(X(b) - X(a)).toFixed(1)}" height="${h.toFixed(1)}" fill="${GC.parq}" stroke="${GC.parqBorde}" stroke-dasharray="5,3"/>`);
-    if (!x.p.id || String(x.p.id).slice(-2) !== "~d") o.push(svgT((X(a) + X(b)) / 2, yA + Math.min(h - 4, 13), (x.p.nombreBase || x.p.nombre || "Parqueadero"), `text-anchor="middle" font-size="10" font-weight="bold" fill="#6D4C41"`));
+    if ((!x.p.id || String(x.p.id).slice(-2) !== "~d") && !(x.p.__sec > 1)) o.push(svgT((X(a) + X(b)) / 2, yA + Math.min(h - 4, 13), (x.p.nombreBase || x.p.nombre || "Parqueadero"), `text-anchor="middle" font-size="10" font-weight="bold" fill="#6D4C41"`));
     const e = x.p.__esq;
     if (e) [[e.aF, e.x0, e.A, "A"], [e.aB, e.x0, e.B, "B"], [e.aB, e.x1, e.C, "C"], [e.aF, e.x1, e.D, "D"]].forEach(([ab, xs, c, k]) => {
       if ((izq && xs > 0.0005) || (!izq && xs < -0.0005)) return;   // cada mitad pinta sus esquinas
@@ -3842,7 +3904,7 @@ function TablaResultado({
     }, v != null ? v.toFixed(3) : "");
     const stickyBg = row.esPI ? "#3A3A3A" : row.esParq ? "#3D2A52" : RASANTE_BG;
     return /*#__PURE__*/React.createElement("tr", {
-      key: row.abs
+      key: row.abs + "|" + (row.sub || 0)
     }, /*#__PURE__*/React.createElement("td", {
       style: {
         ...tdS,
@@ -3855,7 +3917,7 @@ function TablaResultado({
         zIndex: 10,
         boxShadow: "2px 0 4px rgba(0,0,0,0.25)"
       }
-    }, row.absFormato, row.esPI && /*#__PURE__*/React.createElement("span", {
+    }, row.absFormato, row.sub ? " (" + (row.sub + 1) + ")" : "", row.esPI && /*#__PURE__*/React.createElement("span", {
       style: {
         marginLeft: 4,
         fontSize: 9,
@@ -4265,7 +4327,7 @@ function TablaLecturas({
     const lect = cota => ai !== null && cota !== null && cota !== undefined ? r3(ai - cota) : null;
     const sinEstacion = ai === null;
     return /*#__PURE__*/React.createElement("tr", {
-      key: row.abs,
+      key: row.abs + "|" + (row.sub || 0),
       style: {
         background: sinEstacion ? "var(--bFDF2E3)" : row.esPI ? "var(--bD5D8DC)" : "var(--bFFFFFF)"
       }
@@ -4360,13 +4422,13 @@ function getSerie(fuenteId, proyecto, tabla) {
   }
   const nn = v => v != null ? v : null;
   if (fuenteId === "tabla__rasante") {
-    return tabla.map(row => ({ abs: row.abs, absFormato: row.absFormato, parqDer: nn(row.parqDerCota), der: nn(row.cotaLatDer), eje: nn(row.cotaEje), izq: nn(row.cotaLatIzq), parqIzq: nn(row.parqIzqCota) }));
+    return tabla.map(row => ({ abs: row.abs, sub: row.sub || 0, absFormato: row.absFormato, parqDer: nn(row.parqDerCota), der: nn(row.cotaLatDer), eje: nn(row.cotaEje), izq: nn(row.cotaLatIzq), parqIzq: nn(row.parqIzqCota) }));
   }
   if (fuenteId.startsWith("tabla__")) {
     const capaNombre = fuenteId.replace("tabla__", "");
     return tabla.map(row => {
       const c = (row.capas || []).find(x => x.nombre === capaNombre);
-      return { abs: row.abs, absFormato: row.absFormato, parqDer: nn(c && c.parqDer), der: nn(c && c.der), eje: nn(c && c.eje), izq: nn(c && c.izq), parqIzq: nn(c && c.parqIzq) };
+      return { abs: row.abs, sub: row.sub || 0, absFormato: row.absFormato, parqDer: nn(c && c.parqDer), der: nn(c && c.der), eje: nn(c && c.eje), izq: nn(c && c.izq), parqIzq: nn(c && c.parqIzq) };
     });
   }
   return [];
@@ -4422,9 +4484,11 @@ function sobreanchoCapaParq(proy, pq, nombre) {
 }
 // Parqueadero de un lado que cubre la abscisa (para el ancho de cada sección de volumen)
 // cab: true = solo de cabecera, false = solo laterales, undefined = cualquiera (laterales primero)
-function parqEn(proy, lado, abs, cab) {
-  const ps = (proyCalc(proy).parqueaderos || []).filter(p => p.lado === lado && (cab === undefined || esCabecera(p) === cab));
-  const cubre = p => { const a = parseFloat(p.absInicio), b = parseFloat(p.absFin); return !isNaN(a) && !isNaN(b) && abs >= Math.min(a, b) - 0.001 && abs <= Math.max(a, b) + 0.001; };
+// sub: en la unión de dos parqueaderos (abscisa repetida), 0 = el que termina, 1 o más = el que empieza
+function parqEn(proy, lado, abs, cab, sub) {
+  const todos = proyCalc(proy).parqueaderos || [], juntas = juntasParq(todos);
+  const ps = todos.filter(p => p.lado === lado && (cab === undefined || esCabecera(p) === cab));
+  const cubre = p => { const a = parseFloat(p.absInicio), b = parseFloat(p.absFin); return !isNaN(a) && !isNaN(b) && abs >= Math.min(a, b) - 0.001 && abs <= Math.max(a, b) + 0.001 && esParqDeFila(p, juntas, abs, sub); };
   return ps.find(p => !esCabecera(p) && cubre(p)) || ps.find(cubre) || ps.find(p => !esCabecera(p)) || ps[0];
 }
 
@@ -4492,7 +4556,7 @@ function calcVolumen(vol, proyecto, tabla) {
     const abs = pSup.abs, fuera = abs < rv.ini - 0.0005 || abs > rv.fin + 0.0005;
     const D = { parqDer: diff("parqDer"), der: diff("der"), eje: diff("eje"), izq: diff("izq"), parqIzq: diff("parqIzq") };
     // de qué tipo es el parqueadero de cada lado en esta abscisa
-    const cubre = (lado, cab) => { const pq = parqEn(proyecto, lado, abs, cab); if (!pq) return null; const a = parseFloat(pq.absInicio), b = parseFloat(pq.absFin);
+    const cubre = (lado, cab) => { const pq = parqEn(proyecto, lado, abs, cab, pSup.sub); if (!pq) return null; const a = parseFloat(pq.absInicio), b = parseFloat(pq.absFin);
       return !isNaN(a) && !isNaN(b) && abs >= Math.min(a, b) - 0.001 && abs <= Math.max(a, b) + 0.001 ? pq : null; };
     // parqueadero de cabecera de cada lado y qué puntos de la sección ocupa
     const anchoLatV = lado => parseFloat(((lado === "izquierdo" ? proyecto.lateralIzq : proyecto.lateralDer) || {}).ancho) || 0;
@@ -4511,7 +4575,7 @@ function calcVolumen(vol, proyecto, tabla) {
       //        si no, el sobreancho de la vía de ese lado.
       const ladoAncho = (lado, dParq, saVia, escrito) => {
         if (dParq === null) return saVia;
-        const pq = parqEn(proyecto, lado, abs, false);
+        const pq = parqEn(proyecto, lado, abs, false, pSup.sub);
         const anchoP = parseFloat(pq && pq.ancho) || 0;
         const saP = escrito ? saVia : (S.capa ? sobreanchoCapaParq(proyecto, pq, S.capa) : 0);
         return anchoP + saP;
@@ -4820,9 +4884,11 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
       headerRows.add(pushRow(["PARQUEADERO", "ABS INICIO", "ABS FIN", "ANCHO (m)", "SOBREANCHO EXTERIOR (m)", "SOBREANCHO EXTREMOS (m)"]));
       parqsX.forEach(pq => {
         const r = row;
-        pushRow([(pq.nombre || "Parqueadero") + (pq.lado === "izquierdo" ? " (IZQ" : " (DER") + (esCabecera(pq) ? ", CABECERA " + (pq.ubicacion === "inicio" ? "INICIO" : "FIN") + ")" : ")"), ABS(parseFloat(pq.absInicio)), ABS(parseFloat(pq.absFin)),
+        pushRow([(pq.nombre || "Parqueadero") + (pq.lado === "izquierdo" ? " (IZQ" : " (DER") + (esCabecera(pq) ? ", CABECERA " + (pq.ubicacion === "inicio" ? "INICIO" : "FIN") + ")" : ")") + (pq.__sec ? " · sección " + pq.__sec : ""), ABS(parseFloat(pq.absInicio)), ABS(parseFloat(pq.absFin)),
           parseFloat(pq.ancho) || 0, sobreanchoParq(pq), sobreanchoExtremosParq(pq)]);
-        R.parq[pq.id] = { pq, L: `ABS(${ref(2, r)}-${ref(1, r)})`, A: ref(3, r), EXT: ref(4, r), EXTR: ref(5, r), esp: {}, sa: {} };
+        // extremos libres: 2 en un parqueadero entero; en una sección, solo el inicio y/o el fin del parqueadero
+        const nE = pq.__extN !== undefined ? pq.__extN : 2, EXTR = ref(5, r);
+        R.parq[pq.id] = { pq, L: `ABS(${ref(2, r)}-${ref(1, r)})`, A: ref(3, r), EXT: ref(4, r), EXTR, LE: nE === 2 ? `${`ABS(${ref(2, r)}-${ref(1, r)})`}+2*${EXTR}` : nE === 1 ? `${`ABS(${ref(2, r)}-${ref(1, r)})`}+${EXTR}` : `ABS(${ref(2, r)}-${ref(1, r)})`, esp: {}, sa: {} };
       });
       blank();
     }
@@ -4897,13 +4963,13 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
           const c = b.cK + j;
           celdas[k] = ref(c, r);
           // parqueadero con estructura propia: su cota va como valor (sus espesores son otros)
-          const pq = k === "parqDer" ? parqEn(proyecto, "derecho", trow.abs) : k === "parqIzq" ? parqEn(proyecto, "izquierdo", trow.abs) : null;
+          const pq = k === "parqDer" ? parqEn(proyecto, "derecho", trow.abs, undefined, trow.sub) : k === "parqIzq" ? parqEn(proyecto, "izquierdo", trow.abs, undefined, trow.sub) : null;
           const conFormula = b.espRef && !(pq && pq.estructura === "propia") && !(trow.propia && trow.propia[k]);
           const arriba = conFormula ? bloques[b.desde] : null;
           const vArriba = arriba ? arriba.get(trow)[k] : null;
           fila[c] = conFormula && vArriba != null ? F(`${ref(arriba.cK + j, r)}-${b.espRef}`, v) : v;
         });
-        mapa.set(claveAbs(trow.abs, 0), celdas);
+        mapa.set(claveAbs(trow.abs, trow.sub), celdas);
       });
       pushRow(fila);
     });
@@ -4954,7 +5020,7 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
         const cn = cotas[i], r = row, fila = [];
         fila[cA] = ABS(lec.abs);
         fila[cL0] = F(ref(cA, r), lec.abs, XL.abscisa);
-        fila[cLEst] = est ? (est.nombre || "") + (lec.sub ? " · extra" : "") : "";
+        fila[cLEst] = est ? (est.nombre || "") + (esLecturaExtra(lec) ? " · extra" : "") : "";
         const ai = est && aiRef[est.id] ? aiRef[est.id] : null;
         fila[cLAI] = ai && cn.ai != null ? F(ai, cn.ai) : "";
         const celdas = {};
@@ -5037,7 +5103,7 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
         const formulaAncho = f => {
           const lado = (nombreLado, tiene, saVia, pSaVia, escrito) => {
             if (!tiene) return { f: pSaVia, v: saVia };
-            const pq = parqEn(proyecto, nombreLado, f.abs, !!f.cab), P = pq && R.parq[pq.id];
+            const pq = parqEn(proyecto, nombreLado, f.abs, !!f.cab, f.sub), P = pq && R.parq[pq.id];
             if (!P) return null;
             const anchoP = parseFloat(pq.ancho) || 0;
             if (escrito) return { f: `${P.A}+${pSaVia}`, v: anchoP + saVia };
@@ -5202,7 +5268,7 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
     const parqs = Object.values(R.parq);
     const ladoSA = (P, izq, der) => P.pq.lado === "izquierdo" ? izq : der;
     if (!usaManual) P_("área conformada|m²").f.push(`${R.L}*(${R.A}+${R.SI}+${R.SD})`
-      + parqs.map(P => (esCabecera(P.pq) ? "" : `-${P.L}*${ladoSA(P, R.SI, R.SD)}`) + `+(${P.L}+2*${P.EXTR})*(${P.A}+${P.EXT})`).join(""));
+      + parqs.map(P => (esCabecera(P.pq) ? "" : `-${P.L}*${ladoSA(P, R.SI, R.SD)}`) + `+(${P.LE})*(${P.A}+${P.EXT})`).join(""));
     capasViaX.forEach(c => {
       const k = claveCapa(c.nombre);
       if (excl.includes(k) || R.esp[k] === undefined) return;
@@ -5222,7 +5288,7 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
         if (propia) sp = P.sa[k];
         else if (c.sobreancho === "general") sp = P.EXT;
         else if (c.sobreancho === "propio") sp = ladoSA(P, R.saI[k], R.saD[k]);
-        P_(k + "|m³").areas.push([sp === "0" ? `${P.L}*${P.A}` : `IF(${sp}>0,${P.L}+2*${P.EXTR},${P.L})*(${P.A}+${sp})`, esp]);
+        P_(k + "|m³").areas.push([sp === "0" ? `${P.L}*${P.A}` : `IF(${sp}>0,${P.LE},${P.L})*(${P.A}+${sp})`, esp]);
       });
     });
     // a una capa se le suma un volumen o un relleno: queda explicado debajo (capa teórica + cada cosa)
@@ -8246,10 +8312,14 @@ function EditorParq({
   }, "✕")), /*#__PURE__*/React.createElement(CamposTramo, {
     t: t,
     onChange: nt => updT(i, nt)
-  }), !isNaN(pi) && React.createElement(FranjaAbscisa, { f: absParq.filas[i], color: "var(--tA78BFA)", fondo: "var(--bF5F3FF)" }))), !isNaN(pi) && React.createElement(PieAbscisas, { fin: absParq.fin, incompleto: absParq.incompleto, nombre: "Parqueadero", queMeta: "debe llegar a", meta: pf, color: "var(--t4C1D95)" }), /*#__PURE__*/React.createElement(Btn, {
+  }), React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 6, flexWrap: "wrap" } },
+    React.createElement(Label, null, "Ancho de este tramo (m)"),
+    React.createElement(Input, { value: t.ancho || "", placeholder: p.ancho || "", inputMode: "decimal", "aria-label": "Ancho del tramo " + (i + 1), onChange: e => updT(i, { ...t, ancho: e.target.value }), style: { width: 110 } }),
+    React.createElement("span", { style: { fontSize: 11.5, color: C.muted } }, String(t.ancho || "").trim() ? (i > 0 && Math.abs(anchoTramoParq(t, p) - anchoTramoParq(p.tramos[i - 1], p)) > 0.0005 ? "cambia el ancho: la abscisa del PI va dos veces" : "") : "vacío = el ancho del parqueadero")),
+  !isNaN(pi) && React.createElement(FranjaAbscisa, { f: absParq.filas[i], color: "var(--tA78BFA)", fondo: "var(--bF5F3FF)" }))), !isNaN(pi) && React.createElement(PieAbscisas, { fin: absParq.fin, incompleto: absParq.incompleto, nombre: "Parqueadero", queMeta: "debe llegar a", meta: pf, color: "var(--t4C1D95)" }), /*#__PURE__*/React.createElement(Btn, {
     small: true,
     color: C.success,
-    onClick: () => upd("tramos", [...p.tramos, tramoVacio()])
+    onClick: () => { const u = p.tramos[p.tramos.length - 1]; upd("tramos", [...p.tramos, { ...tramoVacio(), ...(u && String(u.ancho || "").trim() ? { ancho: u.ancho } : {}) }]); }
   }, "+ Tramo PI")), React.createElement(EstructuraParq, { p: p, capasVia: capasVia, onChange: onChange }), p.modo === "independiente" && React.createElement(CalcCoordenadas, { label: "PARQUEADERO", prefijo: "Tramo", nTramos: p.tramos.length, puntos: p.coords || [], onChange: function(v) { upd("coords", v); }, onAplicar: function(ds) { upd("tramos", aplicarDistancias(p.tramos, ds)); }}),
   p.modo !== "independiente" && !cab && React.createElement(CalcCoordenadas, { label: "PARQUEADERO", prefijo: "Tramo", puntos: p.coords || [], onChange: function(v) { upd("coords", v); },
     ayuda: "Escribe las coordenadas del inicio (P1) y del fin del parqueadero, siguiendo el borde si quiebra. La suma de las distancias es el largo, y se pasa a la abscisa fin = abscisa inicio + largo.",
@@ -8288,6 +8358,8 @@ function resolverAI(lecturas, estaciones, idx) {
 // Nivelaciones antiguas (sin abs guardada) se alinean por posición, como antes.
 // Una abscisa puede tener lecturas extra (sub = 1, 2…) cuando hay un cambio brusco de nivel:
 // la primera cierra el tramo anterior y la última abre el siguiente.
+// lectura extra = otra lectura en la misma abscisa; la segunda fila de una unión de parqueaderos es de la tabla, no extra
+const esLecturaExtra = l => (l.sub || 0) > ((l.row && l.row.sub) || 0);
 const lecturaEnBlanco = (abs, sub) => ({ abs, sub: sub || 0, estacionId: null, parqDer: "", der: "", eje: "", izq: "", parqIzq: "" });
 const CAMPOS_LECTURA = ["parqDer", "der", "eje", "izq", "parqIzq"];
 const hoyISO = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
@@ -8298,9 +8370,11 @@ function alinearLecturas(niv, tabla) {
   const out = [];
   tabla.forEach((row, i) => {
     const deEsta = conAbs ? lecs.filter(l => l && typeof l.abs === "number" && Math.abs(l.abs - row.abs) < 0.0005) : (lecs[i] ? [lecs[i]] : []);
-    const principal = deEsta.find(l => !l.sub) || null;
-    out.push({ ...(principal || lecturaEnBlanco(row.abs)), abs: row.abs, sub: 0, row });
-    deEsta.filter(l => l.sub > 0).sort((a, b) => a.sub - b.sub).forEach(l => out.push({ ...l, abs: row.abs, row }));
+    // abscisa repetida en la tabla (unión de dos parqueaderos): la fila sub 1 toma la lectura (2) de la cartera
+    const sub = row.sub || 0, ultima = !tabla[i + 1] || Math.abs(tabla[i + 1].abs - row.abs) >= 0.0005;
+    const principal = deEsta.find(l => (l.sub || 0) === sub) || null;
+    out.push({ ...(principal || lecturaEnBlanco(row.abs, sub)), abs: row.abs, sub, row });
+    if (ultima) deEsta.filter(l => l.sub > sub).sort((a, b) => a.sub - b.sub).forEach(l => out.push({ ...l, abs: row.abs, row }));
   });
   return out;
 }
@@ -8339,14 +8413,14 @@ function avanceNivelacion(niv, tabla) {
     let hay = 0;
     CAMPOS_LECTURA.forEach(k => {
       if (d[k] === null || d[k] === undefined) return;
-      if (!l.sub) total++;
-      if (hayLectura(l[k])) { hay++; if (!l.sub) leidos++; }
+      if (!esLecturaExtra(l)) total++;
+      if (hayLectura(l[k])) { hay++; if (!esLecturaExtra(l)) leidos++; }
     });
     if (hay) ultima = { i, abs: l.abs, sub: l.sub, fecha: l.fecha || "" };
   });
   // dónde sigue: la primera abscisa con puntos pendientes después de la última leída
   lecs.forEach((l, i) => {
-    if (siguiente || l.sub || (ultima && i <= ultima.i)) return;
+    if (siguiente || esLecturaExtra(l) || (ultima && i <= ultima.i)) return;
     const d = puntosDiseno(l.row);
     if (CAMPOS_LECTURA.some(k => d[k] !== null && d[k] !== undefined && !hayLectura(l[k]))) siguiente = { i, abs: l.abs };
   });
@@ -8441,7 +8515,7 @@ const FilaLectura = React.memo(function FilaLectura({ lec, i, nivId, acc, estAct
     React.createElement("td", { style: { ...tdS, ...STICKY_ABS, fontFamily: "monospace", fontWeight: 700, background: RASANTE_BG, color: RASANTE_TEXT, whiteSpace: "nowrap", borderLeft: "4px solid " + colorBloque } },
       formatoAbscisa(lec.abs), lec.sub ? " (" + (lec.sub + 1) + ")" : "",
       !pendiente && React.createElement("span", { style: { color: "var(--t7FB77E)", marginLeft: 4 } }, "✓"),
-      lec.sub
+      esLecturaExtra(lec)
         ? React.createElement("button", { className: "tv-mini", onClick: () => A().quitarLectura(i), title: "Quitar lectura extra", style: { marginLeft: 6, border: "none", background: "none", color: "var(--tFF8A80)", cursor: "pointer", fontWeight: 700 } }, "✕")
         : React.createElement("button", { className: "tv-mini", onClick: () => A().agregarLectura(i), title: "Otra lectura en esta abscisa", style: { marginLeft: 6, border: "1px solid #FBBF2488", borderRadius: 4, background: "none", color: "var(--tFBBF24)", cursor: "pointer", fontWeight: 700, padding: "0 5px" } }, "＋")),
     React.createElement("td", { style: { ...tdS, whiteSpace: "nowrap", minWidth: 110 } },

@@ -41,6 +41,7 @@ const PRUEBAS = [
   ['agua en la planta real', 'plantaagua', ''],
   ['auto acotar y cuadro de coordenadas', 'autoacotar', '../out/autoacotar'],
   ['excavación con terreno bajo la cota teórica', 'cortesbajo', ''],
+  ['dos parqueaderos que se tocan (abscisa repetida)', 'escalon', '../out/escalon'],
   ['tabla de puntos (PC)', 'tablapuntos', '../out/tablapuntos'],
   ['tabla de puntos (celular)', 'tablapuntos', '../out/tablapuntos_m', { W: '390' }],
   ['Excel tema Claro', 'excel_tema', '../out/xl_claro', { TEMA: 'claro' }],
@@ -63,6 +64,7 @@ const ESPERA = {
   plantaagua: ['flechas de agua en la planta: 26 | punto bajo: true'],
   recorrido: ['datos iguales: true'],
   cortesbajo: ['corte 1: 74.25 | corte 2: 246.75 | suma: 321 | terreno → sitio: 321'],
+  escalon: ['0+041.500 (2) 955.21', '41.5(2) 0.213 11.4 2.428 0 0', 'total app: 11.668 | a mano: 11.668 | IGUALES', 'Parqueadero 1 200 + Parqueadero 2 21.06 = 221.06', '0+041.500 (2)', '(2) 955.21 | total 11.668 (igual a dos parqueaderos)', 'Parqueadero 1 · sección 1 40.5×5.5=222.75 + Parqueadero 1 · sección 2 4.4×5.9=25.96', 'sardinel del parqueadero: 54.7'],
   tablapuntos: ['Dibujar todos (6 listos · 2 por revisar)', 'nuevos: P3, P4, BM1, P6, BM1, P10, pl 6 abierta | sig: 11', 'quedan en la tabla: P7, P8',
     'nuevos: P7, P8, pl | tabla abierta: false | sig: 11', 'deshacer quita 3 objetos', 'nuevos: E1, P12, E3, pl 3 cerrada | sig: 13', 'Norte/Este cortados: 0', 'barra de arriba cabe: true', 'filas en una línea: true | columna de cota: 0'],
   autoacotar: ['"Área 187.000 m²", "Perím. 56.000 m"', '"R 5.000", "Cuerda 10.000", "Arco 15.708"', 'pie: Área 187.000 m²   Perímetro 56.000 m', 'movido 25 m al este: 25.000 0.000'],
@@ -81,7 +83,7 @@ for (const [nombre, f, salida, env] of PRUEBAS.filter(x => !solo || solo.include
   if (!ok) console.log('      ' + (r.error ? 'se pasó del tiempo' : texto.split('\n').filter(l => MALO.test(l)).slice(0, 3).join('\n      ') || (faltan.length ? 'no salió: ' + faltan.join(' · ') : 'terminó con código ' + r.status)));
 }
 // fórmulas del Excel recalculadas en LibreOffice = valores de la app (uno con parqueaderos y sobreancho, uno de cabecera)
-for (const x of ['extremos2_1', 'extremos2_2', 'cabecera']) {
+for (const x of ['extremos2_1', 'extremos2_2', 'cabecera', 'escalon', 'escalon_b']) {
   const f = '../out/' + x + '.xlsx'; if (!fs.existsSync(f) || fs.statSync(f).mtimeMs < inicio) continue; // solo los de esta corrida
   const r = spawnSync('bash', ['lo_cmp.sh', f], { encoding: 'utf8', timeout: 240000 });
   const ok = / 0 differ/.test(r.stdout || ''), nombre = 'LibreOffice = app (' + x + ')';
