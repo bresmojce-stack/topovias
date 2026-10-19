@@ -2032,7 +2032,7 @@ function ponerTema(t) {
 }
 if (typeof document !== "undefined") { hojaTemas(); const t0 = leerTema(); document.documentElement.setAttribute("data-tema", t0);
   const m0 = document.querySelector('meta[name="theme-color"]'); if (m0) m0.setAttribute("content", TEMAS[t0].colores.barra); }
-const TV_VERSION = "82";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "83";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -3518,6 +3518,35 @@ window.addEventListener("beforeinstallprompt", function(e) {
 const esIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const appInstalada = () => (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
 
+// Botón "Instalar" al final de la pantalla cuando la app está abierta en el navegador (instalada no sale).
+// Si el navegador ya avisó que se puede instalar, abre su ventana; si no (iPhone, o Chrome aún no avisa), explica el paso.
+function BotonInstalarFinal() {
+  const [instalable, setInstalable] = React.useState(!!window.__tvInstalar);
+  const [instalada, setInstalada] = React.useState(appInstalada());
+  const [ayuda, setAyuda] = React.useState(false);
+  React.useEffect(() => {
+    const si = () => setInstalable(true), ya = () => setInstalada(true);
+    window.addEventListener("tv-instalable", si); window.addEventListener("appinstalled", ya);
+    return () => { window.removeEventListener("tv-instalable", si); window.removeEventListener("appinstalled", ya); };
+  }, []);
+  if (instalada) return null;
+  const instalar = async () => {
+    const ev = window.__tvInstalar;
+    if (!ev) { setAyuda(!ayuda); return; }
+    ev.prompt();
+    try { const r = await ev.userChoice; if (r && r.outcome === "accepted") setInstalada(true); } catch (e) {}
+    window.__tvInstalar = null; setInstalable(false);
+  };
+  return React.createElement("div", { className: "tv-instalar-final", style: { marginTop: 24, padding: "16px 14px", borderTop: `1px solid ${C.border}`, textAlign: "center" } },
+    React.createElement("button", { onClick: instalar, className: "tv-btn", "aria-expanded": instalable ? undefined : ayuda,
+      style: { background: "var(--c-btn-success)", color: "#fff", border: "none", borderRadius: 10, padding: "12px 22px", fontSize: 15, fontWeight: 800, cursor: "pointer", minHeight: 48 } },
+      "📲 Instalar TopoVías en este equipo"),
+    React.createElement("div", { style: { fontSize: 12, color: C.muted, marginTop: 6 } }, "Queda como una app: se abre sin el navegador y funciona sin internet."),
+    ayuda && !instalable && React.createElement("div", { role: "note", style: { fontSize: 13, color: C.text, marginTop: 10, lineHeight: 1.5, maxWidth: 460, marginLeft: "auto", marginRight: "auto" } },
+      esIOS()
+        ? "En iPhone/iPad: abre la app en Safari, toca Compartir ⬆ y luego \"Agregar a inicio\"."
+        : "Toca los tres puntos (⋮) del navegador, arriba a la derecha, y elige \"Instalar app\" o \"Agregar a la pantalla principal\". Si no sale, la app ya está instalada (búscala entre tus apps) o estás en una pestaña de incógnito."));
+}
 function crearCopiaSeguridad(obras, proyectos) {
   const datos = { app: "TopoVias", version: 1, fecha: new Date().toISOString(), obras, vias: proyectos };
   const f = new Date();
@@ -9376,7 +9405,8 @@ function App() {
               onArchivo: setArchivo,
               onRestaurar: restaurarCopia,
               onHerramienta: id => { setNav({ vista: id, obraId: null }); window.scrollTo(0, 0); }
-            })),
+            }),
+        nav.vista !== "dibujo" && React.createElement(BotonInstalarFinal)),
       archivo && React.createElement(VentanaArchivo, { archivo: archivo, onClose: () => setArchivo(null) }), avisoGenerando, avisoCorto, nav.vista !== "dibujo" && barraDeshacer);
   }
 
