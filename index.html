@@ -1970,7 +1970,7 @@ function ponerTema(t) {
 }
 if (typeof document !== "undefined") { hojaTemas(); const t0 = leerTema(); document.documentElement.setAttribute("data-tema", t0);
   const m0 = document.querySelector('meta[name="theme-color"]'); if (m0) m0.setAttribute("content", TEMAS[t0].colores.barra); }
-const TV_VERSION = "77";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "78";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -4471,13 +4471,24 @@ function calcVolumen(vol, proyecto, tabla) {
   const rv = rangoVia(proyecto);
   // con signo (ej. sobre-excavación): negativo = faltó llegar a la cota teórica
   const pos = v => vol.conSigno ? v : Math.max(0, v);
+  // Excavación en dos cortes, punto por punto: el corte 1 no baja de 0 (si el terreno queda por debajo de la
+  // cota teórica, ahí no hay corte) y el corte 2 arranca en la más baja entre la cota teórica y el terreno.
+  // Así corte 1 + corte 2 = terreno natural − excavación en sitio en cada punto.
+  const serTope = vol.fuenteTope ? getSerie(vol.fuenteTope, proyecto, tabla) : null;
+  const enAbs = (ser, abs, sub) => { const ig = ser.filter(p => Math.abs(p.abs - abs) < 0.0005); return ig.find(p => (p.sub || 0) === (sub || 0)) || ig[ig.length - 1] || null; };
   const marcadas = guia.map(pG => {
     const igual = otra.filter(p => Math.abs(p.abs - pG.abs) < 0.0005);
     const pO = igual.find(p => (p.sub || 0) === (pG.sub || 0)) || igual[igual.length - 1] ||
       otra.reduce((best, p) => best === null || Math.abs(p.abs - pG.abs) < Math.abs(best.abs - pG.abs) ? p : best, null);
     if (!pO || Math.abs(pO.abs - pG.abs) > 1.0) return null;
     const pSup = guiaEsInf ? { ...pO, abs: pG.abs, absFormato: pG.absFormato, sub: pG.sub } : pG, pInf = guiaEsInf ? pG : pO;
-    const diff = k => pSup[k] !== null && pInf[k] !== null ? r3(pSup[k] - pInf[k]) : null;
+    const pTope = serTope ? enAbs(serTope, pG.abs, pG.sub) : null;
+    const diff = k => {
+      if (pSup[k] === null || pInf[k] === null) return null;
+      const sup = pTope && pTope[k] !== null && pTope[k] !== undefined ? Math.min(pSup[k], pTope[k]) : pSup[k];
+      const d = r3(sup - pInf[k]);
+      return vol.soloPositivo ? Math.max(0, d) : d;
+    };
     const abs = pSup.abs, fuera = abs < rv.ini - 0.0005 || abs > rv.fin + 0.0005;
     const D = { parqDer: diff("parqDer"), der: diff("der"), eje: diff("eje"), izq: diff("izq"), parqIzq: diff("parqIzq") };
     // de qué tipo es el parqueadero de cada lado en esta abscisa
@@ -4575,6 +4586,8 @@ function calcVolumen(vol, proyecto, tabla) {
 //     Con cota teórica y excavación en sitio se calcula en DOS CORTES:
 //       Corte 1: terreno natural → cota teórica
 //       Corte 2: cota teórica → excavación en sitio (sobre-excavación; negativo = faltó excavar)
+//       Punto por punto: el corte 1 no baja de 0 y, si el terreno queda por debajo de la cota teórica,
+//       el corte 2 arranca en el terreno (lo que hay entre los dos es relleno, no excavación)
 //   Relleno (de abajo hacia arriba): desde la superficie medida (ej. excavación en sitio)
 //     hasta la cota de diseño de la capa (ej. cota de roca).
 //   Entre dos superficies: cualquier par (superior − inferior), como antes.
@@ -4592,8 +4605,8 @@ function partesVolumen(vol) {
     const ex = { ...base, capaSA: "Excavación" };
     if (!tn) return [];
     if (teo && sitio) return [
-      { ...ex, clave: "corte1", nombre: "Corte 1: terreno natural → cota teórica", fuenteSup: tn, fuenteInf: teo },
-      { ...ex, clave: "corte2", nombre: "Corte 2: sobre-excavación (cota teórica → excavación en sitio)", fuenteSup: teo, fuenteInf: sitio, conSigno: true }];
+      { ...ex, clave: "corte1", nombre: "Corte 1: terreno natural → cota teórica", fuenteSup: tn, fuenteInf: teo, soloPositivo: true },
+      { ...ex, clave: "corte2", nombre: "Corte 2: sobre-excavación (cota teórica → excavación en sitio)", fuenteSup: teo, fuenteInf: sitio, conSigno: true, fuenteTope: tn }];
     if (teo) return [{ ...ex, clave: "corte1", nombre: "Terreno natural → cota teórica", fuenteSup: tn, fuenteInf: teo }];
     if (sitio) return [{ ...ex, clave: "real", nombre: "Terreno natural → excavación en sitio", fuenteSup: tn, fuenteInf: sitio }];
     return [];
@@ -5067,12 +5080,13 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
         boldRows.add(rT);
         headerRows.add(rH);
         const serS = getSerie(parte.fuenteSup, proyecto, tabla), serI = getSerie(parte.fuenteInf, proyecto, tabla);
+        const serT = parte.fuenteTope ? getSerie(parte.fuenteTope, proyecto, tabla) : null;
         const r0 = row;
         res.filas.forEach((f, fi) => {
           const r = row, fila = [];
           fila[0] = ABS(f.abs);
           fila[aI] = F(ref(0, r), f.abs, XL.abscisa); fila[aC] = F(ref(0, r), f.abs, XL.abscisa);   // la misma abscisa en cada bloque
-          const pS = valorSuperficie(serS, f.abs, f.sub), pI = valorSuperficie(serI, f.abs, f.sub);
+          const pS = valorSuperficie(serS, f.abs, f.sub), pI = valorSuperficie(serI, f.abs, f.sub), pT = serT ? valorSuperficie(serT, f.abs, f.sub) : null;
           const dif = { parqDer: f.dParqDer, der: f.dDer, eje: f.dEje, izq: f.dIzq, parqIzq: f.dParqIzq };
           Kv.forEach((k, j) => {
             const vs = pS ? pS[k] : null, vi = pI ? pI[k] : null;
@@ -5082,7 +5096,11 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
             const fuera = (f.cab || f.partida) && dif[k] == null;
             fila[cS + j] = vs == null || fuera ? "" : rs ? F(rs, vs) : vs;
             fila[cI + j] = vi == null || fuera ? "" : ri ? F(ri, vi) : vi;
-            fila[cC + j] = dif[k] == null || vs == null || vi == null ? "" : F(`ROUND(${ref(cS + j, r)}-${ref(cI + j, r)},3)`, dif[k]);
+            // corte 2: desde la más baja entre la cota teórica y el terreno natural; corte 1: no baja de 0
+            const vt = pT ? pT[k] : null, rt = vt != null ? celdaSuperficie(parte.fuenteTope, f.abs, pT.sub, k) : null;
+            const sup = vt != null ? `MIN(${ref(cS + j, r)},${rt || vt})` : ref(cS + j, r);
+            const resta = `${sup}-${ref(cI + j, r)}`;
+            fila[cC + j] = dif[k] == null || vs == null || vi == null ? "" : F(`ROUND(${parte.soloPositivo ? `MAX(0,${resta})` : resta},3)`, dif[k]);
           });
           fila[cP] = F(`ROUND(AVERAGE(${ref(cC, r)}:${ref(cC + n - 1, r)}),3)`, f.prom);
           fila[cAn] = formulaAncho(f);

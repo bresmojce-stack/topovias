@@ -40,6 +40,7 @@ const PRUEBAS = [
   ['coordenadas de los laterales', 'latcoords', ''],
   ['agua en la planta real', 'plantaagua', ''],
   ['auto acotar y cuadro de coordenadas', 'autoacotar', '../out/autoacotar'],
+  ['excavación con terreno bajo la cota teórica', 'cortesbajo', ''],
   ['Excel tema Claro', 'excel_tema', '../out/xl_claro', { TEMA: 'claro' }],
   ['Excel tema Agua', 'excel_tema', '../out/xl_agua', { TEMA: 'agua' }],
 ];
@@ -59,6 +60,7 @@ const ESPERA = {
   latcoords: ['cerrados → tarjetas de coordenadas visibles: 1', 'abierto el derecho → 2'],
   plantaagua: ['flechas de agua en la planta: 26 | punto bajo: true'],
   recorrido: ['datos iguales: true'],
+  cortesbajo: ['corte 1: 74.25 | corte 2: 246.75 | suma: 321 | terreno → sitio: 321'],
   autoacotar: ['"Área 187.000 m²", "Perím. 56.000 m"', '"R 5.000", "Cuerda 10.000", "Arco 15.708"', 'pie: Área 187.000 m²   Perímetro 56.000 m', 'movido 25 m al este: 25.000 0.000'],
 };
 
