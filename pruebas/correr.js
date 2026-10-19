@@ -39,6 +39,7 @@ const PRUEBAS = [
   ['seis temas', 'temas6', ''],
   ['coordenadas de los laterales', 'latcoords', ''],
   ['agua en la planta real', 'plantaagua', ''],
+  ['auto acotar y cuadro de coordenadas', 'autoacotar', '../out/autoacotar'],
   ['Excel tema Claro', 'excel_tema', '../out/xl_claro', { TEMA: 'claro' }],
   ['Excel tema Agua', 'excel_tema', '../out/xl_agua', { TEMA: 'agua' }],
 ];
@@ -58,6 +59,7 @@ const ESPERA = {
   latcoords: ['cerrados → tarjetas de coordenadas visibles: 1', 'abierto el derecho → 2'],
   plantaagua: ['flechas de agua en la planta: 26 | punto bajo: true'],
   recorrido: ['datos iguales: true'],
+  autoacotar: ['"Área 187.000 m²", "Perím. 56.000 m"', '"R 5.000", "Cuerda 10.000", "Arco 15.708"', 'pie: Área 187.000 m²   Perímetro 56.000 m', 'movido 25 m al este: 25.000 0.000'],
 };
 
 const solo = process.env.SOLO ? process.env.SOLO.split(',') : null;
