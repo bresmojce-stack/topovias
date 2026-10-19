@@ -825,7 +825,7 @@ function seccionesParq(p) {
   grupos[grupos.length - 1].fin = af;
   const n = grupos.length;
   return grupos.map((g, k) => ({ ...p, id: k ? p.id + "~s" + (k + 1) : p.id, idBase: p.id, nombreBase: p.nombre, absInicio: String(r3(g.ini)), absFin: String(r3(g.fin)),
-    ancho: String(g.w), __a0: a0, __sec: k + 1, __nSec: n, __extN: (k === 0 ? 1 : 0) + (k === n - 1 ? 1 : 0) }));
+    ancho: String(g.w), __a0: a0, __sec: k + 1, ...(k ? { __anchoAnt: grupos[k - 1].w } : {}), __nSec: n, __extN: (k === 0 ? 1 : 0) + (k === n - 1 ? 1 : 0) }));
 }
 // cota con la que EMPIEZA el tramo que nace en la abscisa abs (en un cambio de ancho la segunda fila lleva esa)
 function cotaInicioTramoEn(rs, a0, abs) {
@@ -2032,7 +2032,7 @@ function ponerTema(t) {
 }
 if (typeof document !== "undefined") { hojaTemas(); const t0 = leerTema(); document.documentElement.setAttribute("data-tema", t0);
   const m0 = document.querySelector('meta[name="theme-color"]'); if (m0) m0.setAttribute("content", TEMAS[t0].colores.barra); }
-const TV_VERSION = "81";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "82";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -2473,6 +2473,8 @@ function nubeIniciar() {
 // =============================================================================
 // ─── CANTIDADES DE LA VÍA ─────────────────────────────────────────────────────
 // Áreas en planta: vía (largo × ancho de laterales) y cada parqueadero ((fin − inicio) × (ancho + sobreancho))
+// puntas de la vía sin parqueadero de cabecera (ahí se suma el sobreancho a lo largo)
+const finesLibresVia = proy => ["inicio", "fin"].filter(u => !(proy.parqueaderos || []).some(p => esCabecera(p) && p.ubicacion === u)).length;
 function calcAreas(proy, tabla) {
   proy = proyCalc(proy);
   const { anchoIzq, anchoDer } = anchosProyecto(proy);
@@ -2480,6 +2482,10 @@ function calcAreas(proy, tabla) {
   const ancho = r3(anchoIzq + anchoDer);                 // ancho del plano
   const sg = sobreanchoGeneral(proy);
   const anchoConf = r3(ancho + sg.izq + sg.der);        // ancho de conformación (con sobreancho general)
+  // el sobreancho va en todos los sentidos: también al inicio y al fin de la vía (el promedio de los dos lados),
+  // salvo en la punta donde hay un parqueadero de cabecera (ahí van los extremos de la cabecera)
+  const finesLibres = finesLibresVia(proy), saFin = r3((sg.izq + sg.der) / 2);
+  const largoConf = r3(largo + finesLibres * saFin);
   const parqs = (proy.parqueaderos || []).map(p => {
     const pi = parseFloat(p.absInicio), pf = parseFloat(p.absFin);
     const anchoP = parseFloat(p.ancho) || 0;
@@ -2489,14 +2495,17 @@ function calcAreas(proy, tabla) {
     const anchoC = r3(anchoP + ext);
     // en este tramo el borde de trabajo es el del parqueadero: no se suma el sobreancho de la vía de ese lado
     // (uno de cabecera no queda al lado de la vía: no descuenta nada)
+    // (el descuento también cubre sus extremos: ahí el sobreancho de la vía y el extremo del parqueadero son la misma franja)
     const saViaLado = esCabecera(p) ? 0 : p.lado === "izquierdo" ? sg.izq : sg.der;
-    return { p, nombre: (p.nombre || "Parqueadero") + (p.__sec ? " · sección " + p.__sec : ""), lado: p.lado, largo: largoP, anchoPlano: anchoP, ext, extremos, largoC, ancho: anchoC,
-      area: r3(largoC * anchoC), areaPlano: r3(largoP * anchoP), descuentoVia: r3(largoP * saViaLado), saViaLado };
+    // cambio de ancho: el sobreancho exterior también va por el escalón
+    const escalon = p.__anchoAnt !== undefined ? r3(Math.abs(anchoP - p.__anchoAnt)) : 0;
+    return { p, nombre: (p.nombre || "Parqueadero") + (p.__sec ? " · sección " + p.__sec : ""), lado: p.lado, largo: largoP, anchoPlano: anchoP, ext, extremos, largoC, ancho: anchoC, escalon,
+      area: r3(largoC * anchoC + escalon * ext), areaPlano: r3(largoP * anchoP), descuentoVia: r3(largoC * saViaLado), saViaLado };
   });
-  const via = r3(largo * anchoConf - parqs.reduce((s, x) => s + x.descuentoVia, 0));
+  const via = r3(largoConf * anchoConf - parqs.reduce((s, x) => s + x.descuentoVia, 0));
   const sumParqs = parqs.reduce((s, x) => s + x.area, 0);
   const viaPlano = r3(largo * ancho);
-  return { largo, ancho, anchoConf, saIzq: sg.izq, saDer: sg.der, via, viaPlano, parqs,
+  return { largo, largoConf, finesLibres, saFin, ancho, anchoConf, saIzq: sg.izq, saDer: sg.der, via, viaPlano, parqs,
     total: r3(via + sumParqs),              // área de conformación
     totalPlano: r3(viaPlano + parqs.reduce((s, x) => s + x.areaPlano, 0)) };  // área en planta según el plano
 }
@@ -2548,17 +2557,17 @@ function calcCantidades(proy, tabla) {
     // cada capa con su ancho de trabajo: plano + su sobreancho (izq + der)
     capasVia.forEach(c => {
       const sc = sobreanchoCapa(proy, c.nombre);
-      const anchoC = r3(areas.ancho + sc.izq + sc.der);
-      const desc = areas.parqs.filter(x => !esCabecera(x.p)).reduce((s, x) => s + x.largo * (x.lado === "izquierdo" ? sc.izq : sc.der), 0);
-      usarCapa(c, areas.largo * anchoC - desc, `vía ${areas.largo.toFixed(3)} m × ${anchoC.toFixed(3)} m${desc ? " − " + desc.toFixed(3) + " m² (sobreancho donde hay parqueadero)" : ""} = `);
+      const anchoC = r3(areas.ancho + sc.izq + sc.der), largoC = r3(areas.largo + areas.finesLibres * r3((sc.izq + sc.der) / 2));
+      const desc = areas.parqs.filter(x => !esCabecera(x.p)).reduce((s, x) => s + (sobreanchoCapaParq(proy, x.p, c.nombre) > 0 ? x.largoC : x.largo) * (x.lado === "izquierdo" ? sc.izq : sc.der), 0);
+      usarCapa(c, largoC * anchoC - desc, `vía ${largoC.toFixed(3)} m × ${anchoC.toFixed(3)} m${desc ? " − " + desc.toFixed(3) + " m² (sobreancho donde hay parqueadero)" : ""} = `);
     });
     areas.parqs.forEach(pq => {
       const estr = pq.p.estructura === "propia" ? capasDefinidas(pq.p.capas) : capasVia;
       estr.forEach(c => {
         const sp = sobreanchoCapaParq(proy, pq.p, c.nombre);
         const largoC = sp > 0 ? pq.largoC : pq.largo;   // los extremos solo cuentan en capas con sobreancho
-        const anchoC = pq.anchoPlano + sp;
-        usarCapa(c, largoC * anchoC, `${pq.nombre} ${largoC.toFixed(3)} m × ${anchoC.toFixed(3)} m = `);
+        const anchoC = pq.anchoPlano + sp, esc = sp > 0 ? pq.escalon * sp : 0;
+        usarCapa(c, largoC * anchoC + esc, `${pq.nombre} ${largoC.toFixed(3)} m × ${anchoC.toFixed(3)} m${esc ? " + escalón " + pq.escalon.toFixed(3) + " × " + sp.toFixed(3) : ""} = `);
       });
     });
   }
@@ -2617,11 +2626,11 @@ function TabCantidades({ proyecto, tabla, onChange }) {
       React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 8 } },
         "Ancho del plano + sobreancho general de cada lado (se define en 🛣 Vía › Estructura). Las cotas siguen con el ancho del plano."),
       fila(A.saIzq || A.saDer
-        ? `Vía: ${A.largo.toFixed(3)} m × (${A.ancho.toFixed(3)} + ${A.saIzq.toFixed(3)} izq + ${A.saDer.toFixed(3)} der) m`
+        ? `Vía: ${A.largoConf !== A.largo ? "(" + A.largo.toFixed(3) + " + " + A.finesLibres + "×" + A.saFin.toFixed(3) + ")" : A.largo.toFixed(3)} m × (${A.ancho.toFixed(3)} + ${A.saIzq.toFixed(3)} izq + ${A.saDer.toFixed(3)} der) m`
         : `Vía: ${A.largo.toFixed(3)} m × ${A.ancho.toFixed(3)} m (sin sobreancho)`, A.via.toFixed(3) + " m²"),
       A.parqs.some(x => x.descuentoVia) && fila("Menos sobreancho de la vía donde hay parqueadero", "−" + A.parqs.reduce((s, x) => s + x.descuentoVia, 0).toFixed(3) + " m²"),
       A.parqs.map((x, i) => React.createElement(React.Fragment, { key: i }, fila(
-        `${x.nombre}: ${x.extremos ? "(" + x.largo.toFixed(3) + " + 2×" + x.extremos.toFixed(3) + ")" : x.largo.toFixed(3)} m × ${x.ext ? "(" + x.anchoPlano.toFixed(3) + " + " + x.ext.toFixed(3) + ")" : x.anchoPlano.toFixed(3)} m`,
+        `${x.nombre}: ${x.extremos && x.largoC !== x.largo ? "(" + x.largo.toFixed(3) + " + " + r3((x.largoC - x.largo) / x.extremos) + "×" + x.extremos.toFixed(3) + ")" : x.largo.toFixed(3)} m × ${x.ext ? "(" + x.anchoPlano.toFixed(3) + " + " + x.ext.toFixed(3) + ")" : x.anchoPlano.toFixed(3)} m${x.escalon && x.ext ? " + escalón " + x.escalon.toFixed(3) + " × " + x.ext.toFixed(3) : ""}`,
         x.area.toFixed(3) + " m²"))),
       fila("Total calculado", A.total.toFixed(3) + " m²", true),
       React.createElement("div", { style: { marginTop: 12, maxWidth: 360 } },
@@ -4900,7 +4909,8 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
           parseFloat(pq.ancho) || 0, sobreanchoParq(pq), sobreanchoExtremosParq(pq)]);
         // extremos libres: 2 en un parqueadero entero; en una sección, solo el inicio y/o el fin del parqueadero
         const nE = pq.__extN !== undefined ? pq.__extN : 2, EXTR = ref(5, r);
-        R.parq[pq.id] = { pq, L: `ABS(${ref(2, r)}-${ref(1, r)})`, A: ref(3, r), EXT: ref(4, r), EXTR, LE: nE === 2 ? `${`ABS(${ref(2, r)}-${ref(1, r)})`}+2*${EXTR}` : nE === 1 ? `${`ABS(${ref(2, r)}-${ref(1, r)})`}+${EXTR}` : `ABS(${ref(2, r)}-${ref(1, r)})`, esp: {}, sa: {} };
+        const ant = pq.__sec > 1 ? R.parq[pq.__sec === 2 ? pq.idBase : pq.idBase + "~s" + (pq.__sec - 1)] : null;
+        R.parq[pq.id] = { pq, ANT: ant ? ant.A : null, L: `ABS(${ref(2, r)}-${ref(1, r)})`, A: ref(3, r), EXT: ref(4, r), EXTR, LE: nE === 2 ? `${`ABS(${ref(2, r)}-${ref(1, r)})`}+2*${EXTR}` : nE === 1 ? `${`ABS(${ref(2, r)}-${ref(1, r)})`}+${EXTR}` : `ABS(${ref(2, r)}-${ref(1, r)})`, esp: {}, sa: {} };
       });
       blank();
     }
@@ -5282,14 +5292,23 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
     const P_ = k => (partes[k] = partes[k] || { areas: [], vols: [], f: [] });
     const parqs = Object.values(R.parq);
     const ladoSA = (P, izq, der) => P.pq.lado === "izquierdo" ? izq : der;
-    if (!usaManual) P_("área conformada|m²").f.push(`${R.L}*(${R.A}+${R.SI}+${R.SD})`
-      + parqs.map(P => (esCabecera(P.pq) ? "" : `-${P.L}*${ladoSA(P, R.SI, R.SD)}`) + `+(${P.LE})*(${P.A}+${P.EXT})`).join(""));
+    // la vía con el sobreancho también en sus puntas libres; cada parqueadero descuenta el sobreancho de la vía a lo
+    // largo de él y de sus extremos (es la misma franja) y suma el escalón de un cambio de ancho
+    const nFin = finesLibresVia(proyecto), largoCon = (si, sd) => nFin ? `(${R.L}+${nFin === 1 ? "" : nFin + "*"}ROUND((${si}+${sd})/2,3))` : R.L;
+    const escalon = (P, sa) => P.ANT ? `+ABS(${P.A}-${P.ANT})*${sa}` : "";
+    if (!usaManual) P_("área conformada|m²").f.push(`${largoCon(R.SI, R.SD)}*(${R.A}+${R.SI}+${R.SD})`
+      + parqs.map(P => (esCabecera(P.pq) ? "" : `-(${P.LE})*${ladoSA(P, R.SI, R.SD)}`) + `+(${P.LE})*(${P.A}+${P.EXT})` + escalon(P, P.EXT)).join(""));
+    // sobreancho de una capa en un parqueadero (como celda, "0" si no tiene)
+    const saParqCapa = (P, c) => { const k = claveCapa(c.nombre);
+      if (P.pq.estructura === "propia") { const cp = capasDefinidas(P.pq.capas).find(x => claveCapa(x.nombre) === k); return cp && P.sa[k] ? P.sa[k] : "0"; }
+      return c.sobreancho === "general" ? P.EXT : c.sobreancho === "propio" ? ladoSA(P, R.saI[k], R.saD[k]) : "0"; };
     capasViaX.forEach(c => {
       const k = claveCapa(c.nombre);
       if (excl.includes(k) || R.esp[k] === undefined) return;
       if (usaManual) { P_(k + "|m³").areas.push([areaRef, R.esp[k]]); return; }
-      const desc = parqs.filter(P => !esCabecera(P.pq)).map(P => `-${P.L}*${ladoSA(P, R.saI[k], R.saD[k])}`).join("");
-      P_(k + "|m³").areas.push([`${R.L}*(${R.A}+${R.saI[k]}+${R.saD[k]})${desc}`, R.esp[k]]);
+      const desc = parqs.filter(P => !esCabecera(P.pq)).map(P => { const sp = saParqCapa(P, c);
+        return `-${sp === "0" ? P.L : `IF(${sp}>0,${P.LE},${P.L})`}*${ladoSA(P, R.saI[k], R.saD[k])}`; }).join("");
+      P_(k + "|m³").areas.push([`${largoCon(R.saI[k], R.saD[k])}*(${R.A}+${R.saI[k]}+${R.saD[k]})${desc}`, R.esp[k]]);
     });
     if (!usaManual) parqs.forEach(P => {
       const propia = P.pq.estructura === "propia";
@@ -5303,7 +5322,7 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
         if (propia) sp = P.sa[k];
         else if (c.sobreancho === "general") sp = P.EXT;
         else if (c.sobreancho === "propio") sp = ladoSA(P, R.saI[k], R.saD[k]);
-        P_(k + "|m³").areas.push([sp === "0" ? `${P.L}*${P.A}` : `IF(${sp}>0,${P.LE},${P.L})*(${P.A}+${sp})`, esp]);
+        P_(k + "|m³").areas.push([sp === "0" ? `${P.L}*${P.A}` : `IF(${sp}>0,${P.LE},${P.L})*(${P.A}+${sp})` + (P.ANT ? `+IF(${sp}>0,ABS(${P.A}-${P.ANT})*${sp},0)` : ""), esp]);
       });
     });
     // a una capa se le suma un volumen o un relleno: queda explicado debajo (capa teórica + cada cosa)

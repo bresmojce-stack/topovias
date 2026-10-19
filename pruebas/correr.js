@@ -54,7 +54,7 @@ const MALO = /PAGEERROR|TimeoutError|Error:|Cannot read properties|is not define
 const ESPERA = {
   extremos2: ['100.992 m³', '238.191 m³', '27.372 m³', '99.288 m³', '50.720 m³'],
   cant: ['volúmenes individuales: [ 25.375, 25.375, 76.125 ]', 'Asfalto | 495.000 | 0.050', 'Base | 719.980 | 0.150'],
-  saparq: ['subbase | 476.550 | 0.200 | 95.310 m³', 'roca | 457.680 | 0.300 | 137.304 m³', "volumen: [ '99.750 m³' ]"],
+  saparq: ['subbase | 482.520 | 0.200 | 96.504 m³', 'roca | 461.460 | 0.300 | 138.438 m³', "volumen: [ '99.750 m³' ]"],
   sardinel: ['"total":212,"ejec":110,"area":0.079,"vol":16.748', 'xlsx ["TOTAL",212,110,102,51.9]'],
   libro: ['TOTAL | 1203.600 | 197.790 | 345.000 | 154.080 | 69.000 | 17.250'],
   fallos: ['xlsx ["TOTAL",2.959]', 'xlsx ["Excavación","m³",452.959]'],
@@ -65,7 +65,7 @@ const ESPERA = {
   plantaagua: ['flechas de agua en la planta: 26 | punto bajo: true'],
   recorrido: ['datos iguales: true'],
   cortesbajo: ['corte 1: 74.25 | corte 2: 246.75 | suma: 321 | terreno → sitio: 321'],
-  escalon: ['0+041.500 (2) 955.21', '41.5(2) 0.213 11.4 2.428 0 0', 'total app: 11.668 | a mano: 11.668 | IGUALES', 'Parqueadero 1 200 + Parqueadero 2 21.06 = 221.06', '0+041.500 (2)', '(2) 955.21 | total 11.668 (igual a dos parqueaderos)', 'Parqueadero 1 · sección 1 40.5×5.5=222.75 + Parqueadero 1 · sección 2 4.4×5.9=25.96', 'sardinel del parqueadero: 54.7', 'sin lectura (2): total 11.668 (no se corta)'],
+  escalon: ['0+041.500 (2) 955.21', '41.5(2) 0.213 11.4 2.428 0 0', 'total app: 11.668 | a mano: 11.668 | IGUALES', 'Parqueadero 1 200 + Parqueadero 2 21.06 = 221.06', '0+041.500 (2)', '(2) 955.21 | total 11.668 (igual a dos parqueaderos)', 'Parqueadero 1 · sección 1 40.5×5.5=222.75 + Parqueadero 1 · sección 2 4.4×5.9=26.16', 'sardinel del parqueadero: 54.7', 'sin lectura (2): total 11.668 (no se corta)'],
   estadovia: ['marcadas: EJE 1:ok EJE 2:falta EJE 3:malo | sigue en la obra: true', 'quitar el amarillo: EJE 1:ok EJE 2:- EJE 3:malo', 'después de recargar: ok malo'],
   tablapuntos: ['Dibujar todos (6 listos · 2 por revisar)', 'nuevos: P3, P4, BM1, P6, BM1, P10, pl 6 abierta | sig: 11', 'quedan en la tabla: P7, P8',
     'nuevos: P7, P8, pl | tabla abierta: false | sig: 11', 'deshacer quita 3 objetos', 'nuevos: E1, P12, E3, pl 3 cerrada | sig: 13', 'Norte/Este cortados: 0', 'barra de arriba cabe: true', 'filas en una línea: true | columna de cota: 0'],
