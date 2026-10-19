@@ -41,6 +41,8 @@ const PRUEBAS = [
   ['agua en la planta real', 'plantaagua', ''],
   ['auto acotar y cuadro de coordenadas', 'autoacotar', '../out/autoacotar'],
   ['excavación con terreno bajo la cota teórica', 'cortesbajo', ''],
+  ['tabla de puntos (PC)', 'tablapuntos', '../out/tablapuntos'],
+  ['tabla de puntos (celular)', 'tablapuntos', '../out/tablapuntos_m', { W: '390' }],
   ['Excel tema Claro', 'excel_tema', '../out/xl_claro', { TEMA: 'claro' }],
   ['Excel tema Agua', 'excel_tema', '../out/xl_agua', { TEMA: 'agua' }],
 ];
@@ -61,6 +63,8 @@ const ESPERA = {
   plantaagua: ['flechas de agua en la planta: 26 | punto bajo: true'],
   recorrido: ['datos iguales: true'],
   cortesbajo: ['corte 1: 74.25 | corte 2: 246.75 | suma: 321 | terreno → sitio: 321'],
+  tablapuntos: ['Dibujar todos (6 listos · 2 por revisar)', 'nuevos: P3, P4, BM1, P6, BM1, P10, pl 6 abierta | sig: 11', 'quedan en la tabla: P7, P8',
+    'nuevos: P7, P8, pl | tabla abierta: false | sig: 11', 'deshacer quita 3 objetos', 'nuevos: E1, P12, E3, pl 3 cerrada | sig: 13', 'Norte/Este cortados: 0', 'barra de arriba cabe: true', 'filas en una línea: true | columna de cota: 0'],
   autoacotar: ['"Área 187.000 m²", "Perím. 56.000 m"', '"R 5.000", "Cuerda 10.000", "Arco 15.708"', 'pie: Área 187.000 m²   Perímetro 56.000 m', 'movido 25 m al este: 25.000 0.000'],
 };
 

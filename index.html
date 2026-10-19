@@ -1970,7 +1970,7 @@ function ponerTema(t) {
 }
 if (typeof document !== "undefined") { hojaTemas(); const t0 = leerTema(); document.documentElement.setAttribute("data-tema", t0);
   const m0 = document.querySelector('meta[name="theme-color"]'); if (m0) m0.setAttribute("content", TEMAS[t0].colores.barra); }
-const TV_VERSION = "78";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "79";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -6097,11 +6097,90 @@ const DIB_COLORES = [["#0F172A", "Negro", 7], ["#DC2626", "Rojo", 1], ["#EA580C"
   ["#0891B2", "Cian", 4], ["#2563EB", "Azul", 5], ["#7C3AED", "Morado", 200], ["#DB2777", "Rosado", 6], ["#92400E", "Café", 34], ["#64748B", "Gris", 8]];
 const aciDe = col => { const c = DIB_COLORES.find(x => x[0] === col); return c ? c[2] : null; };
 const conAlfa = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
+// ── TABLA DE PUNTOS (Dibujar → Tabla de puntos) ──
+// Número limpio de una casilla: "863104.065", "863104,065" o "-12.5"; cualquier otra cosa da null (no se adivina)
+const numTabla = s => { s = String(s == null ? "" : s).trim(); if (/^[-+]?\d+,\d+$/.test(s)) s = s.replace(",", "."); return /^[-+]?(\d+\.?\d*|\.\d+)$/.test(s) ? parseFloat(s) : null; };
+// Texto pegado desde Excel (o de una libreta / estación): una fila por línea; columnas con tabulador, punto y coma,
+// coma o espacios. Orden: [nombre] Norte Este (lo que venga después se ignora). Las líneas sin Norte y Este numéricos (encabezados) se saltan.
+function pegarTablaPuntos(texto) {
+  const filas = [];
+  String(texto || "").split(/\r?\n/).forEach(lin => {
+    if (!lin.trim()) return;
+    const c = (lin.indexOf("\t") >= 0 ? lin.split("\t") : lin.indexOf(";") >= 0 ? lin.split(";") : /\d\.\d/.test(lin) && lin.indexOf(",") >= 0 ? lin.split(",") : lin.trim().split(/\s+/)).map(x => x.trim());
+    while (c.length && c[c.length - 1] === "") c.pop();
+    const n = c.map(numTabla);
+    let f = null;
+    if (c.length >= 3 && n[0] === null) f = { nom: c[0], n: c[1], e: c[2] };
+    else if (c.length === 2) f = { nom: "", n: c[0], e: c[1] };
+    else if (c.length === 3) f = Number.isInteger(n[0]) && n[1] !== null && n[2] !== null && Math.abs(n[0]) < 1e5 && Math.abs(n[1]) >= 1e3 ? { nom: c[0], n: c[1], e: c[2] } : { nom: "", n: c[0], e: c[1] };
+    else if (c.length >= 4) f = { nom: c[0], n: c[1], e: c[2] };
+    if (f && (numTabla(f.n) !== null || numTabla(f.e) !== null)) filas.push(f);
+  });
+  return filas;
+}
+// Revisa las filas sin pararse: lo que se puede dibujar se dibuja; lo malo queda en la tabla.
+//   op = { modo: "cons"|"nombre", letra, desde, unir, cerrar };  existentes = puntos que ya tiene el dibujo
+//   da { puntos (con fila), malas: [{fila, msg}] (rojo, no se dibujan), avisos: [{fila, msg}] (ámbar, sí se dibujan), nombres }
+function revisarTablaPuntos(filas, op, existentes, sig) {
+  const letra = (op.letra || "").trim() || "P", d0 = parseInt(op.desde, 10), desde = isNaN(d0) ? (sig || 1) : d0;
+  const malas = [], avisos = [], nombres = [], cand = [];
+  filas.forEach((f, i) => {
+    nombres[i] = (f.nom || "").trim() || letra + (desde + i);
+    const vacia = !(f.nom || "").trim() && !String(f.n || "").trim() && !String(f.e || "").trim();
+    if (vacia) return;
+    const N = numTabla(f.n), E = numTabla(f.e), sn = String(f.n || "").trim(), se = String(f.e || "").trim();
+    if (N === null || E === null) {
+      const q = [];
+      if (N === null) q.push(sn ? "el norte \"" + sn + "\" no es un número" : "falta el norte");
+      if (E === null) q.push(se ? "el este \"" + se + "\" no es un número" : "falta el este");
+      malas.push({ fila: i, msg: q.join(" y ") }); return;
+    }
+    cand.push({ fila: i, N, E });
+  });
+  // un número con un dígito de más o de menos deja el punto lejísimos: se compara con la mediana de los demás
+  const mediana = a => { const s = a.slice().sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  // contra la misma tabla (3 o más filas) es casi seguro un error y no se dibuja; contra lo ya dibujado solo se avisa
+  const ref = cand.length >= 3 ? { N: mediana(cand.map(c => c.N)), E: mediana(cand.map(c => c.E)) } : null;
+  const refDib = existentes.length ? { N: mediana(existentes.map(p => p.y)), E: mediana(existentes.map(p => p.x)) } : null;
+  const km = v => v < 10000 ? (v / 1000).toFixed(1) : String(Math.round(v / 1000));   // sin punto de miles: "1064 km", no "1.064"
+  const puntos = [];
+  cand.forEach(c => {
+    if (ref) {
+      const dN = Math.abs(c.N - ref.N), dE = Math.abs(c.E - ref.E);
+      if (dN > 5000 || dE > 5000) { malas.push({ fila: c.fila, msg: (dN >= dE ? "el norte" : "el este") + " queda a " + km(Math.max(dN, dE)) + " km de los demás. ¿Le falta o le sobra un dígito?" }); return; }
+    }
+    const f = filas[c.fila], p = { t: "p", x: c.E, y: c.N, nom: nombres[c.fila], fila: c.fila };
+    if (refDib) { const dN = Math.abs(c.N - refDib.N), dE = Math.abs(c.E - refDib.E); if (dN > 5000 || dE > 5000) avisos.push({ fila: c.fila, msg: "queda a " + km(Math.max(dN, dE)) + " km de lo que ya está dibujado (¿otro sistema de coordenadas?)" }); }
+    if (op.modo === "nombre" && !(f.nom || "").trim()) avisos.push({ fila: c.fila, msg: "sin nombre: quedó " + p.nom });
+    puntos.push(p);
+  });
+  // repetidos: se dibujan igual, pero se avisa
+  puntos.forEach((p, k) => {
+    const otro = puntos.slice(0, k).find(q => q.nom === p.nom), ya = existentes.find(q => q.nom === p.nom);
+    if (otro) avisos.push({ fila: p.fila, msg: "el nombre " + p.nom + " ya está en la fila " + (otro.fila + 1) });
+    else if (ya) avisos.push({ fila: p.fila, msg: "ya hay un punto " + p.nom + " en el dibujo" });
+    const mismo = puntos.slice(0, k).find(q => Math.abs(q.x - p.x) < 0.0005 && Math.abs(q.y - p.y) < 0.0005), mismoYa = existentes.find(q => Math.abs(q.x - p.x) < 0.0005 && Math.abs(q.y - p.y) < 0.0005);
+    if (mismo) avisos.push({ fila: p.fila, msg: "mismas coordenadas que la fila " + (mismo.fila + 1) + " (" + mismo.nom + ")" });
+    else if (mismoYa) avisos.push({ fila: p.fila, msg: "mismas coordenadas que " + (mismoYa.nom || "un punto") + " del dibujo" });
+  });
+  malas.sort((a, b) => a.fila - b.fila); avisos.sort((a, b) => a.fila - b.fila);
+  // el número que sigue: después del último consecutivo usado (también los que quedan en la tabla con su nombre)
+  let siguiente = desde;
+  filas.forEach((f, i) => { const vacia = !(f.nom || "").trim() && !String(f.n || "").trim() && !String(f.e || "").trim(); if (!vacia && !(f.nom || "").trim()) siguiente = Math.max(siguiente, desde + i + 1); });
+  return { puntos, malas, avisos, nombres, siguiente };
+}
+// Lo que se agrega al dibujo: los puntos y, si se pide, la polilínea en el orden de la tabla
+function objetosTablaPuntos(r, op) {
+  const pts = r.puntos.map(p => ({ t: "p", x: p.x, y: p.y, nom: p.nom }));
+  if (op.unir && pts.length >= 2) pts.push({ t: "pl", v: r.puntos.map(p => ({ x: p.x, y: p.y })), c: !!op.cerrar && pts.length >= 3 });
+  return pts;
+}
+
 const DIB_GRUPOS = [
   { id: "dibujar", label: "Dibujar", icono: "pencil", herr: [["punto", "Punto N,E", "circle-dot"], ["linea", "Línea", "slash"], ["polilinea", "Polilínea", "spline"],
     ["rect", "Rectángulo", "rectangle-horizontal"], ["cuadrado", "Cuadrado", "square"], ["triangulo", "Triángulo", "triangle"], ["circulo", "Círculo", "circle"], ["arco", "Arco", "rainbow"],
     ["sombrear", "Sombrear", "paint-bucket"], ["pluma", "Pluma libre", "pen-line"], ["paralela", "Paralela", "between-vertical-start"], ["desfase", "Desfase (sobreancho)", "expand"],
-    ["@eje", "Eje de la vía", "signpost"], ["estacar", "Dividir / estacar", "milestone"]] },
+    ["@eje", "Eje de la vía", "signpost"], ["@tabla", "Tabla de puntos", "table"], ["estacar", "Dividir / estacar", "milestone"]] },
   { id: "medir", label: "Medir", icono: "ruler", herr: [["idcoord", "ID coordenada", "map-pin"], ["distancia", "Distancia y azimut", "ruler"], ["area", "Área y perímetro", "pentagon"], ["angulo", "Ángulo", "triangle-right"], ["radio", "Radio y cuerda", "circle-dot-dashed"], ["abscisa", "Abscisa y desplaz.", "locate-fixed"], ["acotar", "Acotar", "move-horizontal"], ["autoacotar", "Auto acotar", "pencil-ruler"], ["cuadro", "Cuadro de coordenadas", "table"]] },
   { id: "editar", label: "Editar", icono: "scissors", herr: [["elegir", "Elegir y editar", "mouse-pointer-2"], ["seleccionar", "Seleccionar varios", "square-dashed-mouse-pointer"], ["mover", "Mover", "move"], ["copiar", "Copiar", "copy"], ["girar", "Girar", "rotate-ccw"], ["recortar", "Recortar", "scissors"], ["extender", "Extender", "move-up-right"], ["unir", "Unir en una figura", "combine"], ["borrar", "Borrar", "trash-2"], ["@deshacer", "Deshacer", "undo-2"], ["@rehacer", "Rehacer", "redo-2"]] },
   { id: "ver", label: "Ver", icono: "search", herr: [["mano", "Mover la vista", "hand"], ["@todo", "Ver todo", "scan"], ["@buscar", "Buscar punto", "map-pin"], ["@imanes", "Imanes", "magnet"], ["@cuadricula", "Cuadrícula", "grid-3x3"]] }
@@ -6233,6 +6312,33 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   const setCuaOp = v => { setCuaOpR(v); try { localStorage.setItem(TV_KEY + "_dibCuadro", JSON.stringify(v)); } catch (_) {} };
   const [cuaLetra, setCuaLetra] = React.useState("P");
   const [cuaDesde, setCuaDesde] = React.useState("");   // vacío = sigue la numeración de los puntos (P1, P2…)
+  // tabla de puntos: lo escrito queda guardado en este equipo hasta dibujarlo (no toca los datos de la vía)
+  const [tabla, setTabla] = React.useState(false);
+  const [tabPegar, setTabPegar] = React.useState(null);   // texto del cuadro "Pegar desde Excel" (null = cerrado)
+  const filaVacia = () => ({ nom: "", n: "", e: "" });
+  const [tabFilas, setTabFilasR] = React.useState(() => { try { const f = JSON.parse(localStorage.getItem(TV_KEY + "_dibTablaFilas") || "null"); if (Array.isArray(f) && f.length) return f; } catch (_) {} return [filaVacia(), filaVacia(), filaVacia()]; });
+  const setTabFilas = v => { setTabFilasR(v); try { localStorage.setItem(TV_KEY + "_dibTablaFilas", JSON.stringify(v)); } catch (_) {} };
+  const [tabOp, setTabOpR] = React.useState(() => leerOp("_dibTablaOp", { modo: "cons", letra: "P", desde: "", unir: true, cerrar: false }));
+  const setTabOp = v => { setTabOpR(v); try { localStorage.setItem(TV_KEY + "_dibTablaOp", JSON.stringify(v)); } catch (_) {} };
+  const dibujarTabla = () => {
+    const existentes = objs.filter(o => o.t === "p");
+    const r = revisarTablaPuntos(tabFilas, tabOp, existentes, dib.sig);
+    if (!r.puntos.length) { alert(r.malas.length ? "Ninguna fila se puede dibujar todavía. Corrige las que están en rojo." : "La tabla está vacía. Escribe o pega los puntos."); return; }
+    const nuevos = objetosTablaPuntos(r, tabOp);
+    const letra = (tabOp.letra || "").trim() || "P";
+    agregar(nuevos, letra === "P" ? (d => ({ sig: Math.max(d.sig || 1, r.siguiente) })) : null);
+    // lo que no se dibujó queda en la tabla, con el nombre que le tocaba, para corregirlo
+    const quedan = r.malas.map(m => ({ ...tabFilas[m.fila], nom: (tabFilas[m.fila].nom || "").trim() || r.nombres[m.fila] }));
+    setTabFilas(quedan.length ? quedan : [filaVacia(), filaVacia(), filaVacia()]);
+    if (tabOp.modo === "cons" && String(tabOp.desde).trim() !== "") setTabOp({ ...tabOp, desde: String(r.siguiente) });
+    setTimeout(() => verTodo(objs.concat(nuevos)), 60);
+    if (!quedan.length) setTabla(false);
+    const n = r.puntos.length;
+    aviso(n + (n === 1 ? " punto dibujado" : " puntos dibujados") + (tabOp.unir && n >= 2 ? " y unidos" : "") +
+      (r.avisos.length ? " · revisa " + r.avisos.length + (r.avisos.length === 1 ? " aviso" : " avisos") + " (en ámbar)" : "") +
+      (quedan.length ? " · " + quedan.length + (quedan.length === 1 ? " fila quedó" : " filas quedaron") + " en la tabla para corregir" : "") +
+      ". \"Deshacer\" los quita de una vez.");
+  };
   const eje = objs.find(o => o.t === "eje");
   const setHerr = x => { setHerrR(x); setHoverId(null); setTemp([]); setRes(null); setSel(null); setGrupo(null); setTeclado(null); setSelSet([]); setSelListo(false); setObjA(null); };
   const deshacerDib = () => {
@@ -6729,6 +6835,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     if (id === "@imanes") { setGrupo(null); return setVerImanes(true); }
     if (id === "@cuadricula") { setGrupo(null); return setCuadricula(!cuadricula); }
     if (id === "@eje") return traerEje();
+    if (id === "@tabla") { setGrupo(null); setTeclado(null); setBuscar(null); return setTabla(true); }
     setHerr(id);
   };
   // trae al dibujo los PI que se escribieron en la vía (Vía → Distancias por coordenadas)
@@ -7017,7 +7124,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
 
   return h("div", { className: "tv-dibujo" },
     // barra de dibujos
-    h("div", { style: { display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap", marginBottom: 8 } },
+    h("div", { style: { display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 8 } },
       h(Sel, { value: String(dib.id), onChange: e => { setActivoId(dibujos.find(d => String(d.id) === e.target.value).id); setHerr("linea"); }, style: { maxWidth: 230, flex: "1 1 110px", minWidth: 0, fontWeight: 700 } },
         dibujos.map(d => h("option", { key: d.id, value: String(d.id) }, d.nombre))),
       h(Btn, { small: true, color: C.accent, onClick: nuevoDibujo, title: "Nuevo dibujo" }, h(Icono, { n: "plus", size: 14 }), h("span", { className: "tv-dib-txt" }, "Nuevo")),
@@ -7025,6 +7132,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
       h(Btn, { small: true, color: "var(--t475569)", onClick: duplicar, title: "Duplicar" }, h(Icono, { n: "copy", size: 14 })),
       h(Btn, { small: true, color: C.danger, onClick: borrarDibujo, title: "Borrar dibujo" }, h(Icono, { n: "trash-2", size: 14 })),
       h(Btn, { small: true, color: "var(--t475569)", onClick: () => setVerPaleta(!verPaleta), title: "Color de lo que dibujes" }, h("span", { className: "tv-dib-coloractual", style: { width: 14, height: 14, borderRadius: "50%", display: "inline-block", border: "2px solid var(--lFFFFFF)", background: colorNuevo || "conic-gradient(var(--bDC2626), var(--bCA8A04), var(--b16A34A), var(--b2563EB), var(--b7C3AED), var(--bDC2626))" } }), h("span", { className: "tv-dib-txt" }, "Color")),
+      h(Btn, { small: true, color: "var(--t0369A1)", onClick: () => accion("@tabla"), title: "Tabla de puntos (escribir o pegar Norte y Este)" }, h(Icono, { n: "table", size: 14 }), h("span", { className: "tv-dib-txt" }, "Tabla de puntos")),
       h(Btn, { small: true, color: C.success, onClick: exportarDXF, title: "Exportar a AutoCAD" }, h(Icono, { n: "download", size: 14 }), "DXF")),
     // lienzo
     h("div", { ref: cajaRef, style: { position: "relative", height: alto, borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, background: "var(--bFFFFFF)", display: "flex", flexDirection: "column" } },
@@ -7112,6 +7220,68 @@ function TabDibujo({ proy, onChange, onArchivo }) {
              reemplazar(sel, [{ id: sel, t: "eje", v: selObj.v, abs0: a0, paso: 10, nom: proy.nombre || "Eje" }]); } }, "Usar como eje"),
            h(Btn, { key: "b", small: true, color: C.danger, onClick: () => { cambiarDib(d => ({ objs: d.objs.filter(x => x.id !== sel) })); setSel(null); } }, h(Icono, { n: "trash-2", size: 13 }), "Borrar")],
           () => setSel(null)),
+        // tabla de puntos: escribir o pegar Norte y Este y dibujarlos todos de una vez
+        tabla && dib && (() => {
+          const r = revisarTablaPuntos(tabFilas, tabOp, objs.filter(o => o.t === "p"), dib.sig);
+          const malaDe = {}, avisoDe = {};
+          r.malas.forEach(m => { malaDe[m.fila] = true; }); r.avisos.forEach(m => { avisoDe[m.fila] = true; });
+          const est = W < 520;   // celular: columnas más justas para que quepan Norte y Este completos
+          // nombre, norte y este en una sola fila; en el celular la letra baja para que quepan las coordenadas completas
+          const cols = est ? (W < 380 ? "12px minmax(32px,0.42fr)" : "14px minmax(34px,0.5fr)") + " minmax(0,1.1fr) minmax(0,1.2fr) 20px" : "30px minmax(54px,0.8fr) minmax(0,1.2fr) minmax(0,1.2fr) 30px";
+          const setFila = (i, k, v) => setTabFilas(tabFilas.map((f, j) => j === i ? { ...f, [k]: v } : f));
+          const celda = (i, k, ph, modo) => h("input", { value: tabFilas[i][k] || "", placeholder: ph, inputMode: modo, "aria-label": { nom: "Nombre", n: "Norte", e: "Este" }[k] + " fila " + (i + 1),
+            onChange: e => setFila(i, k, e.target.value), className: "tv-in tv-tabla-celda",
+            style: { width: "100%", minWidth: 0, boxSizing: "border-box", minHeight: 36, border: `1px solid ${C.border}`, borderRadius: 6, padding: est ? "4px 2px" : "4px 6px", fontFamily: "'JetBrains Mono', monospace", fontSize: est ? (W < 380 ? 10 : 11.5) : 13, color: C.text, background: "var(--bFFFFFF)" } });
+          const quitar = i => h("button", { onClick: () => setTabFilas(tabFilas.length > 1 ? tabFilas.filter((_, j) => j !== i) : [filaVacia()]), "aria-label": "Quitar fila " + (i + 1), style: { border: "none", background: "none", cursor: "pointer", padding: est ? 2 : 4, color: C.muted } }, h(Icono, { n: "x", size: 15 }));
+          const tit = t => h("div", { style: { fontSize: 11.5, fontWeight: 800, letterSpacing: 0.6, color: C.muted, marginBottom: 6 } }, t);
+          const caja = (k, hijos) => h("div", { key: k, style: { border: `1px solid ${C.border}`, borderRadius: 10, padding: est ? 7 : 10, marginTop: 10 } }, hijos);
+          const marca = (k, t) => h("label", { key: k, style: { display: "flex", alignItems: "center", gap: 8, minHeight: 34, fontSize: 13.5, cursor: "pointer", color: C.text } },
+            h("input", { type: "checkbox", checked: !!tabOp[k], onChange: e => setTabOp({ ...tabOp, [k]: e.target.checked }), style: { width: 19, height: 19 } }), t);
+          const modoBtn = (m, t) => h("button", { key: m, onClick: () => setTabOp({ ...tabOp, modo: m }), "aria-pressed": tabOp.modo === m,
+            style: { minHeight: 40, borderRadius: 8, border: tabOp.modo === m ? `2px solid ${C.accent}` : `1px solid ${C.border}`, background: tabOp.modo === m ? C.relleno : "var(--bFFFFFF)", color: tabOp.modo === m ? "var(--tFFFFFF)" : C.text, fontWeight: 700, fontSize: 13, cursor: "pointer" } }, t);
+          const pegar = () => {
+            const nuevas = pegarTablaPuntos(tabPegar);
+            if (!nuevas.length) { alert("No encontré filas con Norte y Este en lo pegado.\n\nOrden de las columnas: [Nombre] Norte Este [Cota]."); return; }
+            const llenas = tabFilas.filter(f => (f.nom || "").trim() || String(f.n || "").trim() || String(f.e || "").trim());
+            setTabFilas(llenas.concat(nuevas)); setTabPegar(null);
+            aviso(nuevas.length + (nuevas.length === 1 ? " fila pegada" : " filas pegadas") + ". Revisa la tabla y dibuja.");
+          };
+          const listos = r.puntos.length, porRevisar = r.malas.length;
+          return h("div", { className: "tv-dib-tabla", role: "dialog", "aria-label": "Tabla de puntos", style: { position: "absolute", top: est ? 4 : 8, left: est ? 4 : 8, right: est ? 4 : 8, maxWidth: 560, maxHeight: "calc(100% - 16px)", overflowY: "auto", background: "var(--bFFFFFF)", borderRadius: 12, boxShadow: "0 6px 24px rgba(0,0,0,0.22)", padding: est ? 8 : 12, zIndex: 5, boxSizing: "border-box", color: C.text } },
+            h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 } },
+              h("div", null, h("div", { style: { fontWeight: 800, fontSize: 13, letterSpacing: 0.5 } }, "TABLA DE PUNTOS"),
+                h("div", { style: { fontSize: 12, color: C.muted } }, "Escribe o pega los puntos y dibújalos todos")),
+              h("button", { onClick: () => { setTabla(false); setTabPegar(null); }, "aria-label": "Cerrar", style: { border: "none", background: "none", cursor: "pointer", padding: 6, color: C.text } }, h(Icono, { n: "x", size: 18 }))),
+            caja("nom", [tit("NOMBRES DE LOS PUNTOS"),
+              h("div", { key: "m", style: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 } }, modoBtn("cons", "Consecutivos"), modoBtn("nombre", "Escribir cada nombre")),
+              tabOp.modo === "cons" && h("div", { key: "ld", style: { display: "flex", gap: 10, alignItems: "flex-end", marginTop: 8, flexWrap: "wrap" } },
+                h("label", { style: { fontSize: 11.5, fontWeight: 700, color: C.muted } }, "Letra", h(Input, { value: tabOp.letra, onChange: e => setTabOp({ ...tabOp, letra: e.target.value }), style: { width: 60, fontFamily: "monospace", display: "block", marginTop: 3 } })),
+                h("label", { style: { fontSize: 11.5, fontWeight: 700, color: C.muted } }, "Desde", h(Input, { value: tabOp.desde, placeholder: String(dib.sig || 1), inputMode: "numeric", onChange: e => setTabOp({ ...tabOp, desde: e.target.value.replace(/[^\d]/g, "") }), style: { width: 76, fontFamily: "monospace", display: "block", marginTop: 3 } })),
+                h("div", { style: { fontSize: 12, color: C.muted, flex: "1 1 140px", paddingBottom: 6 } }, "Un nombre escrito en la tabla manda sobre el consecutivo" + (String(tabOp.desde).trim() === "" ? ". Vacío: sigue la numeración del dibujo." : "."))),
+              tabOp.modo === "nombre" && h("div", { key: "nn", style: { fontSize: 12, color: C.muted, marginTop: 8 } }, "Escribe el nombre en cada fila. La que quede sin nombre recibe " + ((tabOp.letra || "").trim() || "P") + " y su número, con un aviso.")]),
+            caja("tab", [
+              h("div", { key: "enc", style: { display: "grid", gridTemplateColumns: cols, gap: est ? 3 : 4, fontSize: 11.5, fontWeight: 800, color: C.muted, padding: "0 0 4px" } },
+                h("div", null, "#"), h("div", null, "NOMBRE"), h("div", null, "NORTE"), h("div", null, "ESTE"), h("div", null)),
+              tabFilas.map((f, i) => h("div", { key: i, className: malaDe[i] ? "tv-tabla-mala" : avisoDe[i] ? "tv-tabla-aviso" : undefined, style: { display: "grid", gridTemplateColumns: cols, gap: est ? 3 : 4, alignItems: "center", padding: est ? "3px 0" : "3px 2px", borderRadius: 6, background: malaDe[i] ? "var(--bFEE2E2)" : avisoDe[i] ? "var(--bFEF3C7)" : "transparent" } },
+                h("div", { style: { fontSize: 12, fontFamily: "monospace", color: malaDe[i] ? "var(--t991B1B)" : avisoDe[i] ? "var(--t92400E)" : C.muted, fontWeight: malaDe[i] || avisoDe[i] ? 800 : 400 } }, i + 1),
+                celda(i, "nom", tabOp.modo === "cons" ? r.nombres[i] : "Nombre", "text"), celda(i, "n", "Norte", "decimal"), celda(i, "e", "Este", "decimal"), quitar(i))),
+              (r.malas.length > 0 || r.avisos.length > 0) && h("div", { key: "av", style: { marginTop: 8, display: "flex", flexDirection: "column", gap: 4 } },
+                r.malas.map((m, k) => h("div", { key: "m" + k, style: { fontSize: 12, color: "var(--t991B1B)", background: "var(--bFEF2F2)", border: "1px solid var(--lFECACA)", borderRadius: 6, padding: "5px 8px" } }, "✕ Fila " + (m.fila + 1) + ": " + m.msg + " (no se dibuja)")),
+                r.avisos.map((m, k) => h("div", { key: "a" + k, style: { fontSize: 12, color: "var(--t92400E)", background: "var(--bFFFBEB)", border: "1px solid var(--lFDE68A)", borderRadius: 6, padding: "5px 8px" } }, "⚠ Fila " + (m.fila + 1) + ": " + m.msg))),
+              h("div", { key: "bt", style: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6, marginTop: 8 } },
+                h(Btn, { small: true, color: "var(--t475569)", onClick: () => setTabFilas(tabFilas.concat([filaVacia()])) }, "+ Fila"),
+                h(Btn, { small: true, color: "var(--t475569)", onClick: () => setTabPegar(tabPegar === null ? "" : null) }, "Pegar desde Excel"),
+                h(Btn, { small: true, color: "var(--t475569)", onClick: () => { if (confirm("¿Vaciar la tabla? (no borra nada del dibujo)")) setTabFilas([filaVacia(), filaVacia(), filaVacia()]); } }, "Vaciar")),
+              tabPegar !== null && h("div", { key: "pg", style: { marginTop: 8 } },
+                h("div", { style: { fontSize: 12, color: C.muted, marginBottom: 4 } }, "Copia las columnas en Excel y pégalas aquí. Orden: [Nombre] Norte Este. Los encabezados se saltan."),
+                h("textarea", { value: tabPegar, onChange: e => setTabPegar(e.target.value), autoFocus: true, rows: 5, "aria-label": "Texto pegado", className: "tv-in",
+                  style: { width: "100%", boxSizing: "border-box", fontFamily: "'JetBrains Mono', monospace", fontSize: 12.5, border: `1px solid ${C.border}`, borderRadius: 8, padding: 8, color: C.text, background: "var(--bFFFFFF)" } }),
+                h("div", { style: { display: "flex", gap: 6, marginTop: 6 } },
+                  h(Btn, { small: true, onClick: pegar }, "Agregar a la tabla"), h(Btn, { small: true, color: "var(--t64748B)", onClick: () => setTabPegar(null) }, "Cancelar")))]),
+            caja("al", [tit("AL DIBUJAR"), marca("unir", "Unir los puntos en el orden de la tabla"), tabOp.unir && marca("cerrar", "Cerrar la figura (último con el primero)")]),
+            h("button", { onClick: dibujarTabla, className: "tv-btn", style: { width: "100%", minHeight: 48, marginTop: 10, borderRadius: 10, border: "none", background: listos ? "var(--c-btn-accent)" : "var(--b94A3B8)", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer" } },
+              "Dibujar todos (" + listos + (listos === 1 ? " listo" : " listos") + (porRevisar ? " · " + porRevisar + " por revisar" : "") + ")"));
+        })(),
         // teclado: punto o medida exacta
         teclado && h("div", { className: "tv-dib-teclado", style: { position: "absolute", top: 8, left: 8, right: 8, maxWidth: 440, background: "var(--bFFFFFF)", borderRadius: 12, boxShadow: "0 6px 24px rgba(0,0,0,0.22)", padding: 12, zIndex: 4 } },
           h("div", { style: { display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" } },
