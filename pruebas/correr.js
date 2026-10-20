@@ -46,6 +46,7 @@ const PRUEBAS = [
   ['botón instalar al final', 'instalarfinal', '../out/instalarfinal'],
   ['calculadora: coordenadas sin cota', 'calccoords', '../out/calccoords'],
   ['cartera: fila activa y sin fechas', 'filaactiva', '../out/filaactiva'],
+  ['dibujo: un lado, diámetro, descomponer y regenerar', 'dibujoclaro', '../out/dibujoclaro'],
   ['tabla de puntos (PC)', 'tablapuntos', '../out/tablapuntos'],
   ['tabla de puntos (celular)', 'tablapuntos', '../out/tablapuntos_m', { W: '390' }],
   ['Excel tema Claro', 'excel_tema', '../out/xl_claro', { TEMA: 'claro' }],
@@ -68,14 +69,15 @@ const ESPERA = {
   plantaagua: ['flechas de agua en la planta: 26 | punto bajo: true'],
   recorrido: ['datos iguales: true'],
   cortesbajo: ['corte 1: 74.25 | corte 2: 246.75 | suma: 321 | terreno → sitio: 321'],
-  escalon: ['0+041.500 (2) 955.21', '41.5(2) 0.213 11.4 2.428 0 0', 'total app: 11.668 | a mano: 11.668 | IGUALES', 'Parqueadero 1 200 + Parqueadero 2 21.06 = 221.06', '0+041.500 (2)', '(2) 955.21 | total 11.668 (igual a dos parqueaderos)', 'Parqueadero 1 · sección 1 40.5×5.5=222.75 + Parqueadero 1 · sección 2 4.4×5.9=26.16', 'sardinel del parqueadero: 54.7', 'sin lectura (2): total 11.668 (no se corta)'],
+  escalon: ['0+041.500 (2) 955.21', '41.5(2) 0.213 11.4 2.428 0 0', 'total app: 11.668 | a mano: 11.668 | IGUALES', 'Parqueadero 1 200 + Parqueadero 2 21.06 = 221.06', '0+041.500 (2)', '(2) 955.21 | total 11.668 (igual a dos parqueaderos)', 'Parqueadero 1 · sección 1 40.5×5.5=222.75 + Parqueadero 1 · sección 2 4.4×5.9=26.16', 'sardinel del parqueadero: 54.7', 'sin lectura (2): total 11.668 (no se corta)', '11. dos parqueaderos separados: área 603.06', 'un parqueadero: área 603.06 IGUALES', '12. sardinel separados: 54.7', 'un parqueadero: 54.7 IGUALES', '14. fallo en la sección ancha: app 955.133 | a mano 955.133 IGUALES'],
   filaactiva: ['cartel: false | ✏ Escribiendo en 0+010.000 · columna LAT DER', 'encabezados: ABSCISA,📌 Est.,PARQ DER,LAT DER,EJE,LAT IZQ,PARQ IZQ', 'cartel tras salir hidden: true', 'no errors'],
+  dibujoclaro: ['1. un lado del rectángulo: cota 17.000(-)', '2. otro lado: cota 11.000(-)', 'cota 10.000(-)', 'Acotados 1 objetos', 'Descompuesto en 4 líneas', 'largos: 17.000 11.000 17.000 11.000', '6. deshacer: rectángulo de vuelta: 1', '7. descomponer elegidos: 0 figuras quedan | 7 líneas', '8. regenerar: transform = "" | Imagen regenerada', 'no errors'],
   calccoords: ['columnas: 2 campos por punto | cota visible: 0', 'distancia | 50.000 m', 'desnivel/pendiente: no salen', 'cabe sin desbordar: true', 'punto nuevo: campos de cota: 0 | desnivel: 0'],
   instalarfinal: ['botón al final: 1 | abajo', 'sin aviso del navegador: Toca los tres puntos', 'ventana abierta 1 vez | botón después de aceptar: 0'],
   estadovia: ['marcadas: EJE 1:ok EJE 2:falta EJE 3:malo | sigue en la obra: true', 'quitar el amarillo: EJE 1:ok EJE 2:- EJE 3:malo', 'después de recargar: ok malo'],
   tablapuntos: ['Dibujar todos (6 listos · 2 por revisar)', 'nuevos: P3, P4, BM1, P6, BM1, P10, pl 6 abierta | sig: 11', 'quedan en la tabla: P7, P8',
     'nuevos: P7, P8, pl | tabla abierta: false | sig: 11', 'deshacer quita 3 objetos', 'nuevos: E1, P12, E3, pl 3 cerrada | sig: 13', 'Norte/Este cortados: 0', 'barra de arriba cabe: true', 'filas en una línea: true | columna de cota: 0'],
-  autoacotar: ['"Área 187.000 m²", "Perím. 56.000 m"', '"R 5.000", "Cuerda 10.000", "Arco 15.708"', 'pie: Área 187.000 m²   Perímetro 56.000 m', 'movido 25 m al este: 25.000 0.000'],
+  autoacotar: ['"Área 187.000 m²", "Perím. 56.000 m"', '4. círculo r5: "R 5.000", "Área 78.540 m²", "Perím. 31.416 m", cota 10.000(-)', '"R 5.000", "Cuerda 10.000", "Arco 15.708"', 'pie: Área 187.000 m²   Perímetro 56.000 m', 'movido 25 m al este: 25.000 0.000'],
 };
 
 const solo = process.env.SOLO ? process.env.SOLO.split(',') : null;
@@ -91,7 +93,7 @@ for (const [nombre, f, salida, env] of PRUEBAS.filter(x => !solo || solo.include
   if (!ok) console.log('      ' + (r.error ? 'se pasó del tiempo' : texto.split('\n').filter(l => MALO.test(l)).slice(0, 3).join('\n      ') || (faltan.length ? 'no salió: ' + faltan.join(' · ') : 'terminó con código ' + r.status)));
 }
 // fórmulas del Excel recalculadas en LibreOffice = valores de la app (uno con parqueaderos y sobreancho, uno de cabecera)
-for (const x of ['extremos2_1', 'extremos2_2', 'cabecera', 'escalon', 'escalon_b']) {
+for (const x of ['extremos2_1', 'extremos2_2', 'cabecera', 'escalon', 'escalon_b', 'escalon_d']) {
   const f = '../out/' + x + '.xlsx'; if (!fs.existsSync(f) || fs.statSync(f).mtimeMs < inicio) continue; // solo los de esta corrida
   const r = spawnSync('bash', ['lo_cmp.sh', f], { encoding: 'utf8', timeout: 240000 });
   const ok = / 0 differ/.test(r.stdout || ''), nombre = 'LibreOffice = app (' + x + ')';

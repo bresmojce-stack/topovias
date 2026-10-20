@@ -77,5 +77,28 @@ const abrirVia = require('./abrir.js');
   const [dl2] = await Promise.all([p.waitForEvent('download'), p.click('button:has-text("Exportar")').then(() => p.click('text=💾 Guardar en el dispositivo'))]);
   await dl2.saveAs(process.argv[3] + '_b.xlsx'); await p.click('text=Cerrar').catch(() => {});
   console.log('9. Excel un parqueadero:', process.argv[3] + '_b.xlsx');
+  // D. los mismos dos parqueaderos SEPARADOS (como los dibujó Brian) con sobreancho, extremos y sardinel: la unión no es un
+  //    extremo libre ni lleva remate de sardinel; área y sardinel deben dar lo mismo que el caso B (un parqueadero con dos anchos)
+  const SDX = { activo: true, corona: "0.15", pata: "0.20", altura: "0.45", revelado: "0.15", lados: { izq: false, der: false, ini: false, fin: false }, sin: [], ejecutado: [] };
+  const prD = { ...prB, nombre: "Escalon D", sardinel: SDX, parqueaderos: pr.parqueaderos.map(q => ({ ...q, sobreAncho: "0.5", saExtremos: "0.5" })) };
+  const rD = await p.evaluate(([d, bb]) => { const f = x => { const t = generarTabla(x), a = calcAreas(x, t), s = calcSardinel(x);
+      return { area: a.total, partes: a.parqs.map(q => q.nombre + ' ' + q.largoC + '×' + q.ancho + '+esc ' + q.escalon + '=' + q.area).join(' + '), sd: s.total, lados: s.lados.map(l => l.nombre + ' ' + l.total).join(' | ') }; };
+    return { D: f(d), B: f({ ...bb, sardinel: d.sardinel }) }; }, [prD, prB]);
+  console.log('11. dos parqueaderos separados: área ' + rD.D.area + ' (' + rD.D.partes + ') | un parqueadero: área ' + rD.B.area + (Math.abs(rD.D.area - rD.B.area) < 0.0006 ? ' IGUALES' : ' DISTINTAS'));
+  console.log('12. sardinel separados: ' + rD.D.sd + ' (' + rD.D.lados + ') | un parqueadero: ' + rD.B.sd + (Math.abs(rD.D.sd - rD.B.sd) < 0.0006 ? ' IGUALES' : ' DISTINTOS'));
+  // E. un fallo en la sección ancha (5.40 m): la cota de referencia se interpola con ese ancho, no con el del primer parqueadero (5.00)
+  const rE = await p.evaluate(pr => { const f = { id: 1, nombre: "Fallo", desde: "43", hasta: "43", xDesde: "5", ladoDesde: "der", xHasta: "5", ladoHasta: "der", puntos: "1", contra: "tabla__rasante",
+      cotaBM: "955", vistaMas: "1", lecturas: [{ abs: "43", v: ["1.5"] }] };
+    const v = { ...pr, fallos: [f] }, t = generarTabla(v), r = calcFallo(f, v, t);
+    const A = t.find(x => x.abs === 41.5 && x.sub === 1), B = t.find(x => x.abs === 45);
+    const en = x => x.cotaLatDer + (x.parqDerCota - x.cotaLatDer) * (5 - 3) / 5.4;
+    const esperado = en(A) + (en(B) - en(A)) * (43 - 41.5) / (45 - 41.5);
+    return { app: r.filas[0].ref[0], mano: Math.round(esperado * 1000 + 1e-9) / 1000 }; }, prD);
+  console.log('14. fallo en la sección ancha: app ' + rE.app + ' | a mano ' + rE.mano + (Math.abs(rE.app - rE.mano) < 0.0006 ? ' IGUALES' : ' DISTINTOS'));
+  await p.evaluate(pr => { localStorage.setItem('topovias_standalone', JSON.stringify([pr])); localStorage.setItem('topovias_standalone__t', String(Date.now() + 99999)); }, prD);
+  await p.reload(); await abrirVia(p, prD.nombre); await p.click('button:has-text("CALCULAR")'); await p.waitForTimeout(200);
+  const [dl3] = await Promise.all([p.waitForEvent('download'), p.click('button:has-text("Exportar")').then(() => p.click('text=💾 Guardar en el dispositivo'))]);
+  await dl3.saveAs(process.argv[3] + '_d.xlsx'); await p.click('text=Cerrar').catch(() => {});
+  console.log('13. Excel dos parqueaderos separados:', process.argv[3] + '_d.xlsx');
   console.log(errs.join('\n') || 'no errors'); await b.close();
 })();

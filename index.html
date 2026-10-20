@@ -830,7 +830,7 @@ function seccionesParq(p) {
   grupos[grupos.length - 1].fin = af;
   const n = grupos.length;
   return grupos.map((g, k) => ({ ...p, id: k ? p.id + "~s" + (k + 1) : p.id, idBase: p.id, nombreBase: p.nombre, absInicio: String(r3(g.ini)), absFin: String(r3(g.fin)),
-    ancho: String(g.w), __a0: a0, __sec: k + 1, ...(k ? { __anchoAnt: grupos[k - 1].w } : {}), __nSec: n, __extN: (k === 0 ? 1 : 0) + (k === n - 1 ? 1 : 0) }));
+    ancho: String(g.w), __a0: a0, __sec: k + 1, ...(k ? { __anchoAnt: grupos[k - 1].w } : {}), __extN: (k === 0 ? 1 : 0) + (k === n - 1 ? 1 : 0) }));
 }
 // cota con la que EMPIEZA el tramo que nace en la abscisa abs (en un cambio de ancho la segunda fila lleva esa)
 function cotaInicioTramoEn(rs, a0, abs) {
@@ -872,6 +872,16 @@ function proyCalc(proy) {
   // parqueadero con tramos de distinto ancho: para el cálculo, una sección por cada ancho (como dos parqueaderos
   // que se tocan: la abscisa del cambio va dos veces); el editor y lo guardado siguen siendo un solo parqueadero
   if ((out.parqueaderos || []).some(p => seccionesParq(p).length > 1)) out = { ...out, __calc: true, parqueaderos: out.parqueaderos.flatMap(seccionesParq) };
+  // dos parqueaderos distintos que se tocan en una abscisa (mismo lado): para las áreas son una sola pieza con un
+  // escalón (la unión no es un extremo libre); se marca en la copia de cálculo, lo guardado no cambia
+  const toques = juntasParq(out.parqueaderos || []).filter(j => (j.antes.idBase || j.antes.id) !== (j.despues.idBase || j.despues.id));
+  if (toques.length) {
+    const aj = {};
+    toques.forEach(j => { (aj[j.antes.id] = aj[j.antes.id] || { ext: 0 }).ext++; const d = aj[j.despues.id] = aj[j.despues.id] || { ext: 0 }; d.ext++; d.ant = j.antes; });
+    out = { ...out, __calc: true, parqueaderos: out.parqueaderos.map(p => { const a = aj[p.id]; if (!a) return p;
+      return { ...p, __extN: Math.max(0, (p.__extN !== undefined ? p.__extN : 2) - a.ext),
+        ...(a.ant && p.__anchoAnt === undefined ? { __anchoAnt: parseFloat(a.ant.ancho) || 0, __antId: a.ant.id } : {}) }; }) };
+  }
   cacheCalc.set(proy, out);
   return out;
 }
@@ -953,6 +963,15 @@ function piezasSardinel(proy) {
       piezas.push({ key: k, nombre: nombre + " cabecera", medida: "abscisa", desde: a, hasta: b, mult: kc.desde > SD_T ? 2 : 1, base: sdRestar([[a, b]], sin),
         puntos: [{ x: lejos, len: kc.ancho }, { x: borde, len: fuera }].filter(q => q.len > SD_T && !sdContiene(sin, q.x)) });
     }
+  });
+  // dos parqueaderos distintos que se tocan: en la unión no hay remate de cada uno, solo el escalón entre sus anchos
+  juntasParq(parqs).filter(j => (j.antes.idBase || j.antes.id) !== (j.despues.idBase || j.despues.id)).forEach(j => {
+    const A = piezas.find(z => z.key === "pq:" + (j.antes.idBase || j.antes.id)), B = piezas.find(z => z.key === "pq:" + (j.despues.idBase || j.despues.id));
+    if (!A || !B) return;
+    const w = r3(Math.abs((parseFloat(j.antes.ancho) || 0) - (parseFloat(j.despues.ancho) || 0)));
+    const fuera = q => Math.abs(q.x - j.abs) > SD_T;
+    A.puntos = A.puntos.filter(fuera); B.puntos = B.puntos.filter(fuera);
+    if (w > SD_T && !sdContiene(sinDe(A.key), j.abs)) A.puntos.push({ x: j.abs, len: w });
   });
   return piezas;
 }
@@ -2038,7 +2057,7 @@ function ponerTema(t) {
 }
 if (typeof document !== "undefined") { hojaTemas(); const t0 = leerTema(); document.documentElement.setAttribute("data-tema", t0);
   const m0 = document.querySelector('meta[name="theme-color"]'); if (m0) m0.setAttribute("content", TEMAS[t0].colores.barra); }
-const TV_VERSION = "84";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "85";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -4578,7 +4597,7 @@ function calcVolumen(vol, proyecto, tabla) {
   const S = sobreanchoVolumen(vol, proyecto);
   const saLados = r3(S.izq + S.der);               // se suma al ancho de la vía
   const sa = S.longitudinal ? r3(saLados / 2) : 0; // se suma al inicio y fin (si se pidió)
-  const { anchoIzq, anchoDer, anchoParqDer, anchoParqIzq } = anchosProyecto(proyecto);
+  const { anchoIzq, anchoDer } = anchosProyecto(proyecto);
   const anchoVia = r3(anchoIzq + anchoDer);
   if (!vol.fuenteSup || !vol.fuenteInf || !tabla) return null;
   const serSup = getSerie(vol.fuenteSup, proyecto, tabla), serInf = getSerie(vol.fuenteInf, proyecto, tabla);
@@ -4758,8 +4777,9 @@ const nombreRellenoFallo = f => "Relleno de fallos — " + materialFallo(f);
 // Cota de una superficie en (abscisa, desplazamiento): entre sus puntos de la sección (parq, lateral,
 // eje) y entre las dos abscisas que la rodean. Fuera de lo medido no inventa: null.
 function cotaSuperficieEn(serie, A, abs, x) {
-  const pos = { parqIzq: -(A.anchoIzq + A.anchoParqIzq), izq: -A.anchoIzq, eje: 0, der: A.anchoDer, parqDer: A.anchoDer + A.anchoParqDer };
   const enSeccion = f => {
+    // el ancho del parqueadero es el de ESA fila (si hay otro o una sección más ancha), no el del primero
+    const pos = { parqIzq: -(A.anchoIzq + (f.wParqIzq !== undefined ? f.wParqIzq : A.anchoParqIzq)), izq: -A.anchoIzq, eje: 0, der: A.anchoDer, parqDer: A.anchoDer + (f.wParqDer !== undefined ? f.wParqDer : A.anchoParqDer) };
     const pts = Object.keys(pos).filter(k => f[k] != null && isFinite(f[k])).map(k => ({ x: pos[k], c: f[k] })).sort((a, b) => a.x - b.x);
     if (!pts.length) return null;
     if (x <= pts[0].x) return pts[0].c;
@@ -4785,7 +4805,8 @@ function calcFallo(f, proyecto, tabla) {
   const n = Math.min(5, Math.max(1, parseInt(f.puntos, 10) || 3));
   const xs = n === 1 ? [(x0 + x1) / 2] : Array.from({ length: n }, (_, i) => x0 + (x1 - x0) * i / (n - 1));
   const bm = parseFloat(f.cotaBM), vm = parseFloat(f.vistaMas), ai = !isNaN(bm) && !isNaN(vm) ? r3(bm + vm) : null;
-  const serie = f.contra && tabla ? getSerie(f.contra, P, tabla) : [];
+  const anchoParqFila = (lado, r) => { const q = parqEn(P, lado, r.abs, false, r.sub); return q ? parseFloat(q.ancho) || 0 : 0; };
+  const serie = (f.contra && tabla ? getSerie(f.contra, P, tabla) : []).map(r => ({ ...r, wParqIzq: anchoParqFila("izquierdo", r), wParqDer: anchoParqFila("derecho", r) }));
   const filas = (f.lecturas || []).map((l, idx) => {
     const abs = parseFloat(l.abs); if (isNaN(abs)) return null;
     const lect = xs.map((_, i) => { const v = parseFloat((l.v || [])[i]); return isNaN(v) ? null : v; });
@@ -4944,9 +4965,11 @@ function construirHojaVia(proyecto, tabla, sheetName, filasReservadas) {
           parseFloat(pq.ancho) || 0, sobreanchoParq(pq), sobreanchoExtremosParq(pq)]);
         // extremos libres: 2 en un parqueadero entero; en una sección, solo el inicio y/o el fin del parqueadero
         const nE = pq.__extN !== undefined ? pq.__extN : 2, EXTR = ref(5, r);
-        const ant = pq.__sec > 1 ? R.parq[pq.__sec === 2 ? pq.idBase : pq.idBase + "~s" + (pq.__sec - 1)] : null;
+        const ant = pq.__antId !== undefined ? null : pq.__sec > 1 ? R.parq[pq.__sec === 2 ? pq.idBase : pq.idBase + "~s" + (pq.__sec - 1)] : null;
         R.parq[pq.id] = { pq, ANT: ant ? ant.A : null, L: `ABS(${ref(2, r)}-${ref(1, r)})`, A: ref(3, r), EXT: ref(4, r), EXTR, LE: nE === 2 ? `${`ABS(${ref(2, r)}-${ref(1, r)})`}+2*${EXTR}` : nE === 1 ? `${`ABS(${ref(2, r)}-${ref(1, r)})`}+${EXTR}` : `ABS(${ref(2, r)}-${ref(1, r)})`, esp: {}, sa: {} };
       });
+      // parqueadero que empieza donde termina otro (mismo lado): su escalón se mide contra el ancho del otro
+      parqsX.forEach(pq => { if (pq.__antId !== undefined && R.parq[pq.__antId]) R.parq[pq.id].ANT = R.parq[pq.__antId].A; });
       blank();
     }
     // cabeceras de 4 esquinas: la cota de cada esquina (las de adentro salen repartidas entre ellas)
@@ -6317,11 +6340,11 @@ const DIB_GRUPOS = [
     ["sombrear", "Sombrear", "paint-bucket"], ["pluma", "Pluma libre", "pen-line"], ["paralela", "Paralela", "between-vertical-start"], ["desfase", "Desfase (sobreancho)", "expand"],
     ["@eje", "Eje de la vía", "signpost"], ["@tabla", "Tabla de puntos", "table"], ["estacar", "Dividir / estacar", "milestone"]] },
   { id: "medir", label: "Medir", icono: "ruler", herr: [["idcoord", "ID coordenada", "map-pin"], ["distancia", "Distancia y azimut", "ruler"], ["area", "Área y perímetro", "pentagon"], ["angulo", "Ángulo", "triangle-right"], ["radio", "Radio y cuerda", "circle-dot-dashed"], ["abscisa", "Abscisa y desplaz.", "locate-fixed"], ["acotar", "Acotar", "move-horizontal"], ["autoacotar", "Auto acotar", "pencil-ruler"], ["cuadro", "Cuadro de coordenadas", "table"]] },
-  { id: "editar", label: "Editar", icono: "scissors", herr: [["elegir", "Elegir y editar", "mouse-pointer-2"], ["seleccionar", "Seleccionar varios", "square-dashed-mouse-pointer"], ["mover", "Mover", "move"], ["copiar", "Copiar", "copy"], ["girar", "Girar", "rotate-ccw"], ["recortar", "Recortar", "scissors"], ["extender", "Extender", "move-up-right"], ["unir", "Unir en una figura", "combine"], ["borrar", "Borrar", "trash-2"], ["@deshacer", "Deshacer", "undo-2"], ["@rehacer", "Rehacer", "redo-2"]] },
-  { id: "ver", label: "Ver", icono: "search", herr: [["mano", "Mover la vista", "hand"], ["@todo", "Ver todo", "scan"], ["@buscar", "Buscar punto", "map-pin"], ["@imanes", "Imanes", "magnet"], ["@cuadricula", "Cuadrícula", "grid-3x3"]] }
+  { id: "editar", label: "Editar", icono: "scissors", herr: [["elegir", "Elegir y editar", "mouse-pointer-2"], ["seleccionar", "Seleccionar varios", "square-dashed-mouse-pointer"], ["mover", "Mover", "move"], ["copiar", "Copiar", "copy"], ["girar", "Girar", "rotate-ccw"], ["recortar", "Recortar", "scissors"], ["extender", "Extender", "move-up-right"], ["unir", "Unir en una figura", "combine"], ["descomponer", "Descomponer en líneas", "split"], ["borrar", "Borrar", "trash-2"], ["@deshacer", "Deshacer", "undo-2"], ["@rehacer", "Rehacer", "redo-2"]] },
+  { id: "ver", label: "Ver", icono: "search", herr: [["mano", "Mover la vista", "hand"], ["@todo", "Ver todo", "scan"], ["@regenerar", "Regenerar imagen", "refresh-cw"], ["@buscar", "Buscar punto", "map-pin"], ["@imanes", "Imanes", "magnet"], ["@cuadricula", "Cuadrícula", "grid-3x3"]] }
 ];
 const DIB_NOMBRE = { punto: "PUNTO", linea: "LÍNEA", polilinea: "POLILÍNEA", rect: "RECTÁNGULO", cuadrado: "CUADRADO", triangulo: "TRIÁNGULO", circulo: "CÍRCULO", arco: "ARCO", sombrear: "SOMBREAR", pluma: "PLUMA LIBRE", paralela: "PARALELA",
-  estacar: "DIVIDIR / ESTACAR", desfase: "DESFASE", unir: "UNIR", abscisa: "ABSCISA", distancia: "DISTANCIA", area: "ÁREA", angulo: "ÁNGULO", radio: "RADIO Y CUERDA", acotar: "ACOTAR", autoacotar: "AUTO ACOTAR", cuadro: "CUADRO DE COORDENADAS", idcoord: "ID COORDENADA", mano: "MOVER LA VISTA", seleccionar: "SELECCIONAR", elegir: "ELEGIR", mover: "MOVER", copiar: "COPIAR", girar: "GIRAR", recortar: "RECORTAR", extender: "EXTENDER", borrar: "BORRAR" };
+  estacar: "DIVIDIR / ESTACAR", desfase: "DESFASE", unir: "UNIR", descomponer: "DESCOMPONER", abscisa: "ABSCISA", distancia: "DISTANCIA", area: "ÁREA", angulo: "ÁNGULO", radio: "RADIO Y CUERDA", acotar: "ACOTAR", autoacotar: "AUTO ACOTAR", cuadro: "CUADRO DE COORDENADAS", idcoord: "ID COORDENADA", mano: "MOVER LA VISTA", seleccionar: "SELECCIONAR", elegir: "ELEGIR", mover: "MOVER", copiar: "COPIAR", girar: "GIRAR", recortar: "RECORTAR", extender: "EXTENDER", borrar: "BORRAR" };
 // herramientas que piden puntos (con imanes y "Escribir")
 const DIB_PIDE_PUNTO = ["punto", "linea", "polilinea", "rect", "cuadrado", "triangulo", "circulo", "arco", "distancia", "area", "acotar", "abscisa", "idcoord"];
 const DIB_SELECCION = ["mover", "copiar", "girar"];
@@ -6441,7 +6464,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   const [estVal, setEstVal] = React.useState("5");
   // auto acotar y cuadro de coordenadas: lo que se escribe (cada equipo lo recuerda)
   const leerOp = (clave, def) => { try { return { ...def, ...JSON.parse(localStorage.getItem(TV_KEY + clave) || "{}") }; } catch (_) { return def; } };
-  const [acoOp, setAcoOpR] = React.useState(() => leerOp("_dibAcotar", { lados: true, area: true, perim: true, radio: true, cuerda: true, arco: true }));
+  const [acoOp, setAcoOpR] = React.useState(() => leerOp("_dibAcotar", { uno: false, lados: true, area: true, perim: true, radio: true, diam: true, cuerda: true, arco: true }));
   const setAcoOp = v => { setAcoOpR(v); try { localStorage.setItem(TV_KEY + "_dibAcotar", JSON.stringify(v)); } catch (_) {} };
   const [cuaOp, setCuaOpR] = React.useState(() => leerOp("_dibCuadro", { dist: true, az: true, rumbo: false, tot: true }));
   const setCuaOp = v => { setCuaOpR(v); try { localStorage.setItem(TV_KEY + "_dibCuadro", JSON.stringify(v)); } catch (_) {} };
@@ -6533,11 +6556,14 @@ function TabDibujo({ proy, onChange, onArchivo }) {
 
   // ── auto acotar: escribe en el dibujo las medidas del objeto (cotas y textos fijos, como Acotar) ──
   const ACOTABLES = ["l", "pl", "ci", "ar"];
-  const autoAcotar = o => {
+  const autoAcotar = (o, seg) => {
     const k = vistaRef.current.k, sep = 14 / k, renglon = 16 / k, op = acoOp, nuevos = [];
     const textos = (p, lineas) => lineas.filter(Boolean).forEach((s, i, ls) => nuevos.push({ t: "tx", p: { x: p.x, y: p.y + ((ls.length - 1) / 2 - i) * renglon }, s }));
-    const cotas = (segs, d) => segs.forEach(([a, b]) => { if (DIB.dist(a, b) > 1e-9) nuevos.push({ t: "cota", a, b, d }); });
-    if (o.t === "l") cotas([[o.a, o.b]], sep);
+    // la separación no pasa de la cuarta parte del lado: con el zoom muy lejos no quedan rayas enormes ni cotas encimadas
+    const cotas = (segs, d) => segs.forEach(([a, b]) => { const L = DIB.dist(a, b); if (L > 1e-9) nuevos.push({ t: "cota", a, b, d: Math.sign(d) * Math.min(Math.abs(d), Math.max(L * 0.25, 0.08)) }); });
+    if (seg && (o.t === "l" || o.t === "pl")) {   // "Un lado": solo la medida del lado que se tocó
+      cotas([seg], o.t === "pl" && o.c && o.v.length > 2 && DIB.areaSigno(o.v) <= 0 ? sep : o.t === "pl" && o.c && o.v.length > 2 ? -sep : sep);
+    } else if (o.t === "l") cotas([[o.a, o.b]], sep);
     else if (o.t === "pl" && o.c && o.v.length > 2) {
       const A = DIB.areaSigno(o.v), v0 = o.v[0];
       if (op.lados) cotas(DIB.segmentos(o), A > 0 ? -sep : sep);   // por fuera de la figura
@@ -6552,7 +6578,11 @@ function TabDibujo({ proy, onChange, onArchivo }) {
         const [a, b] = segs[Math.floor(segs.length / 2)], L = DIB.dist(a, b) || 1, n = DIB.izq({ x: (b.x - a.x) / L, y: (b.y - a.y) / L }), s = "Total " + f3(DIB.largo(o.v)) + " m";
         textos(DIB.sum(DIB.medio(a, b), n, -(sep * 1.4 + Math.abs(n.x) * s.length * 3.6 / k)), [s]);   // junto a un tramo vertical se corre medio texto para no taparlo
       }
-    } else if (o.t === "ci") textos(o.c, [op.radio && "R " + f3(o.r), op.area && "Área " + f3(Math.PI * o.r * o.r) + " m²", op.perim && "Perím. " + f3(TAU * o.r) + " m"]);
+    } else if (o.t === "ci") {
+      textos(o.c, [op.radio && "R " + f3(o.r), op.area && "Área " + f3(Math.PI * o.r * o.r) + " m²", op.perim && "Perím. " + f3(TAU * o.r) + " m"]);
+      // el diámetro como cota, por debajo del círculo (un solo trazo, no por pedazos)
+      if (op.diam) nuevos.push({ t: "cota", a: { x: o.c.x - o.r, y: o.c.y }, b: { x: o.c.x + o.r, y: o.c.y }, d: -(o.r + Math.min(sep, o.r * 0.5)) });
+    }
     else if (o.t === "ar") {
       const B = DIB.barrido(o), [e1, e2] = DIB.extremos(o), m = DIB.medio(e1, e2), mA = DIB.enCirculo(o.c, o.r, o.a1 + B / 2), dm = DIB.dist(m, mA);
       if (op.radio) textos(o.c, ["R " + f3(o.r)]);
@@ -6563,9 +6593,10 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     return nuevos;
   };
   const acotarTodo = () => {
-    const nuevos = objs.filter(o => ACOTABLES.includes(o.t)).flatMap(autoAcotar);
+    const lista = objs.filter(o => ACOTABLES.includes(o.t) && (!selSet.length || selSet.includes(o.id)));   // con objetos elegidos, solo esos
+    const nuevos = lista.flatMap(o => autoAcotar(o));
     if (!nuevos.length) return aviso(objs.some(o => ACOTABLES.includes(o.t)) ? "Marca arriba qué quieres que escriba." : "No hay líneas, curvas ni figuras para acotar.");
-    agregar(nuevos); aviso("Acotados " + objs.filter(o => ACOTABLES.includes(o.t)).length + " objetos");
+    agregar(nuevos); aviso("Acotados " + lista.length + " objetos");
   };
   // ── cuadro de coordenadas: un punto numerado en cada vértice y el cuadro debajo de la figura ──
   const cuadroDe = o => {
@@ -6661,6 +6692,23 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   const borrarSeleccion = () => { const ids = selSet; cambiarDib(d => ({ objs: d.objs.filter(o => !ids.includes(o.id)) })); aviso(ids.length + " borrado" + (ids.length > 1 ? "s" : "")); setSelSet([]); };
   const colorSeleccion = c => { const ids = selSet; cambiarDib(d => ({ objs: d.objs.map(o => ids.includes(o.id) ? (c ? { ...o, col: c } : (({ col, ...r }) => r)(o)) : o) })); setColorSel(false); };
   const pasarSeleccion = x => { setHerrR(x); setTemp([]); setRes(null); setSel(null); setSelListo(true); setColorSel(false); };
+  // Descomponer: una figura o polilínea pasa a ser sus líneas sueltas (un solo deshacer); círculos, arcos y lo demás no cambian
+  const descomponerObjs = lista => {
+    const hechas = lista.filter(o => o.t === "pl" && o.v.length > 1);
+    if (!hechas.length) return aviso("Toca una polilínea o figura (rectángulo, cuadrado, triángulo…).");
+    const ids = hechas.map(o => o.id);
+    const lineas = hechas.flatMap(o => DIB.segmentos(o).filter(([a, b]) => DIB.dist(a, b) > 1e-9).map(([a, b]) => ({ t: "l", a, b, id: nuevoId(), ...(o.col ? { col: o.col } : {}) })));
+    cambiarDib(d => ({ objs: d.objs.filter(o => !ids.includes(o.id)).concat(lineas) }));
+    setSelSet([]); setSel(null);
+    aviso("Descompuesto en " + lineas.length + " línea" + (lineas.length === 1 ? "" : "s") + (hechas.some(o => o.som) ? " (el sombreado de la figura se quitó)" : ""));
+  };
+  // vuelve a pintar el dibujo desde cero: limpia lo que haya quedado en pantalla (sobre todo después de acercar y alejar)
+  const regenerarImagen = () => {
+    const el = svgRef.current; if (el) { el.style.transform = ""; el.style.willChange = ""; }
+    capaCache.current.deps = null;
+    const nv = { ...vistaRef.current }; vistaRef.current = nv; setVistaR(nv);
+    aviso("Imagen regenerada");
+  };
   const unirSeleccion = () => {
     const lista = objs.filter(o => selSet.includes(o.id) && DIB_UNIBLES.includes(o.t)); if (lista.length < 2) return aviso("Elige al menos dos líneas, polilíneas, arcos o trazos.");
     const ids = lista.map(o => o.id);
@@ -6747,6 +6795,11 @@ function TabDibujo({ proy, onChange, onArchivo }) {
       const o = tocarObjeto(X, Y); if (!o) return;
       setSelSet(selSet.includes(o.id) ? selSet.filter(x => x !== o.id) : selSet.concat([o.id])); return;
     }
+    if (herr === "descomponer") {
+      const o = tocarObjeto(X, Y, o => o.t === "pl");
+      if (!o) return aviso("Toca la polilínea o figura que quieres descomponer.");
+      descomponerObjs([o]); return;
+    }
     if (herr === "unir") {
       const o = tocarObjeto(X, Y, o => DIB_UNIBLES.includes(o.t)); if (!o) return;
       setSelSet(selSet.includes(o.id) ? selSet.filter(x => x !== o.id) : selSet.concat([o.id])); return;
@@ -6754,7 +6807,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     if (herr === "autoacotar") {
       const o = tocarObjeto(X, Y, o => ACOTABLES.includes(o.t));
       if (!o) return aviso("Toca una línea, polilínea, figura, círculo o arco.");
-      const nuevos = autoAcotar(o);
+      const nuevos = autoAcotar(o, acoOp.uno && (o.t === "l" || o.t === "pl") ? tramoCercano(o, pM) : null);
       if (!nuevos.length) return aviso("Marca arriba qué quieres que escriba.");
       agregar(nuevos); return;
     }
@@ -6804,7 +6857,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     const todo = () => true, cerr = o => DIB.cerrada(o);
     if (herr === "elegir" || herr === "borrar") return todo;
     if (DIB_SELECCION.includes(herr)) return selListo ? null : todo;
-    return { unir: o => DIB_UNIBLES.includes(o.t), recortar: o => ["l", "pl", "ci", "ar"].includes(o.t), extender: o => o.t === "l" || (o.t === "pl" && !o.c),
+    return { unir: o => DIB_UNIBLES.includes(o.t), descomponer: o => o.t === "pl", recortar: o => ["l", "pl", "ci", "ar"].includes(o.t), extender: o => o.t === "l" || (o.t === "pl" && !o.c),
       paralela: objA ? null : o => ["l", "pl", "ci", "ar", "eje"].includes(o.t), desfase: o => ["l", "pl", "ci", "ar", "eje"].includes(o.t), estacar: o => ["l", "pl", "ci", "ar", "eje"].includes(o.t),
       sombrear: cerr, radio: o => o.t === "ci" || o.t === "ar", autoacotar: o => ACOTABLES.includes(o.t), cuadro: o => o.t === "l" || o.t === "pl", angulo: o => o.t === "l" || o.t === "pl", area: temp.length ? null : cerr }[herr] || null;
   };
@@ -6966,6 +7019,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     if (id === "@deshacer") { setGrupo(null); return deshacerDib(); }
     if (id === "@rehacer") { setGrupo(null); return rehacer(); }
     if (id === "@todo") { setGrupo(null); return verTodo(); }
+    if (id === "@regenerar") { setGrupo(null); return regenerarImagen(); }
     if (id === "@buscar") { setGrupo(null); return setBuscar(""); }
     if (id === "@imanes") { setGrupo(null); return setVerImanes(true); }
     if (id === "@cuadricula") { setGrupo(null); return setCuadricula(!cuadricula); }
@@ -7050,6 +7104,11 @@ function TabDibujo({ proy, onChange, onArchivo }) {
       let ang = Math.atan2(B2.Y - A2.Y, B2.X - A2.X) * 180 / Math.PI; if (ang > 90) ang -= 180; if (ang < -90) ang += 180;
       const M = { X: (A2.X + B2.X) / 2, Y: (A2.Y + B2.Y) / 2 }, ux = (B2.X - A2.X) / (Math.hypot(B2.X - A2.X, B2.Y - A2.Y) || 1), uy = (B2.Y - A2.Y) / (Math.hypot(B2.X - A2.X, B2.Y - A2.Y) || 1);
       const tick = P => h("line", { x1: P.X - (ux - uy) * 5, y1: P.Y - (uy + ux) * 5, x2: P.X + (ux - uy) * 5, y2: P.Y + (uy + ux) * 5, stroke: c, strokeWidth: 1.8 });
+      // de lejos (la medida mide menos que su texto) no se amontonan rayas ni números: queda solo la línea de la cota
+      const lpx = Math.hypot(B.X - A.X, B.Y - A.Y), txtPx = String(f3(DIB.dist(o.a, o.b))).length * 7.5 + 8;
+      if (lpx < 14) return h("g", { key }, h("line", { x1: A2.X, y1: A2.Y, x2: B2.X, y2: B2.Y, stroke: c, strokeWidth: 1.2 }));
+      if (lpx < txtPx) return h("g", { key },
+        h("line", { x1: A2.X, y1: A2.Y, x2: B2.X, y2: B2.Y, stroke: c, strokeWidth: 1.4 }), tick(A2), tick(B2));
       return h("g", { key },
         h("line", { x1: A.X, y1: A.Y, x2: A2.X, y2: A2.Y, stroke: c, strokeWidth: 1, strokeDasharray: "3 3" }),
         h("line", { x1: B.X, y1: B.Y, x2: B2.X, y2: B2.Y, stroke: c, strokeWidth: 1, strokeDasharray: "3 3" }),
@@ -7153,6 +7212,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     estacar: "toca la línea, arco o eje para marcar los puntos",
     desfase: "escribe la medida, elige el lado y toca la figura",
     unir: `toca las líneas a unir (${selSet.length}) y luego Unir`,
+    descomponer: "toca la figura o polilínea: queda en líneas sueltas (para varias: Seleccionar varios → Descomponer)",
     seleccionar: selSet.length ? `${selSet.length} elegido${selSet.length > 1 ? "s" : ""} · toca o arrastra para sumar más` : "toca objetos o arrastra un recuadro",
     idcoord: "toca un punto: te digo su Norte y Este",
     mano: "arrastra para moverte por el dibujo · zoom con dos dedos o la rueda · ✋ para volver",
@@ -7282,6 +7342,8 @@ function TabDibujo({ proy, onChange, onArchivo }) {
           herr === "seleccionar" && !selSet.length && objs.length > 0 && btnBarra("Todo", () => setSelSet(objs.map(o => o.id)), "#334155"),
           herr === "seleccionar" && selSet.length > 0 && [
             ["borrar", btnBarra("Borrar (" + selSet.length + ")", borrarSeleccion, C.danger, "trash-2")],
+            ["acotar", btnBarra("Acotar (" + selSet.length + ")", acotarTodo, objs.some(o => selSet.includes(o.id) && ACOTABLES.includes(o.t)) ? C.accent : "#475569", "pencil-ruler")],
+            ["descomponer", btnBarra("Descomponer", () => descomponerObjs(objs.filter(o => selSet.includes(o.id))), objs.some(o => selSet.includes(o.id) && o.t === "pl") ? C.relleno : "#475569", "split")],
             ["unir", btnBarra("Unir", unirSeleccion, objs.filter(o => selSet.includes(o.id) && DIB_UNIBLES.includes(o.t)).length >= 2 ? C.relleno : "#475569", "combine")],
             ["color", btnBarra("Color", () => setColorSel(!colorSel), colorSel ? C.relleno : "#334155")],
             ["mover", btnBarra("Mover", () => pasarSeleccion("mover"), "#334155", "move")],
@@ -7292,9 +7354,9 @@ function TabDibujo({ proy, onChange, onArchivo }) {
             h("button", { type: "submit", className: "tv-dib-btn", style: { background: C.relleno, color: "var(--tFFFFFF)", border: "none", borderRadius: 8, padding: "6px 9px", fontWeight: 800, cursor: "pointer" } }, "✓")),
           herr === "estacar" && [h(React.Fragment, { key: "a" }, btnBarra("Cada", () => setEstModo("cada"), estModo === "cada" ? C.relleno : "#334155")), h(React.Fragment, { key: "b" }, btnBarra("Partes", () => setEstModo("partes"), estModo === "partes" ? C.accent : "#334155")),
             h(React.Fragment, { key: "c" }, campoBarra(estVal, setEstVal, estModo === "cada" ? "5" : "4", 64)), h("span", { key: "m" }, estModo === "cada" ? "m" : "partes")],
-          herr === "autoacotar" && [["lados", "Lados"], ["area", "Área"], ["perim", "Perím."], ["radio", "Radio"], ["cuerda", "Cuerda"], ["arco", "Arco"]]
+          herr === "autoacotar" && [["uno", "Un lado"], ["lados", "Lados"], ["area", "Área"], ["perim", "Perím."], ["radio", "Radio"], ["diam", "Diám."], ["cuerda", "Cuerda"], ["arco", "Arco"]]
             .map(([k, t]) => h(React.Fragment, { key: k }, btnBarra(t, () => setAcoOp({ ...acoOp, [k]: !acoOp[k] }), acoOp[k] ? C.relleno : "#334155", acoOp[k] ? "check" : null)))
-            .concat([h(React.Fragment, { key: "todo" }, btnBarra("Acotar todo", acotarTodo, C.accent))]),
+            .concat([h(React.Fragment, { key: "todo" }, btnBarra(selSet.length ? "Acotar elegidos (" + selSet.length + ")" : "Acotar todo", acotarTodo, C.accent))]),
           herr === "cuadro" && [h("span", { key: "l", style: { whiteSpace: "nowrap" } }, "Letra"), h(React.Fragment, { key: "lc" }, campoBarra(cuaLetra, setCuaLetra, "P", 40, "text")),
             h("span", { key: "d", style: { whiteSpace: "nowrap" } }, "desde"), h(React.Fragment, { key: "dc" }, campoBarra(cuaDesde, setCuaDesde, String((dib && dib.sig) || 1), 52, "numeric"))]
             .concat([["dist", "Distancia"], ["az", "Azimut"], ["rumbo", "Rumbo"], ["tot", "Totales"]].map(([k, t]) => h(React.Fragment, { key: k }, btnBarra(t, () => setCuaOp({ ...cuaOp, [k]: !cuaOp[k] }), cuaOp[k] ? C.relleno : "#334155", cuaOp[k] ? "check" : null)))),
@@ -7327,6 +7389,9 @@ function TabDibujo({ proy, onChange, onArchivo }) {
           onClick: () => { if (herr === "mano") setHerr(herrAntes.current || "linea"); else { herrAntes.current = herr; setHerr("mano"); } },
           style: { position: "absolute", right: 8, bottom: 56, zIndex: 3, width: 44, height: 44, borderRadius: 22, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
             background: herr === "mano" ? C.relleno : "var(--bFFFFFF)", color: herr === "mano" ? "var(--tFFFFFF)" : "var(--t334155)", boxShadow: "0 3px 12px rgba(0,0,0,0.25)" } }, h(Icono, { n: "hand", size: 20 })),
+        h("button", { className: "tv-dib-regenerar", "data-accion": "regenerar", title: "Regenerar imagen (limpia la pantalla y vuelve a pintar el dibujo)", onClick: regenerarImagen,
+          style: { position: "absolute", right: 8, bottom: 108, zIndex: 3, width: 44, height: 44, borderRadius: 22, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+            background: "var(--bFFFFFF)", color: "var(--t334155)", boxShadow: "0 3px 12px rgba(0,0,0,0.25)" } }, h(Icono, { n: "refresh-cw", size: 20 })),
         h("div", { className: "tv-dib-deshacer", style: { position: "absolute", right: 8, bottom: 8, zIndex: 3, display: "flex", borderRadius: 22, overflow: "hidden", boxShadow: "0 3px 12px rgba(0,0,0,0.25)", background: "var(--bFFFFFF)" } },
           h("button", { onClick: deshacerDib, title: "Deshacer (Ctrl+Z)", "data-accion": "deshacer", style: { border: "none", background: C.relleno, color: "var(--tFFFFFF)", padding: "9px 14px", fontWeight: 800, fontSize: 13.5, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 } }, h(Icono, { n: "undo-2", size: 16 }), temp.length ? "Quitar punto" : "Deshacer"),
           h("button", { onClick: () => rehacer(), title: "Rehacer (Ctrl+Y)", "data-accion": "rehacer", style: { border: "none", borderLeft: "1px solid rgba(255,255,255,0.35)", background: "var(--b0369A1)", color: "var(--tFFFFFF)", padding: "9px 12px", cursor: "pointer", display: "flex", alignItems: "center" } }, h(Icono, { n: "redo-2", size: 16 }))),
