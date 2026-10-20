@@ -2057,7 +2057,7 @@ function ponerTema(t) {
 }
 if (typeof document !== "undefined") { hojaTemas(); const t0 = leerTema(); document.documentElement.setAttribute("data-tema", t0);
   const m0 = document.querySelector('meta[name="theme-color"]'); if (m0) m0.setAttribute("content", TEMAS[t0].colores.barra); }
-const TV_VERSION = "87";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "88";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -6356,6 +6356,58 @@ function objetosTablaPuntos(r, op) {
   return pts;
 }
 
+// ── DIBUJO → VÍA: lee del dibujo el eje, los bordes de la vía (laterales) y los parqueaderos, con Norte y Este reales (sin cotas) ──
+// Eje = objeto "eje" (abscisa 0 = su abs0). Cada punto se proyecta al eje: abscisa y desplazamiento (derecha +, izquierda −).
+// Laterales: líneas o polilíneas abiertas largas, de un solo lado, que corren junto al eje. Parqueaderos: figuras cerradas de un solo
+// lado dentro del largo del eje; el ancho es lo que sobresale del lateral. Cabeceras (cruzan el eje o pasan de sus extremos): no se pasan.
+function detectarDibujoVia(objs, eje) {
+  const acum = EJE.acum(eje.v), L = acum[acum.length - 1], A0 = eje.abs0 || 0, T = 0.0005;
+  const muestras = o => { const pts = []; DIB.segmentos(o).forEach(([a, b]) => { const n = Math.max(1, Math.ceil(DIB.dist(a, b) / Math.max(L / 40, 0.5))); for (let i = 0; i <= n; i++) pts.push({ x: a.x + (b.x - a.x) * i / n, y: a.y + (b.y - a.y) * i / n }); }); return pts; };
+  const proy = pts => pts.map(p => EJE.proyectar(eje, p)).filter(Boolean);
+  const media = a => a.reduce((t, x) => t + x, 0) / (a.length || 1);
+  const grupos = a => { const g = []; a.slice().sort((x, y) => x - y).forEach(x => { if (!g.length || x - g[g.length - 1] > 0.15) g.push(x); }); return g.length; };
+  const bordes = [];
+  objs.forEach(o => {
+    if (o.id === eje.id || o.oculto || !(o.t === "l" || (o.t === "pl" && !o.c))) return;
+    const P = proy(muestras(o)); if (!P.length) return;
+    const d = P.map(q => q.desp), abs = P.map(q => q.abs), cober = Math.max(...abs) - Math.min(...abs);
+    const lado = d.every(x => x > T) ? "derecho" : d.every(x => x < -T) ? "izquierdo" : null;
+    if (lado && cober >= L * 0.5) { const a = d.map(Math.abs); bordes.push({ id: o.id, lado, ancho: r3(media(a)), min: r3(Math.min(...a)), max: r3(Math.max(...a)), cober }); }
+  });
+  const mejor = lado => bordes.filter(b => b.lado === lado).sort((x, y) => y.cober - x.cober || x.ancho - y.ancho)[0] || null;
+  const lat = { izquierdo: mejor("izquierdo"), derecho: mejor("derecho") };
+  const parqs = [], aparte = [];
+  // figuras = grupos de líneas y polilíneas que se tocan por sus extremos (0.05 m); un parqueadero pegado al borde de la vía puede
+  // venir con tres lados (el cuarto es el borde) o con las líneas sueltas, no solo como figura cerrada
+  const excl = new Set([eje.id].concat(bordes.map(x => x.id))), segs = [];
+  objs.forEach(o => { if (excl.has(o.id) || o.oculto) return; if (o.t === "l") segs.push([o.a, o.b]); else if (o.t === "pl") DIB.segmentos(o).forEach(sg => segs.push(sg)); });
+  const nodos = [], padre = [], nid = q => { for (let i = 0; i < nodos.length; i++) if (DIB.dist(nodos[i], q) < 0.05) return i; nodos.push(q); padre.push(padre.length); return nodos.length - 1; };
+  const raiz = i => padre[i] === i ? i : (padre[i] = raiz(padre[i]));
+  segs.forEach(([a, b]) => { const i = nid(a), j = nid(b); padre[raiz(i)] = raiz(j); });
+  const comps = {}; nodos.forEach((q, i) => { const r = raiz(i); (comps[r] = comps[r] || []).push(q); });
+  // analiza un grupo de puntos como parqueadero: { parq } o { aparte } (lo usan los grupos del dibujo y "Marcar parqueadero")
+  const figura = (pts, id) => {
+    const P = proy(pts); if (P.length < 2) return null;
+    const d = P.map(q => q.desp), abs = P.map(q => q.abs), a0 = Math.min(...abs), a1 = Math.max(...abs);
+    const lado = d.every(x => x > -T) ? "derecho" : d.every(x => x < T) ? "izquierdo" : null;
+    const donde = formatoAbscisa(a0) + " → " + formatoAbscisa(a1);
+    if (!lado) return { aparte: { id, texto: "Figura en " + donde + " que cruza el eje (cabecera o línea de cruce): todavía no se pasa a la vía." } };
+    if (a0 < A0 - 0.25 || a1 > A0 + L + 0.25) return { aparte: { id, texto: "Figura en " + donde + " que pasa del largo del eje (cabecera): todavía no se pasa a la vía." } };
+    const a = d.map(Math.abs), outer = Math.max(...a), inner = Math.min(...a), anchoLat = lat[lado] ? lat[lado].ancho : 0;
+    const notas = [], regular = grupos(a) <= 2, corta = a1 - a0 < 1.5;   // regular = el ancho no cambia (en un eje con quiebres las abscisas de las esquinas se corren sin que el ancho cambie)
+    if (!lat[lado]) notas.push("no hay borde de la vía de este lado: el ancho se mide desde el eje");
+    else if (inner > anchoLat + 0.15) notas.push("queda separada " + f3(inner - anchoLat) + " m del borde de la vía");
+    else if (inner < anchoLat - 0.15) notas.push("se monta " + f3(anchoLat - inner) + " m sobre la vía");
+    if (corta) notas.push("muy corta (" + f3(a1 - a0) + " m): puede ser un pedazo de otra figura que no cierra; revisa antes de pasarla");
+    if (!regular) notas.push("forma irregular: el ancho es el mayor (" + f3(outer - anchoLat) + " m); si cambia de ancho, parte la figura");
+    return { parq: { id, lado, absInicio: r3(a0), absFin: r3(a1), ancho: r3(Math.max(0, outer - anchoLat)), notas, corta } };
+  };
+  Object.keys(comps).forEach(r => { const f = figura(comps[r], "f" + r); if (!f) return; if (f.aparte) aparte.push(f.aparte); else parqs.push(f.parq); });
+  parqs.sort((x, y) => (x.lado === y.lado ? 0 : x.lado === "izquierdo" ? -1 : 1) || x.absInicio - y.absInicio);
+  const cuenta = { izquierdo: 0, derecho: 0 };
+  parqs.forEach(q => { q.nombre = "Parqueadero " + (q.lado === "izquierdo" ? "izq. " : "der. ") + (++cuenta[q.lado]); });
+  return { largo: L, abs0: A0, lat, parqs, aparte, nBordes: bordes.length, figura };
+}
 const DIB_GRUPOS = [
   { id: "dibujar", label: "Dibujar", icono: "pencil", herr: [["punto", "Punto N,E", "circle-dot"], ["linea", "Línea", "slash"], ["polilinea", "Polilínea", "spline"],
     ["rect", "Rectángulo", "rectangle-horizontal"], ["cuadrado", "Cuadrado", "square"], ["triangulo", "Triángulo", "triangle"], ["circulo", "Círculo", "circle"], ["arco", "Arco", "rainbow"],
@@ -6366,9 +6418,9 @@ const DIB_GRUPOS = [
   { id: "ver", label: "Ver", icono: "search", herr: [["mano", "Mover la vista", "hand"], ["@todo", "Ver todo", "scan"], ["@regenerar", "Regenerar imagen", "refresh-cw"], ["@puntos", "Lista de puntos", "list"], ["@buscar", "Buscar punto", "map-pin"], ["@imanes", "Imanes", "magnet"], ["@cuadricula", "Cuadrícula", "grid-3x3"]] }
 ];
 const DIB_NOMBRE = { punto: "PUNTO", linea: "LÍNEA", polilinea: "POLILÍNEA", rect: "RECTÁNGULO", cuadrado: "CUADRADO", triangulo: "TRIÁNGULO", circulo: "CÍRCULO", arco: "ARCO", sombrear: "SOMBREAR", pluma: "PLUMA LIBRE", paralela: "PARALELA",
-  estacar: "DIVIDIR / ESTACAR", desfase: "DESFASE", unir: "UNIR", descomponer: "DESCOMPONER", abscisa: "ABSCISA", distancia: "DISTANCIA", area: "ÁREA", angulo: "ÁNGULO", radio: "RADIO Y CUERDA", acotar: "ACOTAR", autoacotar: "AUTO ACOTAR", cuadro: "CUADRO DE COORDENADAS", idcoord: "ID COORDENADA", mano: "MOVER LA VISTA", seleccionar: "SELECCIONAR", elegir: "ELEGIR", mover: "MOVER", copiar: "COPIAR", girar: "GIRAR", recortar: "RECORTAR", extender: "EXTENDER", borrar: "BORRAR" };
+  estacar: "DIVIDIR / ESTACAR", desfase: "DESFASE", unir: "UNIR", descomponer: "DESCOMPONER", marcarparq: "MARCAR PARQUEADERO", abscisa: "ABSCISA", distancia: "DISTANCIA", area: "ÁREA", angulo: "ÁNGULO", radio: "RADIO Y CUERDA", acotar: "ACOTAR", autoacotar: "AUTO ACOTAR", cuadro: "CUADRO DE COORDENADAS", idcoord: "ID COORDENADA", mano: "MOVER LA VISTA", seleccionar: "SELECCIONAR", elegir: "ELEGIR", mover: "MOVER", copiar: "COPIAR", girar: "GIRAR", recortar: "RECORTAR", extender: "EXTENDER", borrar: "BORRAR" };
 // herramientas que piden puntos (con imanes y "Escribir")
-const DIB_PIDE_PUNTO = ["punto", "linea", "polilinea", "rect", "cuadrado", "triangulo", "circulo", "arco", "distancia", "area", "acotar", "abscisa", "idcoord"];
+const DIB_PIDE_PUNTO = ["marcarparq", "punto", "linea", "polilinea", "rect", "cuadrado", "triangulo", "circulo", "arco", "distancia", "area", "acotar", "abscisa", "idcoord"];
 const DIB_SELECCION = ["mover", "copiar", "girar"];
 const DIB_UNIBLES = ["l", "pl", "ar", "fh"];
 
@@ -6378,7 +6430,7 @@ const DIB_OSCURO = { "#0F172A": "#F1F5F9", "#334155": "#CBD5E1", "#64748B": "#A8
   "#0284C7": "#38BDF8", "#2563EB": "#60A5FA", "#B91C1C": "#F87171", "#BE185D": "#F472B6", "#0891B2": "#22D3EE", "#16A34A": "#4ADE80",
   "#CA8A04": "#FACC15", "#fff": "#212830", "#FFFFFF": "#212830", "#CBD5E1": "#3A4757", "#EEF2F6": "#2A3340" };
 const temaOscuro = () => typeof document !== "undefined" && !!(TEMAS[document.documentElement.getAttribute("data-tema")] || {}).oscuro;
-function TabDibujo({ proy, onChange, onArchivo }) {
+function TabDibujo({ proy, onChange, onArchivo, onVia }) {
   const h = React.createElement;
   const dibujos = proy.dibujos || [];
   const claveActivo = TV_KEY + "_dib_" + proy.id;
@@ -6474,6 +6526,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   const [colorNuevo, setColorNuevoR] = React.useState(() => { try { return localStorage.getItem(TV_KEY + "_dibColor") || null; } catch (_) { return null; } });
   const setColorNuevo = c => { setColorNuevoR(c); try { if (c) localStorage.setItem(TV_KEY + "_dibColor", c); else localStorage.removeItem(TV_KEY + "_dibColor"); } catch (_) {} };
   const [verPaleta, setVerPaleta] = React.useState(false);
+  const [pv, setPv] = React.useState(null), [pvVal, setPvVal] = React.useState({}), [pvOff, setPvOff] = React.useState({}), [pvModo, setPvModo] = React.useState("agregar"), [pvRas, setPvRas] = React.useState([]), [pvCotas, setPvCotas] = React.useState(false);   // dibujo → vía
   const [lp, setLp] = React.useState(null), [lpColor, setLpColor] = React.useState(false);   // lista de puntos: null = cerrada, texto = filtro
   colorRef.current = colorNuevo;
   const [desD, setDesD] = React.useState("0.50");       // desfase
@@ -6663,6 +6716,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
     const q = { x: p.x, y: p.y };
     if (herr === "punto") { agregar([{ t: "p", x: q.x, y: q.y, nom: nom || "P" + (dib.sig || 1) }], d => ({ sig: (d.sig || 1) + 1 })); return; }
     if (herr === "linea") { if (temp.length) { agregar([{ t: "l", a: temp[0], b: q }]); setTemp([]); } else setTemp([q]); return; }
+    if (herr === "marcarparq") { setTemp(temp.concat([q])); return; }
     if (herr === "polilinea" || herr === "area") {
       if (temp.length > 2 && DIB.dist(q, temp[0]) < 1e-9) return terminarPoli(true);
       setTemp(temp.concat([q])); return;
@@ -7154,7 +7208,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   const tempS = temp.map(p => aP(p));
   const fig = cursor && figuraCon(cursor);
   if (fig) els.push(dibujarObj(fig, "fig", { col: "#0284C7", ancho: 2, guion: "6 4" }));
-  else if (temp.length && ["linea", "polilinea", "area", "distancia", "rect", "cuadrado", "triangulo", "circulo", "arco"].includes(herr)) {
+  else if (temp.length && ["linea", "polilinea", "marcarparq", "area", "distancia", "rect", "cuadrado", "triangulo", "circulo", "arco"].includes(herr)) {
     const pts = tempS.concat(cursor ? [aP(cursor)] : []);
     els.push(h("polyline", { key: "temp", points: pts.map(s => s.X + "," + s.Y).join(" "), fill: herr === "area" ? "rgba(5,150,105,0.08)" : "none", stroke: herr === "area" || herr === "distancia" ? "#059669" : "#0284C7", strokeWidth: 2, strokeDasharray: "6 4" }));
   }
@@ -7221,7 +7275,19 @@ function TabDibujo({ proy, onChange, onArchivo }) {
 
   // ── textos de la barra de comando ──
   const enSel = DIB_SELECCION.includes(herr);
-  const pasoTxt = enSel ? (!selListo ? `toca los objetos (${selSet.length}) y luego Siguiente` : !temp.length ? "punto base" : herr === "girar" ? "toca hacia dónde girar o escribe el ángulo" : herr === "copiar" ? "toca dónde va la copia (puedes hacer varias)" : "toca dónde va")
+  // Marcar parqueadero: lo que miden los puntos tocados hasta ahora (lado, abscisas y ancho)
+  const ejeMarca = herr === "marcarparq" ? objs.filter(o => o.t === "eje" && o.v.length >= 2)[0] : null;
+  const vivoParq = ejeMarca && temp.length >= 3 ? detectarDibujoVia(objs, ejeMarca).figura(temp, "t") : null;
+  const textoVivoParq = !vivoParq ? "toca las esquinas del parqueadero (" + temp.length + " de 4 o más)" : vivoParq.aparte ? vivoParq.aparte.texto.replace(/ todavía no se pasa a la vía\./, "") :
+    (vivoParq.parq.lado === "izquierdo" ? "IZQ" : "DER") + " · " + formatoAbscisa(vivoParq.parq.absInicio) + " → " + formatoAbscisa(vivoParq.parq.absFin) + " · ancho " + f3(vivoParq.parq.ancho) + " m" + " · " + temp.length + " puntos" + (vivoParq.parq.notas.length ? " · ⚠ " + vivoParq.parq.notas[0] : "");
+  const terminarMarca = cancelar => {
+    if (!cancelar) {
+      if (temp.length < 3) return aviso("Toca al menos 3 esquinas del parqueadero.");
+      agregar([{ t: "pl", c: true, v: temp.slice() }]);
+    }
+    setTemp([]); setHerr("elegir"); setPv({});   // vuelve al panel con el parqueadero ya en la lista
+  };
+  const pasoTxt = herr === "marcarparq" ? textoVivoParq : enSel ? (!selListo ? `toca los objetos (${selSet.length}) y luego Siguiente` : !temp.length ? "punto base" : herr === "girar" ? "toca hacia dónde girar o escribe el ángulo" : herr === "copiar" ? "toca dónde va la copia (puedes hacer varias)" : "toca dónde va")
   : {
     punto: "toca dónde va el punto, o escríbelo con ⌨",
     linea: temp.length ? "segundo punto" : "primer punto",
@@ -7327,7 +7393,7 @@ function TabDibujo({ proy, onChange, onArchivo }) {
   const ultimo = temp[temp.length - 1];
   const angosto = W < 560;
   // medida rápida en la barra: desde el último punto, con distancia y azimut (sin abrir Escribir)
-  const baseRapida = DIB_SELECCION.includes(herr) && selListo ? (herr !== "girar" ? temp[0] : null) : (DIB_PIDE_PUNTO.includes(herr) && herr !== "abscisa" && !(herr === "acotar" && temp.length === 2) ? temp[temp.length - 1] : null);
+  const baseRapida = DIB_SELECCION.includes(herr) && selListo ? (herr !== "girar" ? temp[0] : null) : (DIB_PIDE_PUNTO.includes(herr) && herr !== "abscisa" && herr !== "marcarparq" && !(herr === "acotar" && temp.length === 2) ? temp[temp.length - 1] : null);
   const puedeRapido = !!baseRapida && !teclado;
   const medidaRapida = () => {
     const D = parseFloat(String(rapD).replace(",", ".")), A = leerAzimut(rapAz);
@@ -7359,7 +7425,8 @@ function TabDibujo({ proy, onChange, onArchivo }) {
       h(Btn, { small: true, color: C.danger, onClick: borrarDibujo, title: "Borrar dibujo" }, h(Icono, { n: "trash-2", size: 14 })),
       h(Btn, { small: true, color: "var(--t475569)", onClick: () => setVerPaleta(!verPaleta), title: "Color de lo que dibujes" }, h("span", { className: "tv-dib-coloractual", style: { width: 14, height: 14, borderRadius: "50%", display: "inline-block", border: "2px solid var(--lFFFFFF)", background: colorNuevo || "conic-gradient(var(--bDC2626), var(--bCA8A04), var(--b16A34A), var(--b2563EB), var(--b7C3AED), var(--bDC2626))" } }), h("span", { className: "tv-dib-txt" }, "Color")),
       h(Btn, { small: true, color: "var(--t0369A1)", onClick: () => accion("@tabla"), title: "Tabla de puntos (escribir o pegar Norte y Este)" }, h(Icono, { n: "table", size: 14 }), h("span", { className: "tv-dib-txt" }, "Tabla de puntos")),
-      h(Btn, { small: true, color: C.success, onClick: exportarDXF, title: "Exportar a AutoCAD" }, h(Icono, { n: "download", size: 14 }), "DXF")),
+      h(Btn, { small: true, color: C.success, onClick: exportarDXF, title: "Exportar a AutoCAD" }, h(Icono, { n: "download", size: 14 }), "DXF"),
+      onVia && !proy.libre && h(Btn, { small: true, color: "var(--t9D174D)", onClick: () => { setGrupo(null); setBuscar(null); setLp(null); setPvVal({}); setPvOff({}); setPv({}); }, title: "Pasar el eje, los laterales y los parqueaderos del dibujo a la vía" }, h(Icono, { n: "signpost", size: 14 }), h("span", { className: "tv-dib-txt" }, "→ Vía"))),
     // lienzo
     h("div", { ref: cajaRef, style: { position: "relative", height: alto, borderRadius: 14, overflow: "hidden", border: `1px solid ${C.border}`, background: "var(--bFFFFFF)", display: "flex", flexDirection: "column" } },
       // barra de comando (altura fija: que el lienzo no salte cuando aparecen o se van botones)
@@ -7397,6 +7464,8 @@ function TabDibujo({ proy, onChange, onArchivo }) {
           herr === "girar" && selListo && temp.length > 0 && [h(React.Fragment, { key: "c" }, campoBarra(giroTxt, setGiroTxt, "grados")), h(React.Fragment, { key: "b" }, btnBarra("Girar", () => { const a = parseFloat(String(giroTxt).replace(",", ".")); if (!isNaN(a)) aplicarGiro(a * Math.PI / 180); }, C.accent))],
           herr === "copiar" && selListo && btnBarra("Terminar", terminarSeleccion, C.accent, "check"),
           (DIB_PIDE_PUNTO.includes(herr) || (enSel && selListo && temp.length && herr !== "girar") || (enSel && selListo && !temp.length)) && btnBarra("Escribir", abrirTeclado, "#334155", "keyboard"),
+          herr === "marcarparq" && [btnBarra("Quitar último", () => setTemp(temp.slice(0, -1)), "#334155", "undo-2"), btnBarra("Listo (" + temp.length + ")", () => terminarMarca(false), temp.length >= 3 ? C.relleno : "#475569", "check"), btnBarra("Cancelar", () => terminarMarca(true), "#475569")]
+            .map((el, i) => h(React.Fragment, { key: "mp" + i }, el)),
           herr === "polilinea" && temp.length >= 2 && btnBarra("Terminar", () => terminarPoli(false), C.accent, "check"),
           herr === "polilinea" && temp.length >= 3 && btnBarra("Cerrar", () => terminarPoli(true), C.accent),
           herr === "area" && temp.length >= 3 && btnBarra("Calcular", () => terminarPoli(true), C.success, "check"),
@@ -7577,6 +7646,139 @@ function TabDibujo({ proy, onChange, onArchivo }) {
             h("div", { key: o.id, className: "tv-dib-pt", style: { display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: `1px solid ${C.border}`, fontSize: 12.5, fontFamily: "monospace" } },
               h("strong", { style: { color: "var(--tB91C1C)", minWidth: 34 } }, o.nom), h("span", { style: { flex: 1 } }, "N " + f3(o.y) + "  E " + f3(o.x)),
               h(Btn, { small: true, color: C.accent, onClick: () => { setVista({ ...vistaRef.current, cx: o.x, cy: o.y, k: Math.max(vistaRef.current.k, 8) }); setMarca(o); setTimeout(() => setMarca(m => m === o ? null : m), 3500); setBuscar(null); } }, "Ir")))),
+        // dibujo → vía: el eje, los laterales y los parqueaderos del dibujo pasan a la vía (sin cotas)
+        pv !== null && (() => {
+          const caja = hijos => h("div", { className: "tv-dib-pasar", style: { position: "absolute", top: 8, left: 8, right: 8, maxWidth: 560, maxHeight: "92%", overflowY: "auto", background: "var(--bFFFFFF)", borderRadius: 12, boxShadow: "0 6px 24px rgba(0,0,0,0.22)", padding: 12, zIndex: 4, fontSize: 12.5 } },
+            h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, fontWeight: 800, fontSize: 13 } }, "→ Pasar el dibujo a la vía",
+              h("button", { onClick: () => setPv(null), title: "Cerrar", style: { border: "none", background: "none", cursor: "pointer" } }, h(Icono, { n: "x", size: 16 }))), hijos);
+          const eje = objs.filter(o => o.t === "eje" && o.v.length >= 2)[0];
+          if (!eje) {
+            const cand = objs.filter(o => o.t === "pl" && !o.c && o.v.length >= 2 && !o.oculto).map(o => ({ o, L: DIB.largo(o.v) })).sort((x, y) => y.L - x.L).slice(0, 5);
+            const hacerEje = (o, txt) => { const a0 = leerAbscisa(txt); if (a0 === null) return alert("Abscisa no válida (ej. 0+000 o 125.5)."); reemplazar(o.id, [{ id: o.id, t: "eje", v: o.v, abs0: a0, paso: 10, nom: proy.nombre || "Eje" }]); };
+            return caja([h("div", { key: "t", style: { color: C.muted, lineHeight: 1.6, marginBottom: 6 } }, "Elige cuál polilínea es el eje (se marca en el dibujo con sus abscisas). Escribe la abscisa de su primer punto: es tu abscisa 0."),
+              !cand.length && h("div", { key: "n", style: { color: C.muted } }, "No hay polilíneas abiertas en este dibujo. Dibuja el eje como polilínea y vuelve."),
+              cand.map(({ o, L }) => h("div", { key: o.id, style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "6px 0", borderBottom: `1px solid ${C.border}` } },
+                h("svg", { width: 44, height: 10 }, h("line", { x1: 2, y1: 5, x2: 42, y2: 5, stroke: cd(o.col || "#0284C7"), strokeWidth: 2.5, strokeLinecap: "round", strokeDasharray: guionLinea(o.tipo) })),
+                h("span", { style: { flex: "1 1 130px" } }, "Polilínea de " + o.v.length + " puntos · " + f3(L) + " m"),
+                h("input", { defaultValue: formatoAbscisa(parseFloat(proy.absInicio) || 0), className: "tv-in", "data-eje-abs": o.id, style: { width: 100, fontFamily: "monospace", fontSize: 12, border: `1px solid ${C.border}`, borderRadius: 7, padding: "3px 6px", background: "var(--bF8FAFC)", textAlign: "right" } }),
+                h(Btn, { small: true, color: "var(--t9D174D)", onClick: e => hacerEje(o, e.currentTarget.parentNode.querySelector("input[data-eje-abs]").value) }, "Usar como eje")))]);
+          }
+          const D = detectarDibujoVia(objs, eje);
+          const n2 = t => { const x = parseFloat(String(t).replace(",", ".")); return isNaN(x) ? null : x; };
+          const ov = (k, auto) => pvVal[k] !== undefined ? pvVal[k] : auto;
+          const usa = (k, def) => pvOff[k] === undefined ? def : !pvOff[k];
+          const campo = (k, auto, ancho, modo) => h("input", { key: k + "|" + ov(k, auto), defaultValue: ov(k, auto), className: "tv-in", inputMode: modo || "decimal", "data-pv": k,
+            onKeyDown: e => { if (e.key === "Enter") e.currentTarget.blur(); }, onBlur: e => { const v = e.currentTarget.value; if (v !== ov(k, auto)) setPvVal({ ...pvVal, [k]: v }); },
+            style: { width: ancho || 72, fontFamily: "monospace", fontSize: 12, border: `1px solid ${C.border}`, borderRadius: 7, padding: "3px 6px", background: "var(--bF8FAFC)", textAlign: modo === "text" ? "left" : "right" } });
+          const marca = (k, def) => h("input", { type: "checkbox", checked: usa(k, def), "data-usa": k, onChange: e => setPvOff({ ...pvOff, [k]: !e.target.checked }), style: { width: 18, height: 18, flex: "0 0 auto" } });
+          const ins = t => h("span", { style: { fontSize: 10.5, fontWeight: 800, borderRadius: 999, padding: "1px 7px", marginLeft: 6, color: "#FFFFFF", background: t === "IGUAL" ? "#64748B" : t === "NUEVO" ? "#16A34A" : "#D97706", whiteSpace: "nowrap" } }, t);
+          const sec = t => h("div", { style: { fontWeight: 800, letterSpacing: 0.4, fontSize: 11.5, color: C.muted, margin: "10px 0 4px" } }, t);
+          const fila = (k, ...hijos) => h("div", { key: k, style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", padding: "5px 0", borderBottom: `1px solid ${C.border}` } }, ...hijos);
+          // puntos del eje: los PI del dibujo (con sus coordenadas) y los PI de rasante (abscisa y cota, sin quiebre: sus coordenadas salen del eje)
+          const acumE = EJE.acum(eje.v), absPI = eje.v.map((_, i) => r3(D.abs0 + acumE[i]));
+          const leerCota = k => { const t = String(ov(k, "")).trim(); if (t === "") return null; const x = n2(t); return x === null ? NaN : x; };
+          const armarPuntos = () => {
+            const pts = eje.v.map((q, i) => ({ abs: absPI[i], x: q.x, y: q.y, cota: leerCota("ci|" + i), planta: true }));
+            if (pts.some(q => Number.isNaN(q.cota))) return { error: "Revisa las cotas de los PI: deben ser números." };
+            for (const r of pvRas) {
+              if (!String(r.a).trim() && !String(r.c).trim()) continue;
+              const a = leerAbscisa(r.a), c = n2(r.c);
+              if (a === null || c === null) return { error: "Revisa la abscisa y la cota de los PI de rasante." };
+              if (a < D.abs0 - 0.001 || a > D.abs0 + D.largo + 0.001) return { error: "El PI de rasante en " + formatoAbscisa(a) + " queda fuera del eje (" + formatoAbscisa(D.abs0) + " a " + formatoAbscisa(D.abs0 + D.largo) + ")." };
+              const ex = pts.find(q => Math.abs(q.abs - a) < 0.001);
+              if (ex) { if (ex.cota === null) ex.cota = c; else if (Math.abs(ex.cota - c) > 0.0005) return { error: "En " + formatoAbscisa(a) + " hay dos cotas distintas." }; continue; }
+              const q = EJE.punto({ v: eje.v, abs0: D.abs0 }, a, 0); if (!q) return { error: "El PI de rasante en " + formatoAbscisa(a) + " no cae sobre el eje." };
+              pts.push({ abs: r3(a), x: q.x, y: q.y, cota: c, planta: false });
+            }
+            pts.sort((u, v) => u.abs - v.abs);
+            return { pts };
+          };
+          const PE = armarPuntos(), ptsEje = PE.pts || eje.v.map((q, i) => ({ abs: absPI[i], x: q.x, y: q.y, cota: null, planta: true }));
+          const cur = (proy.coordsEje || []).map(q => ({ x: parseFloat(q.este), y: parseFloat(q.norte) }));
+          const igualEje = cur.length === ptsEje.length && cur.every((q, i) => Math.abs(q.x - ptsEje[i].x) < 0.0005 && Math.abs(q.y - ptsEje[i].y) < 0.0005) && Math.abs((parseFloat(proy.absInicio) || 0) - D.abs0) < 0.0005;
+          const estEje = igualEje ? "IGUAL" : cur.length ? "CAMBIA" : "NUEVO";
+          const latProy = lado => parseFloat((lado === "izquierdo" ? proy.lateralIzq : proy.lateralDer).ancho);
+          const iguales = (x, q) => x.lado === q.lado && Math.abs(parseFloat(x.absInicio) - q.ai) < 0.001 && Math.abs(parseFloat(x.absFin) - q.af) < 0.001 && Math.abs(parseFloat(x.ancho) - q.w) < 0.001;
+          const datosParq = q => { const k = "pq|" + q.id; return { k, nombre: ov(k + "|n", q.nombre), ai: leerAbscisa(ov(k + "|ai", formatoAbscisa(q.absInicio))), af: leerAbscisa(ov(k + "|af", formatoAbscisa(q.absFin))), w: n2(ov(k + "|w", String(q.ancho))), lado: q.lado }; };
+          const pasar = () => {
+            const cambios = {}, partes = [];
+            if (usa("eje", true)) {
+              if (PE.error) return alert(PE.error);
+              const ds = eje.v.slice(1).map((q, i) => DIB.dist(eje.v[i], q)), pe = PE.pts, conCotas = pe.some(q => q.cota !== null);
+              cambios.coordsEje = pe.map(q => ({ norte: String(r3(q.y)), este: String(r3(q.x)) }));
+              cambios.tramos = conCotas
+                ? pe.slice(1).map((q, i) => { const a = pe[i]; return { ...tramoVacio(), distancia: String(r3(q.abs - a.abs)), cotaInicio: a.cota === null ? "" : String(r3(a.cota)), cotaFin: q.cota === null ? "" : String(r3(q.cota)), ...(a.planta ? {} : { parte: true }) }; })
+                : aplicarDistancias(proy.tramos, ds).slice(0, ds.length);
+              cambios.absInicio = String(r3(D.abs0)); partes.push("eje de " + eje.v.length + " PI" + (pe.length > eje.v.length ? " y " + (pe.length - eje.v.length) + " de rasante" : "") + (conCotas ? " con cotas" : ""));
+            }
+            for (const lado of ["izquierdo", "derecho"]) {
+              const k = "lat|" + lado, b = D.lat[lado]; if (!usa(k, !!b)) continue;
+              const w = n2(ov(k, b ? String(b.ancho) : "")); if (w === null || !(w > 0)) return alert("Revisa el ancho del lateral " + lado + ".");
+              cambios[lado === "izquierdo" ? "lateralIzq" : "lateralDer"] = { ...(lado === "izquierdo" ? proy.lateralIzq : proy.lateralDer), ancho: String(r3(w)) }; partes.push("lateral " + lado);
+            }
+            const nuevos = [];
+            for (const q of D.parqs) {
+              const d = datosParq(q); if (!usa(d.k, !q.corta)) continue;
+              if (d.ai === null || d.af === null || !(d.w > 0)) return alert("Revisa las abscisas y el ancho de \"" + d.nombre + "\".");
+              nuevos.push({ ...parqVacio(), nombre: String(d.nombre).trim() || "Parqueadero", lado: d.lado, absInicio: String(r3(d.ai)), absFin: String(r3(d.af)), ancho: String(r3(d.w)) });
+            }
+            if (nuevos.length || pvModo === "reemplazar") {
+              const actuales = proy.parqueaderos || [];
+              const unicos = pvModo === "reemplazar" ? nuevos : nuevos.filter(n => !actuales.some(x => iguales(x, { lado: n.lado, ai: +n.absInicio, af: +n.absFin, w: +n.ancho })));
+              cambios.parqueaderos = pvModo === "reemplazar" ? unicos : actuales.concat(unicos);
+              if (unicos.length || pvModo === "reemplazar") partes.push(unicos.length + " parqueadero" + (unicos.length === 1 ? "" : "s"));
+            }
+            if (!partes.length) return aviso("No hay nada nuevo que pasar a la vía.");
+            HIST.ultimo = 0; onVia(cambios); setPv(null);   // un paso propio de Deshacer
+            aviso("Pasado a la vía: " + partes.join(", ") + ". Ahora puedes escribir las cotas en la vía.");
+          };
+          return caja([
+            sec("EJE" ), fila("eje", marca("eje", true), h("span", { style: { fontWeight: 700 } }, "Eje de " + eje.v.length + " PI · " + f3(D.largo) + " m"), ins(estEje),
+              h("span", { style: { color: C.muted, fontSize: 11.5 } }, "inicio N " + f3(eje.v[0].y) + " E " + f3(eje.v[0].x))),
+            fila("abs0", h("span", { style: { flex: "1 1 150px" } }, "Abscisa 0 (primer punto del eje)"),
+              h("input", { key: "abs0|" + D.abs0, defaultValue: formatoAbscisa(D.abs0), className: "tv-in", "data-pv": "abs0", onKeyDown: e => { if (e.key === "Enter") e.currentTarget.blur(); },
+                onBlur: e => { const a = leerAbscisa(e.currentTarget.value); if (a !== null && Math.abs(a - D.abs0) > 0.0005) actualizar(eje.id, { abs0: a }); },
+                style: { width: 112, fontFamily: "monospace", fontSize: 12, border: `1px solid ${C.border}`, borderRadius: 7, padding: "3px 6px", background: "var(--bF8FAFC)", textAlign: "right" } }),
+              h(Btn, { small: true, color: "var(--t475569)", onClick: () => actualizar(eje.id, { v: eje.v.slice().reverse() }), title: "El primer punto pasa a ser el último" }, "↔ Invertir sentido")),
+            h("div", { key: "cotas-t", style: { margin: "10px 0 4px", display: "flex", alignItems: "center", gap: 8 } },
+              h("button", { onClick: () => setPvCotas(!pvCotas), "data-pv": "cotas", style: { border: "none", background: "none", cursor: "pointer", fontWeight: 800, letterSpacing: 0.4, fontSize: 11.5, color: C.muted, padding: 0 } }, (pvCotas ? "▾ " : "▸ ") + "COTAS DEL EJE (opcional)"),
+              ptsEje.some(q => q.cota !== null) && ins("CON COTAS")),
+            pvCotas && h("div", { key: "cotas" },
+              h("div", { style: { color: C.muted, fontSize: 11.5, lineHeight: 1.5, marginBottom: 4 } }, "Cota de cada PI del eje y, si hace falta, PI de rasante: un punto con abscisa y cota donde cambia la pendiente sin que el eje tenga quiebre (la vía parte el tramo ahí). Si lo dejas vacío, se conservan las cotas que ya tiene la vía."),
+              eje.v.map((q, i) => fila("ci|" + i, h("span", { style: { flex: "1 1 130px" } }, "PI " + (i + 1) + " · " + formatoAbscisa(absPI[i])), "cota", campo("ci|" + i, "", 90), "m")),
+              pvRas.map((r, i) => fila("ras" + r.id, h("span", { style: { fontWeight: 700 } }, "PI de rasante"),
+                h("input", { key: "ra" + r.id + "|" + r.a, defaultValue: r.a, placeholder: "0+020", className: "tv-in", "data-ras-a": r.id, onKeyDown: e => { if (e.key === "Enter") e.currentTarget.blur(); }, onBlur: e => setPvRas(pvRas.map(x => x.id === r.id ? { ...x, a: e.currentTarget.value } : x)),
+                  style: { width: 104, fontFamily: "monospace", fontSize: 12, border: `1px solid ${C.border}`, borderRadius: 7, padding: "3px 6px", background: "var(--bF8FAFC)", textAlign: "right" } }), "cota",
+                h("input", { key: "rc" + r.id + "|" + r.c, defaultValue: r.c, placeholder: "954.800", inputMode: "decimal", className: "tv-in", "data-ras-c": r.id, onKeyDown: e => { if (e.key === "Enter") e.currentTarget.blur(); }, onBlur: e => setPvRas(pvRas.map(x => x.id === r.id ? { ...x, c: e.currentTarget.value } : x)),
+                  style: { width: 90, fontFamily: "monospace", fontSize: 12, border: `1px solid ${C.border}`, borderRadius: 7, padding: "3px 6px", background: "var(--bF8FAFC)", textAlign: "right" } }), "m",
+                h(Btn, { small: true, color: C.danger, onClick: () => setPvRas(pvRas.filter(x => x.id !== r.id)), title: "Quitar" }, "✕"))),
+              h("div", { style: { marginTop: 6 } }, h(Btn, { small: true, color: "var(--t475569)", onClick: () => setPvRas(pvRas.concat([{ id: Math.random(), a: "", c: "" }])) }, "＋ PI de rasante")),
+              PE.error && h("div", { style: { color: "var(--tB45309)", fontSize: 11.5, marginTop: 4 } }, "⚠ " + PE.error)),
+            sec("LATERALES (borde de la vía)"),
+            ["izquierdo", "derecho"].map(lado => { const b = D.lat[lado], k = "lat|" + lado, w = n2(ov(k, b ? String(b.ancho) : "")), c = latProy(lado);
+              const est = w === null ? null : !isNaN(c) && c > 0 ? (Math.abs(c - w) < 0.0005 ? "IGUAL" : "CAMBIA") : "NUEVO";
+              return fila(k, marca(k, !!b), h("span", { style: { fontWeight: 700, minWidth: 74 } }, lado === "izquierdo" ? "Izquierdo" : "Derecho"), "ancho", campo(k, b ? String(b.ancho) : "", 64), "m", est && ins(est),
+                !b && h("span", { style: { color: C.muted, fontSize: 11.5 } }, "no encontré el borde: escribe el ancho o déjalo sin marcar"),
+                b && b.max - b.min > 0.05 && h("span", { style: { color: "var(--tB45309)", fontSize: 11.5 } }, "varía de " + f3(b.min) + " a " + f3(b.max) + ": se usa el promedio"),
+                est === "CAMBIA" && h("span", { style: { color: C.muted, fontSize: 11.5 } }, "antes " + f3(c))); }),
+            sec("PARQUEADEROS (" + D.parqs.length + ")"),
+            h("div", { key: "mp", style: { marginBottom: 4 } }, h(Btn, { small: true, color: "var(--t7E22CE)", onClick: () => { setTemp([]); setRes(null); setSel(null); setPv(null); setHerr("marcarparq"); }, title: "Toca las esquinas del parqueadero en el dibujo" }, "＋ Marcar parqueadero con el dedo")),
+            !D.parqs.length && h("div", { style: { color: C.muted } }, "No encontré figuras cerradas junto a la vía. Dibújalas como rectángulo o polilínea cerrada pegadas al borde."),
+            D.parqs.map(q => { const d = datosParq(q), ya = d.ai !== null && d.af !== null && d.w !== null && (proy.parqueaderos || []).some(x => iguales(x, { lado: q.lado, ai: d.ai, af: d.af, w: d.w }));
+              return h("div", { key: q.id, style: { padding: "6px 0", borderBottom: `1px solid ${C.border}` } },
+                h("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" } }, marca(d.k, !q.corta), campo(d.k + "|n", q.nombre, 190, "text"), h("span", { style: { fontWeight: 700 } }, q.lado === "izquierdo" ? "IZQ" : "DER"), ins(ya ? "IGUAL" : "NUEVO")),
+                h("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 4, paddingLeft: 24 } }, "de", campo(d.k + "|ai", formatoAbscisa(q.absInicio), 112, "text"), "a", campo(d.k + "|af", formatoAbscisa(q.absFin), 112, "text"), "ancho", campo(d.k + "|w", String(q.ancho), 60), "m"),
+                q.notas.map((t, i) => h("div", { key: i, style: { color: "var(--tB45309)", fontSize: 11.5, paddingLeft: 24, marginTop: 2 } }, "⚠ " + t))); }),
+            D.aparte.length > 0 && sec("NO SE PASAN"),
+            D.aparte.map((a, i) => h("div", { key: "a" + i, style: { color: C.muted, fontSize: 11.5, padding: "2px 0" } }, "• " + a.texto)),
+            h("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 10 } },
+              h("span", null, "Parqueaderos que ya tiene la vía:"),
+              h(Sel, { value: pvModo, onChange: e => setPvModo(e.target.value), style: { maxWidth: 220 } }, h("option", { value: "agregar" }, "agregar los nuevos"), h("option", { value: "reemplazar" }, "reemplazarlos por estos"))),
+            h("div", { style: { fontSize: 11.5, color: C.muted, marginTop: 8, lineHeight: 1.5 } }, "No se tocan cotas ni capas: solo el eje (PI y distancias de los tramos), los anchos de los laterales y los parqueaderos. Un solo Deshacer lo devuelve todo."),
+            h("div", { style: { display: "flex", gap: 8, marginTop: 10 } }, h(Btn, { color: C.accent, onClick: pasar }, "Pasar a la vía"), h(Btn, { color: "var(--t475569)", onClick: () => setPv(null) }, "Cerrar"))]);
+        })(),
+        // marcar parqueadero: lo que miden los puntos tocados (franja que se lee completa también en el celular)
+        herr === "marcarparq" && h("div", { className: "tv-dib-vivo", style: { position: "absolute", top: 8, left: 8, right: 8, zIndex: 3, background: "var(--b0F172A)", color: "var(--tFFFFFF)", borderRadius: 10, padding: "7px 10px", fontSize: 12.5, fontWeight: 700, lineHeight: 1.4, boxShadow: "0 3px 12px rgba(0,0,0,0.3)", pointerEvents: "none" } }, textoVivoParq),
         // lista de puntos: elegir, esconder, cambiar color y nombre
         lp !== null && (() => {
           const q = lp.trim().toLowerCase();
@@ -10205,7 +10407,7 @@ function App() {
     proyecto: proy,
     tabla: tabla,
     onChange: function(cambios) { updSinRecalcular(cambios); }
-  }), tab === "verif" && React.createElement(Calculadora, null), tab === "dibujo" && React.createElement(TabDibujo, { key: proy.id, proy, onChange: d => updSinRecalcular({ dibujos: d }), onArchivo: setArchivo }), tab === "memoria" && React.createElement(Bitacora, { key: proy.id, proy, onChange: b => updSinRecalcular({ bitacora: b }) }))));
+  }), tab === "verif" && React.createElement(Calculadora, null), tab === "dibujo" && React.createElement(TabDibujo, { key: proy.id, proy, onChange: d => updSinRecalcular({ dibujos: d }), onArchivo: setArchivo, onVia: c => upd(c) }), tab === "memoria" && React.createElement(Bitacora, { key: proy.id, proy, onChange: b => updSinRecalcular({ bitacora: b }) }))));
 }
 
 // ─── BITÁCORA ─────────────────────────────────────────────────────────────────
