@@ -2057,7 +2057,7 @@ function ponerTema(t) {
 }
 if (typeof document !== "undefined") { hojaTemas(); const t0 = leerTema(); document.documentElement.setAttribute("data-tema", t0);
   const m0 = document.querySelector('meta[name="theme-color"]'); if (m0) m0.setAttribute("content", TEMAS[t0].colores.barra); }
-const TV_VERSION = "88";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "89";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
