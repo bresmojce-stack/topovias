@@ -2057,7 +2057,7 @@ function ponerTema(t) {
 }
 if (typeof document !== "undefined") { hojaTemas(); const t0 = leerTema(); document.documentElement.setAttribute("data-tema", t0);
   const m0 = document.querySelector('meta[name="theme-color"]'); if (m0) m0.setAttribute("content", TEMAS[t0].colores.barra); }
-const TV_VERSION = "85";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "86";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -4606,7 +4606,16 @@ function calcVolumen(vol, proyecto, tabla) {
   // La superficie MEDIDA guía las secciones (así entran sus lecturas extra en la misma abscisa);
   // si las dos son medidas, guía la superior.
   const guiaEsInf = !vol.fuenteSup.startsWith("nivel__") && vol.fuenteInf.startsWith("nivel__");
-  const guia = guiaEsInf ? serInf : serSup, otra = guiaEsInf ? serSup : serInf;
+  const guiaBase = guiaEsInf ? serInf : serSup, otra = guiaEsInf ? serSup : serInf;
+  // si la OTRA superficie repite una abscisa (lectura "(2)", cambio brusco de nivel) y la guía no, esa abscisa también abre su
+  // segunda sección en la guía (con los mismos valores de la guía en ese punto): así la fila (2) da volumen 0 y la siguiente vuelve a dar volumen
+  const guia = guiaBase.slice();
+  otra.forEach(pO => {
+    if (!((pO.sub || 0) > 0) || guia.some(g => Math.abs(g.abs - pO.abs) < 0.0005 && (g.sub || 0) === (pO.sub || 0))) return;
+    const base = guia.filter(g => Math.abs(g.abs - pO.abs) < 0.0005 && !((g.sub || 0) > 0))[0]; if (!base) return;
+    guia.push({ ...base, sub: pO.sub, absFormato: String(base.absFormato).replace(/ \(\d+\)$/, "") + " (" + (pO.sub + 1) + ")" });
+  });
+  guia.sort((x, y) => x.abs - y.abs || (x.sub || 0) - (y.sub || 0));
   const rv = rangoVia(proyecto);
   // con signo (ej. sobre-excavación): negativo = faltó llegar a la cota teórica
   const pos = v => vol.conSigno ? v : Math.max(0, v);
