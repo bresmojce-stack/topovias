@@ -4383,7 +4383,7 @@ function TablaLecturas({
       color: "var(--tFFFFFF)"
     }
   }, /*#__PURE__*/React.createElement("th", {
-    style: thS
+    style: { ...thS, position: "sticky", left: 0, zIndex: 3, background: C.warn }
   }, "ABCS"), /*#__PURE__*/React.createElement("th", {
     style: thS
   }, "AI"), /*#__PURE__*/React.createElement("th", {
@@ -4410,7 +4410,12 @@ function TablaLecturas({
       style: {
         ...tdS,
         fontFamily: "monospace",
-        fontWeight: row.esPI ? 800 : 400
+        fontWeight: row.esPI ? 800 : 400,
+        position: "sticky",
+        left: 0,
+        zIndex: 2,
+        background: sinEstacion ? "var(--bFDF2E3)" : row.esPI ? "var(--bD5D8DC)" : "var(--bFFFFFF)",
+        boxShadow: "2px 0 0 " + C.border
       }
     }, row.absFormato, sinEstacion && /*#__PURE__*/React.createElement("span", {
       style: {
