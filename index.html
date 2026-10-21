@@ -1506,7 +1506,6 @@ function CamposTramo({
   const campo = (key, label, placeholder) => {
     const esCalculado = r.faltante === key && r.completo;
     const mal = avisoNumero(t[key]), falta = !r.completo && (t[key] === "" || t[key] === null || t[key] === undefined);
-    const valorMostrado = t[key] !== "" ? t[key] : esCalculado ? String(r[key]) : "";
     return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, label, esCalculado && /*#__PURE__*/React.createElement("span", {
       style: {
         color: C.success
@@ -1791,15 +1790,33 @@ if (typeof window !== "undefined") window.addEventListener("input", function(e) 
 }, true);
 function leerDato(k) { return DATOS.valores[k]; }
 // Cada guardado lleva la hora (clave + "__t") en ambos lugares; al abrir se usa el más reciente.
+// En memoria el cambio queda al instante; al disco se escribe a los GUARDAR_ESPERA_MS del último cambio (escribir
+// seguido, tecla por tecla, reescribía todas las vías cada vez). Al ocultar o cerrar la pestaña se escribe de inmediato.
+const GUARDAR_ESPERA_MS = 300, PENDIENTES = {};
+let temporizadorGuardar = null;
 function guardarDato(k, v) {
   // otra ventana o pestaña de la app ya cambió los datos: esta tiene una versión vieja y no escribe encima
   if (DATOS.otraVentana) { avisarGuardado(false); return; }
   if (k === TV_KEY || k === TV_KEY_OBRAS) copiaAutomatica();   // antes de cambiar nada
   DATOS.valores[k] = v;
-  const t = Date.now();
-  let lsOk = false;
   // si al abrir no respondió la base de datos y estos datos solo estaban allá, no se escribe encima de nada
   if (DATOS.noEscribir && DATOS.noEscribir[k]) { avisarGuardado(false); return; }
+  PENDIENTES[k] = v;
+  clearTimeout(temporizadorGuardar); temporizadorGuardar = setTimeout(vaciarGuardado, GUARDAR_ESPERA_MS);
+}
+function vaciarGuardado() {
+  clearTimeout(temporizadorGuardar); temporizadorGuardar = null;
+  Object.keys(PENDIENTES).forEach(function(k) { const v = PENDIENTES[k]; delete PENDIENTES[k]; escribirDato(k, v); });
+}
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", vaciarGuardado);
+  document.addEventListener("visibilitychange", function() { if (document.visibilityState === "hidden") vaciarGuardado(); });
+}
+function escribirDato(k, v) {
+  // otra ventana guardó mientras esperaba: no se escribe encima
+  if (DATOS.otraVentana) { avisarGuardado(false); return; }
+  const t = Date.now();
+  let lsOk = false;
   if (DATOS.idb) TVDB.set(k, v).then(function() { return TVDB.set(k + "__t", t); })
     .then(function() { avisarGuardado(true); })
     .catch(function(e) { console.error("No se pudo guardar en el dispositivo", e); if (!lsOk) avisarGuardado(false); });
@@ -2066,7 +2083,7 @@ function ponerTema(t) {
 }
 if (typeof document !== "undefined") { hojaTemas(); const t0 = leerTema(); document.documentElement.setAttribute("data-tema", t0);
   const m0 = document.querySelector('meta[name="theme-color"]'); if (m0) m0.setAttribute("content", TEMAS[t0].colores.barra); }
-const TV_VERSION = "90";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "91";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -2406,7 +2423,11 @@ async function nubeSincronizar(interactivo) {
     remotos.forEach(f => { const k = f.appProperties && f.appProperties.k; if (k && !R[k]) R[k] = { id: f.id, h: f.appProperties.h, t: Date.parse(f.modifiedTime) || 0, nombre: f.name }; });
     // la carpeta de Drive no tiene ninguna vía pero aquí ya se habían sincronizado: no se borra nada aquí, se sube todo
     if (!Object.keys(R).some(k => k.indexOf("via:") === 0) && Object.keys(m.items).some(k => k.indexOf("via:") === 0)) m.items = {};
-    const tLocal = parseInt(localStorage.getItem(TV_KEY + "__t") || "0", 10) || Date.now();
+    vaciarGuardado();   // lo que esté esperando se escribe ya: la hora de abajo debe ser la de verdad
+    // hora del último guardado de este equipo; si localStorage ya no la tiene (se llenó), la de IndexedDB
+    let tLocal = parseInt(localStorage.getItem(TV_KEY + "__t") || "0", 10) || 0;
+    if (!tLocal && DATOS.idb) tLocal = (await TVDB.get(TV_KEY + "__t").catch(() => 0)) || 0;
+    if (!tLocal) tLocal = Date.now();
     let vias = (HIST.actual.proyectos || []).slice(), cambioVias = false;
     const S = m.items, nuevoS = {};
     let subidas = 0, bajadas = 0;
@@ -4069,7 +4090,6 @@ function TabSardinel({ proy, upd, updSinRecalcular }) {
   // todos los lados posibles (aunque estén apagados) para elegir en las listas
   const opciones = [["izq", "Lado izquierdo"], ["der", "Lado derecho"], ["ini", "Inicio de la vía"], ["fin", "Fin de la vía"]]
     .concat(parqs.map(p => ["pq:" + p.id, (p.nombre || "Parqueadero") + (p.lado === "izquierdo" ? " (IZQ)" : " (DER)") + (esCabecera(p) ? " cabecera" : "")]));
-  const nombreDe = k => (opciones.find(o => o[0] === k) || [k, k])[1];
   const ayudaDe = k => {
     if (k === "ini" || k === "fin") return "en metros a lo ancho, desde el borde izquierdo (0 a " + W.toFixed(2) + ")";
     if (k.indexOf("pq:") === 0) { const p = parqs.find(x => "pq:" + x.id === k); return p ? "abscisas " + formatoAbscisa(Math.min(+p.absInicio, +p.absFin)) + " a " + formatoAbscisa(Math.max(+p.absInicio, +p.absFin)) : ""; }
@@ -4189,11 +4209,6 @@ const ICONOS_VIA = {
 function IconoVia({ n, size }) {
   return React.createElement("svg", { width: size || 28, height: size || 28, viewBox: "0 0 32 32", fill: "none", "aria-hidden": true, style: { display: "block", flex: "0 0 auto" } },
     ICONOS_VIA[n].map(([tag, at], i) => React.createElement(tag, { key: i, ...at })));
-}
-function TituloSeccionVia({ n, id, texto, orden }) {
-  return React.createElement("div", { id, style: { order: orden, scrollMarginTop: 110, display: "flex", alignItems: "center", gap: 8, margin: n > 1 ? "18px 0 10px" : "0 0 10px",
-      fontWeight: 900, fontSize: 16, color: C.accent, borderBottom: `2px solid ${C.accent}`, paddingBottom: 4 } },
-    React.createElement("span", null, "①②③"[n - 1]), texto);
 }
 // Apartados de cada pestaña (la barra pequeña debajo de las pestañas): [id, nombre, nombre corto en celular]
 const APARTADOS = {
@@ -6238,7 +6253,8 @@ function crearDXF(dib) {
     if (o.som === "relleno") triangular(v).forEach(([a, b, c]) => { g(0, "SOLID"); capa_("SOMBRA"); g(10, n(a.x)); g(20, n(a.y)); g(30, 0); g(11, n(b.x)); g(21, n(b.y)); g(31, 0); g(12, n(c.x)); g(22, n(c.y)); g(32, 0); g(13, n(c.x)); g(23, n(c.y)); g(33, 0); });
     else {
       const xs = v.map(p => p.x), ys = v.map(p => p.y), menor = Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
-      lineasRayado(v, Math.min(h * 1.2, Math.max(menor / 8, 1e-3))).forEach(([a, b]) => linea(a, b, "SOMBRA"));   // al menos unas 8 rayas por figura
+      // al menos unas 8 rayas por figura; una figura sin área (puntos en línea) no se raya
+      if (DIB.area(v) > 1e-6) lineasRayado(v, Math.min(h * 1.2, Math.max(menor / 8, 1e-3))).forEach(([a, b]) => linea(a, b, "SOMBRA"));
     }
   };
   visibles.forEach(o => {
@@ -6374,7 +6390,16 @@ function objetosTablaPuntos(r, op) {
 // Eje = objeto "eje" (abscisa 0 = su abs0). Cada punto se proyecta al eje: abscisa y desplazamiento (derecha +, izquierda −).
 // Laterales: líneas o polilíneas abiertas largas, de un solo lado, que corren junto al eje. Parqueaderos: figuras cerradas de un solo
 // lado dentro del largo del eje; el ancho es lo que sobresale del lateral. Cabeceras (cruzan el eje o pasan de sus extremos): no se pasan.
+// el panel "→ Vía" y "Marcar parqueadero" se vuelven a dibujar con cada movimiento del dedo o del mouse: mientras el
+// dibujo y el eje sean los mismos, se reusa la última detección
+let cacheDibujoVia = null;
 function detectarDibujoVia(objs, eje) {
+  if (cacheDibujoVia && cacheDibujoVia.objs === objs && cacheDibujoVia.eje === eje) return cacheDibujoVia.r;
+  const r = detectarDibujoViaCalc(objs, eje);
+  cacheDibujoVia = { objs, eje, r };
+  return r;
+}
+function detectarDibujoViaCalc(objs, eje) {
   const acum = EJE.acum(eje.v), L = acum[acum.length - 1], A0 = eje.abs0 || 0, T = 0.0005;
   const muestras = o => { const pts = []; DIB.segmentos(o).forEach(([a, b]) => { const n = Math.max(1, Math.ceil(DIB.dist(a, b) / Math.max(L / 40, 0.5))); for (let i = 0; i <= n; i++) pts.push({ x: a.x + (b.x - a.x) * i / n, y: a.y + (b.y - a.y) * i / n }); }); return pts; };
   const proy = pts => pts.map(p => EJE.proyectar(eje, p)).filter(Boolean);
@@ -6388,14 +6413,25 @@ function detectarDibujoVia(objs, eje) {
     const lado = d.every(x => x > T) ? "derecho" : d.every(x => x < -T) ? "izquierdo" : null;
     if (lado && cober >= L * 0.5) { const a = d.map(Math.abs); bordes.push({ id: o.id, lado, ancho: r3(media(a)), min: r3(Math.min(...a)), max: r3(Math.max(...a)), cober }); }
   });
-  const mejor = lado => bordes.filter(b => b.lado === lado).sort((x, y) => y.cober - x.cober || x.ancho - y.ancho)[0] || null;
+  // la que más cubre el eje; si cubren casi lo mismo (5 cm, quedan decimales sueltos con un eje con quiebres), la más cercana
+  const mejor = lado => bordes.filter(b => b.lado === lado).sort((x, y) => Math.abs(y.cober - x.cober) > 0.05 ? y.cober - x.cober : x.ancho - y.ancho)[0] || null;
   const lat = { izquierdo: mejor("izquierdo"), derecho: mejor("derecho") };
   const parqs = [], aparte = [];
   // figuras = grupos de líneas y polilíneas que se tocan por sus extremos (0.05 m); un parqueadero pegado al borde de la vía puede
   // venir con tres lados (el cuarto es el borde) o con las líneas sueltas, no solo como figura cerrada
   const excl = new Set([eje.id].concat(bordes.map(x => x.id))), segs = [];
   objs.forEach(o => { if (excl.has(o.id) || o.oculto) return; if (o.t === "l") segs.push([o.a, o.b]); else if (o.t === "pl") DIB.segmentos(o).forEach(sg => segs.push(sg)); });
-  const nodos = [], padre = [], nid = q => { for (let i = 0; i < nodos.length; i++) if (DIB.dist(nodos[i], q) < 0.05) return i; nodos.push(q); padre.push(padre.length); return nodos.length - 1; };
+  // nodo de un extremo: el primero a menos de 0.05 m (se buscan solo las casillas vecinas de 0.05 m, no todos los nodos)
+  const nodos = [], padre = [], casillas = new Map(), cas = v => Math.floor(v / 0.05);
+  const nid = q => {
+    const cx = cas(q.x), cy = cas(q.y); let n = -1;
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++)
+      (casillas.get((cx + dx) + "," + (cy + dy)) || []).forEach(i => { if ((n < 0 || i < n) && DIB.dist(nodos[i], q) < 0.05) n = i; });
+    if (n >= 0) return n;
+    nodos.push(q); padre.push(padre.length);
+    const k = cx + "," + cy; if (!casillas.has(k)) casillas.set(k, []); casillas.get(k).push(nodos.length - 1);
+    return nodos.length - 1;
+  };
   const raiz = i => padre[i] === i ? i : (padre[i] = raiz(padre[i]));
   segs.forEach(([a, b]) => { const i = nid(a), j = nid(b); padre[raiz(i)] = raiz(j); });
   const comps = {}; nodos.forEach((q, i) => { const r = raiz(i); (comps[r] = comps[r] || []).push(q); });
@@ -6471,7 +6507,7 @@ function TabDibujo({ proy, onChange, onArchivo, onVia }) {
   const setVista = v => { vistaRef.current = v; setVistaR(v); };
   // Durante un gesto (pellizco, arrastre, rueda) se corre y escala la imagen ya dibujada; al terminar se
   // dibuja de nuevo con la vista final. Así el zoom va fluido aunque el dibujo tenga cientos de objetos.
-  const capaRef = React.useRef(null), capaCache = React.useRef({}), ruedaT = React.useRef(null);
+  const capaCache = React.useRef({}), ruedaT = React.useRef(null);
   const moverVista = v => {
     vistaRef.current = v; const el = svgRef.current, base = vista;
     if (!el) { setVistaR(v); return; }
@@ -6810,7 +6846,7 @@ function TabDibujo({ proy, onChange, onArchivo, onVia }) {
     setSelSet([]);
     if (u.c) setRes(resArea(u.v));
     aviso(u.c ? "Figura cerrada: " + f3(DIB.area(u.v)) + " m²" + (u.hueco > 0.0005 ? " (había un hueco de " + f3(u.hueco) + " m)" : "")
-      : "Unidas en una polilínea abierta: le faltan " + f3(u.cierre) + " m para cerrar (Elegir → Cerrar figura)");
+      : "Unidas en una polilínea abierta" + (u.hueco > 0.0005 ? " (ojo: quedó un tramo de " + f3(u.hueco) + " m que une piezas separadas)" : "") + ": le faltan " + f3(u.cierre) + " m para cerrar (Elegir → Cerrar figura)");
   };
   const terminarPoli = cerrar => {
     if (herr === "area") { if (temp.length >= 3) setRes(resArea(temp)); setTemp([]); return; }
@@ -7040,7 +7076,7 @@ function TabDibujo({ proy, onChange, onArchivo, onVia }) {
       // lo que queda completo dentro del recuadro se suma a la selección
       const v = G.ventana; G.ventana = null; setVentana(null);
       const A = aM(Math.min(v.x0, v.x1), Math.max(v.y0, v.y1)), B = aM(Math.max(v.x0, v.x1), Math.min(v.y0, v.y1));
-      const dentro = objs.filter(o => { const c = DIB.caja(o); return c.length && c.every(q => q.x >= A.x && q.x <= B.x && q.y >= A.y && q.y <= B.y); }).map(o => o.id);
+      const dentro = objs.filter(o => { if (o.oculto) return false; const c = DIB.caja(o); return c.length && c.every(q => q.x >= A.x && q.x <= B.x && q.y >= A.y && q.y <= B.y); }).map(o => o.id);
       setSelSet(prev => prev.concat(dentro.filter(id => !prev.includes(id))));
       if (!dentro.length) aviso("No quedó ningún objeto completo dentro del recuadro.");
       return;
@@ -7451,7 +7487,7 @@ function TabDibujo({ proy, onChange, onArchivo, onVia }) {
           herr === "desfase" && [h(React.Fragment, { key: "c" }, campoBarra(desD, setDesD, "0.50", 60)), h("span", { key: "m" }, "m"),
             ...[["afuera", "Afuera +"], ["adentro", "Adentro −"], ["ambos", "Ambos"]].map(([k, t]) => h(React.Fragment, { key: k }, btnBarra(t, () => setDesLado(k), desLado === k ? C.relleno : "#334155")))],
           herr === "unir" && btnBarra("Unir (" + selSet.length + ")", unirSeleccion, selSet.length >= 2 ? C.relleno : "#475569", "check"),
-          herr === "seleccionar" && !selSet.length && objs.length > 0 && btnBarra("Todo", () => setSelSet(objs.map(o => o.id)), "#334155"),
+          herr === "seleccionar" && !selSet.length && objs.length > 0 && btnBarra("Todo", () => setSelSet(objs.filter(o => !o.oculto).map(o => o.id)), "#334155"),
           herr === "seleccionar" && selSet.length > 0 && [
             ["borrar", btnBarra("Borrar (" + selSet.length + ")", borrarSeleccion, C.danger, "trash-2")],
             ["acotar", btnBarra("Acotar (" + selSet.length + ")", acotarTodo, objs.some(o => selSet.includes(o.id) && ACOTABLES.includes(o.t)) ? C.accent : "#475569", "pencil-ruler")],
@@ -7720,9 +7756,15 @@ function TabDibujo({ proy, onChange, onArchivo, onVia }) {
               if (PE.error) return alert(PE.error);
               const ds = eje.v.slice(1).map((q, i) => DIB.dist(eje.v[i], q)), pe = PE.pts, conCotas = pe.some(q => q.cota !== null);
               cambios.coordsEje = pe.map(q => ({ norte: String(r3(q.y)), este: String(r3(q.x)) }));
+              // con alguna cota escrita los tramos se rehacen: un PI que se dejó sin cota queda en 0 (Brian, 2026-10-21)
+              const cota = c => String(r3(c === null ? 0 : c)), sinCota = conCotas ? pe.filter(q => q.cota === null).length : 0;
+              let porGrupo = null;
+              if (!conCotas) { porGrupo = distanciasPorGrupo(proy.tramos, ds); if (porGrupo.error) return alert(porGrupo.error); }
               cambios.tramos = conCotas
-                ? pe.slice(1).map((q, i) => { const a = pe[i]; return { ...tramoVacio(), distancia: String(r3(q.abs - a.abs)), cotaInicio: a.cota === null ? "" : String(r3(a.cota)), cotaFin: q.cota === null ? "" : String(r3(q.cota)), ...(a.planta ? {} : { parte: true }) }; })
-                : aplicarDistancias(proy.tramos, ds).slice(0, ds.length);
+                ? pe.slice(1).map((q, i) => { const a = pe[i]; return { ...tramoVacio(), distancia: String(r3(q.abs - a.abs)), cotaInicio: cota(a.cota), cotaFin: cota(q.cota), ...(a.planta ? {} : { parte: true }) }; })
+                : aplicarDistancias(proy.tramos, porGrupo.ds);
+              if (sinCota) partes.push(sinCota + " PI sin cota quedaron en cota 0");
+              if (porGrupo && porGrupo.sobran) partes.push("la vía conserva " + porGrupo.sobran + " tramo" + (porGrupo.sobran === 1 ? "" : "s") + " después del último PI del dibujo");
               cambios.absInicio = String(r3(D.abs0)); partes.push("eje de " + eje.v.length + " PI" + (pe.length > eje.v.length ? " y " + (pe.length - eje.v.length) + " de rasante" : "") + (conCotas ? " con cotas" : ""));
             }
             for (const lado of ["izquierdo", "derecho"]) {
@@ -7758,7 +7800,7 @@ function TabDibujo({ proy, onChange, onArchivo, onVia }) {
               h("button", { onClick: () => setPvCotas(!pvCotas), "data-pv": "cotas", style: { border: "none", background: "none", cursor: "pointer", fontWeight: 800, letterSpacing: 0.4, fontSize: 11.5, color: C.muted, padding: 0 } }, (pvCotas ? "▾ " : "▸ ") + "COTAS DEL EJE (opcional)"),
               ptsEje.some(q => q.cota !== null) && ins("CON COTAS")),
             pvCotas && h("div", { key: "cotas" },
-              h("div", { style: { color: C.muted, fontSize: 11.5, lineHeight: 1.5, marginBottom: 4 } }, "Cota de cada PI del eje y, si hace falta, PI de rasante: un punto con abscisa y cota donde cambia la pendiente sin que el eje tenga quiebre (la vía parte el tramo ahí). Si lo dejas vacío, se conservan las cotas que ya tiene la vía."),
+              h("div", { style: { color: C.muted, fontSize: 11.5, lineHeight: 1.5, marginBottom: 4 } }, "Cota de cada PI del eje y, si hace falta, PI de rasante: un punto con abscisa y cota donde cambia la pendiente sin que el eje tenga quiebre (la vía parte el tramo ahí). Si lo dejas todo vacío, se conservan las cotas que ya tiene la vía; si escribes alguna, el PI que quede sin cota va con cota 0."),
               eje.v.map((q, i) => fila("ci|" + i, h("span", { style: { flex: "1 1 130px" } }, "PI " + (i + 1) + " · " + formatoAbscisa(absPI[i])), "cota", campo("ci|" + i, "", 90), "m")),
               pvRas.map((r, i) => fila("ras" + r.id, h("span", { style: { fontWeight: 700 } }, "PI de rasante"),
                 h("input", { key: "ra" + r.id + "|" + r.a, defaultValue: r.a, placeholder: "0+020", className: "tv-in", "data-ras-a": r.id, onKeyDown: e => { if (e.key === "Enter") e.currentTarget.blur(); }, onBlur: e => setPvRas(pvRas.map(x => x.id === r.id ? { ...x, a: e.currentTarget.value } : x)),
@@ -7788,7 +7830,7 @@ function TabDibujo({ proy, onChange, onArchivo, onVia }) {
             h("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 10 } },
               h("span", null, "Parqueaderos que ya tiene la vía:"),
               h(Sel, { value: pvModo, onChange: e => setPvModo(e.target.value), style: { maxWidth: 220 } }, h("option", { value: "agregar" }, "agregar los nuevos"), h("option", { value: "reemplazar" }, "reemplazarlos por estos"))),
-            h("div", { style: { fontSize: 11.5, color: C.muted, marginTop: 8, lineHeight: 1.5 } }, "No se tocan cotas ni capas: solo el eje (PI y distancias de los tramos), los anchos de los laterales y los parqueaderos. Un solo Deshacer lo devuelve todo."),
+            h("div", { style: { fontSize: 11.5, color: C.muted, marginTop: 8, lineHeight: 1.5 } }, "No se tocan capas, ni las cotas si no escribes ninguna arriba: solo el eje (PI y distancias de los tramos), los anchos de los laterales y los parqueaderos. Un solo Deshacer lo devuelve todo."),
             h("div", { style: { display: "flex", gap: 8, marginTop: 10 } }, h(Btn, { color: C.accent, onClick: pasar }, "Pasar a la vía"), h(Btn, { color: "var(--t475569)", onClick: () => setPv(null) }, "Cerrar"))]);
         })(),
         // marcar parqueadero: lo que miden los puntos tocados (franja que se lee completa también en el celular)
@@ -8049,7 +8091,7 @@ const CALC_COORDS_KEY = TV_KEY + "_calcCoords";
 const CALC_CON_COTA = false;
 function gradosAGMS(g) {
   let d = Math.floor(g), mm = Math.floor((g - d) * 60), ss = Math.round(((g - d) * 60 - mm) * 60 * 10) / 10;
-  if (ss >= 60) { ss = 0; mm++; } if (mm >= 60) { mm = 0; d++; }
+  if (ss >= 60) { ss = 0; mm++; } if (mm >= 60) { mm = 0; d++; } if (d >= 360) d -= 360;   // 359°59'59.99" redondea a 0°, no a 360°
   return d + "°" + String(mm).padStart(2, "0") + "'" + ss.toFixed(1).padStart(4, "0") + '"';
 }
 function rumboDesdeAzimut(az) {
@@ -8108,12 +8150,17 @@ function CalcDistanciaCoords() {
 }
 
 // Punto nuevo desde uno conocido: N2 = N1 + d·cos(Az), E2 = E1 + d·sen(Az)
-// Azimut en grados decimales (53.1301) o grados minutos segundos (53 07 48.4 / 53°07'48.4")
+// Azimut en grados decimales (53.1301) o grados minutos segundos (53 07 48.4 / 53°07'48.4"), o rumbo (S 45 E, N 30 W / N 30 O).
+// Con signo menos u otras letras da null: es mejor no dibujar que adivinar.
 function leerAzimut(txt) {
-  const n = String(txt || "").replace(/,/g, ".").match(/\d+(\.\d+)?/g);
+  const s = String(txt || "").toUpperCase().replace(/,/g, "."), r = s.match(/^\s*([NS])\s*([^A-Z]*?)\s*([EWO])\s*$/);
+  if (s.indexOf("-") >= 0 || (!r && /[A-Z]/.test(s))) return null;
+  const n = (r ? r[2] : s).match(/\d+(\.\d+)?/g);
   if (!n) return null;
-  const [g, m, ss] = n.map(Number);
-  return n.length === 1 ? g : g + (m || 0) / 60 + (ss || 0) / 3600;
+  const [g, m, ss] = n.map(Number), a = n.length === 1 ? g : g + (m || 0) / 60 + (ss || 0) / 3600;
+  if (!r) return a;
+  if (a > 90) return null;
+  return r[1] === "N" ? (r[3] === "E" ? a : (360 - a) % 360) : (r[3] === "E" ? 180 - a : 180 + a);
 }
 function CalcPuntoRadiado() {
   const [v, setV] = React.useState(() => { try { return JSON.parse(localStorage.getItem(TV_KEY + "_calcPunto") || "null") || {}; } catch (_) { return {}; } });
@@ -9128,7 +9175,6 @@ function TabNivelaciones({ proyecto, tabla, onChange, onArchivo }) {
         const inp = fila.querySelector("input:not([disabled])");
         if (inp) setTimeout(() => inp.focus({ preventScroll: true }), 450);
       };
-      const stickyAbs = { position: "sticky", left: 0, zIndex: 2 };
       return React.createElement("div", { key: niv.id, style: { border: "2px solid " + colorN, borderRadius: 12, padding: "clamp(10px, 2.5vw, 18px)", marginBottom: 24, background: "var(--bFFFFFF)" } },
         React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" } },
           React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, flex: "1 1 320px", flexWrap: "wrap" } },
@@ -9456,6 +9502,23 @@ function calcDistCoords(p1, p2) {
 }
 // Pasa las distancias a los tramos (por posición). Si hay más distancias que tramos,
 // crea los tramos que faltan. Las distancias vacías no tocan su tramo.
+// Distancias del dibujo (una por tramo entre PI) llevadas a los tramos de la vía. Un tramo partido con "punto nuevo"
+// (los que siguen llevan parte) es un solo tramo en el dibujo: sus partes conservan su largo y la última toma el resto.
+// Da { ds } (una por tramo de la vía, para aplicarDistancias), { sobran } (tramos de la vía después del último PI) o { error }.
+function distanciasPorGrupo(tramos, ds) {
+  const grupos = [];
+  (tramos || []).forEach((t, i) => { if (i > 0 && t.parte) grupos[grupos.length - 1].push(i); else grupos.push([i]); });
+  const out = [];
+  for (let g = 0; g < ds.length; g++) {
+    const idx = grupos[g] || [];
+    if (idx.length <= 1) { out.push(ds[g]); continue; }
+    const largos = idx.slice(0, -1).map(i => resolverTramo(tramos[i]).distancia), usado = largos.reduce((a, l) => a + (l || 0), 0);
+    if (largos.some(l => l === null || !isFinite(l) || l <= 0) || ds[g] - usado <= 0.0005)
+      return { error: "El tramo " + (g + 1) + " del eje tiene puntos nuevos que no caben en los " + r3(ds[g]) + " m del dibujo. Revísalo en la vía o escribe las cotas del eje aquí." };
+    largos.forEach(l => out.push(l)); out.push(ds[g] - usado);
+  }
+  return { ds: out, sobran: Math.max(0, grupos.length - ds.length) };
+}
 function aplicarDistancias(tramos, ds) {
   var out = tramos.slice();
   ds.forEach(function(d, i) {
@@ -9703,6 +9766,7 @@ function App() {
     const actV = d.vias.length - nuevasV;
     const fecha = d.fecha ? new Date(d.fecha).toLocaleString("es-CO") : "";
     if (!confirm(`Copia del ${fecha}\n\n• ${nuevasO} obra(s) y ${nuevasV} vía(s) nuevas\n• ${actV} vía(s) que ya están en este equipo se reemplazarán por la versión de la copia\n\nNo se borra nada más. ¿Restaurar?`)) return;
+    DATOS.copiaDia = null; copiaAutomatica();   // foto de cómo estaban hoy, antes de reemplazar
     setObras(prev => prev.filter(o => !d.obras.some(x => x.id === o.id)).concat(d.obras));
     setProyectos(prev => prev.filter(p => !d.vias.some(x => x.id === p.id)).concat(d.vias), { forzar: true });
     alert("Copia restaurada.");
@@ -9738,7 +9802,6 @@ function App() {
     setProyectos(prev => prev.filter(p => p.id !== id));
     if (activoId === id) { setActivoId(null); setTabla(null); setNav({ vista: "obra", obraId: v.obraId }); }
   };
-  const eliminarProyecto = () => eliminarVia(proy.id);
 
   // ── Pantallas de obras ──
   if (nav.vista !== "via" || !proy) {
@@ -10463,7 +10526,11 @@ async function urlFotoTraer(id) {
   if (!b) return null;
   const u = URL.createObjectURL(b); urlsFotos.set(id, u); return u;
 }
-function borrarFotos(ids) { (ids || []).forEach(id => { urlsFotos.delete(id); if (DATOS.idb) TVDB.del("foto_" + id).catch(() => {}); }); }
+// viaId = la vía que borra: una foto que otra vía (por ejemplo una copia duplicada) todavía usa no se borra
+function borrarFotos(ids, viaId) {
+  const enOtras = viaId == null ? new Set() : fotosDeVias((HIST.actual.proyectos || []).filter(p => p.id !== viaId));
+  (ids || []).forEach(id => { if (enOtras.has(id)) return; urlsFotos.delete(id); if (DATOS.idb) TVDB.del("foto_" + id).catch(() => {}); });
+}
 function Miniatura({ id, onClick, onQuitar, grande }) {
   const [u, setU] = React.useState(urlsFotos.get(id) || null), [falta, setFalta] = React.useState(false);
   React.useEffect(() => { let vivo = true; if (!u) urlFoto(id).then(x => { if (!vivo) return; if (x) setU(x); else setFalta(true); }); return () => { vivo = false; }; }, [id]);
@@ -10495,16 +10562,16 @@ function Bitacora({ proy, onChange }) {
   const [ocupado, setOcupado] = React.useState(false);
   const h = React.createElement;
   const abrir = a => { setEd(a ? { ...a, fotos: [...(a.fotos || [])] } : { id: Date.now() + Math.random(), fecha: hoyISO(), texto: "", fotos: [], creada: hoyISO() }); setNuevas([]); };
-  const cancelar = () => { borrarFotos(nuevas); setEd(null); setNuevas([]); };
+  const cancelar = () => { borrarFotos(nuevas, proy.id); setEd(null); setNuevas([]); };
   const guardar = () => {
     if (!ed.texto.trim() && !ed.fotos.length) { alert("Escribe algo o agrega una foto."); return; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(ed.fecha || "")) { alert("Pon la fecha de la anotación."); return; }
     const antes = lista.find(x => x.id === ed.id);
-    if (antes) borrarFotos((antes.fotos || []).filter(f => !ed.fotos.includes(f)));   // las que se quitaron
+    if (antes) borrarFotos((antes.fotos || []).filter(f => !ed.fotos.includes(f)), proy.id);   // las que se quitaron
     onChange(antes ? lista.map(x => x.id === ed.id ? ed : x) : lista.concat([ed]));
     setEd(null); setNuevas([]);
   };
-  const borrar = a => { if (!confirm("¿Borrar la anotación del " + fechaLarga(a.fecha) + (a.fotos && a.fotos.length ? " con sus " + a.fotos.length + " foto(s)" : "") + "?")) return; borrarFotos(a.fotos); onChange(lista.filter(x => x.id !== a.id)); };
+  const borrar = a => { if (!confirm("¿Borrar la anotación del " + fechaLarga(a.fecha) + (a.fotos && a.fotos.length ? " con sus " + a.fotos.length + " foto(s)" : "") + "?")) return; borrarFotos(a.fotos, proy.id); onChange(lista.filter(x => x.id !== a.id)); };
   const agregarFotos = async files => {
     if (!files || !files.length) return;
     setOcupado(true);
@@ -10572,7 +10639,7 @@ class FalloApp extends React.Component {
       const c = l.find(x => Array.isArray(x.vias));
       if (!c) { alert("No hay copias automáticas en este equipo."); return; }
       if (!confirm("¿Volver a como estaba todo el " + new Date(c.fecha).toLocaleString("es-CO") + "? Antes guarda una copia con el otro botón.")) return;
-      guardarDato(TV_KEY_OBRAS, (c.obras || []).filter(viaValida)); guardarDato(TV_KEY, c.vias.filter(viaValida)); location.reload();
+      guardarDato(TV_KEY_OBRAS, (c.obras || []).filter(viaValida)); guardarDato(TV_KEY, c.vias.filter(viaValida)); vaciarGuardado(); location.reload();
     });
     return React.createElement("div", { style: { maxWidth: 520, margin: "40px auto", padding: 20, fontFamily: "system-ui, sans-serif", color: "var(--t0F172A)" } },
       React.createElement("h2", { style: { color: "var(--tB91C1C)" } }, "Algo falló al mostrar TopoVías"),

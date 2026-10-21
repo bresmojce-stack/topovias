@@ -1,0 +1,13 @@
+# Revisión mínima en cada push a main: sintaxis de index.html y versión igual en index.html y sw.js.
+# Avisa con una X roja si algo está mal; no frena la publicación de Pages.
+name: Revisar sintaxis
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  sintaxis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node pruebas/sintaxis.js
