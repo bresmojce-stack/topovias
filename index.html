@@ -1593,6 +1593,7 @@ function revisarVia(proy) {
   const via = rangoVia(proy), ejeListo = (proy.tramos || []).length && resolverTodos(proy.tramos).every(r => r.completo);
   // Laterales
   it = [];
+  const finales = [];
   [["lateralDer", "derecho", "tv-lat-der"], ["lateralIzq", "izquierdo", "tv-lat-izq"]].forEach(([k, n, ir]) => {
     const l = proy[k]; if (!l) return;
     const q = "Lateral " + n, ma = avisoNumero(l.ancho);
@@ -1604,13 +1605,20 @@ function revisarVia(proy) {
       const rs = resolverTodos(l.tramos || []);
       if (ejeListo && rs.length && rs.every(r => r.completo)) {
         const ini = parseFloat(l.absInicio) || via.ini, fin = r3(rs.reduce((a, r) => a + (r.distancia || 0), ini));
-        if (Math.abs(fin - via.fin) > 0.0005) it.push({ n: "a", t: `${q}: termina en ${formatoAbscisa(fin)} y el eje en ${formatoAbscisa(via.fin)}.`, ir });
+        if (Math.abs(fin - via.fin) > 0.0005) finales.push({ q, k, fin, ir });
       }
     } else {
       const m = avisoNumero(l.modoT === "pendiente" ? l.pendienteT : l.diferencia);
       if (m) it.push({ n: "r", t: `${q}: ${l.modoT === "pendiente" ? "la pendiente" : "la diferencia"} dice ${m}.`, ir });
     }
   });
+  // Fin sesgado: los dos laterales terminan distinto y el eje cae en el promedio de ellos (tolerancia 2 cm):
+  // se informa en vez de avisar. Cualquier otro caso sigue con el aviso de siempre.
+  const fD = finales.find(f => f.k === "lateralDer"), fI = finales.find(f => f.k === "lateralIzq");
+  if (fD && fI && Math.abs((fD.fin + fI.fin) / 2 - via.fin) <= 0.02) {
+    const prom = r3((fD.fin + via.fin + fI.fin) / 3);
+    it.push({ n: "i", t: `Fin sesgado: IZQ ${formatoAbscisa(fI.fin)} · EJE ${formatoAbscisa(via.fin)} · DER ${formatoAbscisa(fD.fin)} (promedio de las tres: ${formatoAbscisa(prom)}).`, ir: fD.ir });
+  } else finales.forEach(f => it.push({ n: "a", t: `${f.q}: termina en ${formatoAbscisa(f.fin)} y el eje en ${formatoAbscisa(via.fin)}.`, ir: f.ir }));
   pon("lat", it);
   // Parqueaderos
   it = [];
@@ -1642,15 +1650,16 @@ function revisarVia(proy) {
 function AvisosVia({ r }) {
   if (!r || !r.items.length) return null;
   const h = React.createElement, ir = id => { const el = id && document.getElementById(id); if (el) el.scrollIntoView({ block: "center", behavior: "smooth" }); };
-  const caja = (n, titulo, items) => items.length > 0 && h("div", { className: "tv-avisos tv-avisos-" + n, style: { background: n === "r" ? "var(--bFEF2F2)" : "var(--bFFFBEB)", border: `1px solid ${n === "r" ? C.danger : C.warn}`,
-      color: n === "r" ? C.danger : C.warn, borderRadius: 10, padding: "9px 12px", marginBottom: 12, fontSize: 13 } },
+  const caja = (n, titulo, items) => items.length > 0 && h("div", { className: "tv-avisos tv-avisos-" + n, style: { background: n === "r" ? "var(--bFEF2F2)" : n === "i" ? "var(--bF0F9FF)" : "var(--bFFFBEB)", border: `1px solid ${n === "r" ? C.danger : n === "i" ? "var(--t0369A1)" : C.warn}`,
+      color: n === "r" ? C.danger : n === "i" ? "var(--t0369A1)" : C.warn, borderRadius: 10, padding: "9px 12px", marginBottom: 12, fontSize: 13 } },
     h("div", { style: { fontWeight: 800, marginBottom: 3 } }, titulo),
     h("ul", { style: { margin: 0, paddingLeft: 18, lineHeight: 1.5 } }, items.map((x, k) => h("li", { key: k }, x.t,
       x.ir && h("button", { onClick: () => ir(x.ir), style: { background: "none", border: "none", color: "var(--t0369A1)", fontWeight: 800, textDecoration: "underline", cursor: "pointer", padding: "0 4px", fontSize: 13, fontFamily: "inherit" } }, "Ir")))));
-  const rojos = r.items.filter(x => x.n === "r"), ambar = r.items.filter(x => x.n === "a");
+  const rojos = r.items.filter(x => x.n === "r"), ambar = r.items.filter(x => x.n === "a"), info = r.items.filter(x => x.n === "i");
   return h(React.Fragment, null,
     caja("r", "⚠ " + rojos.length + (rojos.length === 1 ? " dato para revisar" : " datos para revisar"), rojos),
-    caja("a", "● Para revisar (no impide calcular)", ambar));
+    caja("a", "● Para revisar (no impide calcular)", ambar),
+    caja("i", "ⓘ Fin sesgado", info));
 }
 
 // ─── ESTADO INICIAL ───────────────────────────────────────────────────────────
@@ -2057,7 +2066,7 @@ function ponerTema(t) {
 }
 if (typeof document !== "undefined") { hojaTemas(); const t0 = leerTema(); document.documentElement.setAttribute("data-tema", t0);
   const m0 = document.querySelector('meta[name="theme-color"]'); if (m0) m0.setAttribute("content", TEMAS[t0].colores.barra); }
-const TV_VERSION = "89";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "90";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
