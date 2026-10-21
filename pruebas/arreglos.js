@@ -23,7 +23,7 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
   console.log(await p.evaluate(() => {
     localStorage.setItem('prueba_k', '"copia buena"'); const idbAntes = DATOS.idb; DATOS.idb = false;
     const orig = Storage.prototype.setItem; Storage.prototype.setItem = function (k, v) { if (k === 'prueba_k') throw new Error('QuotaExceeded'); return orig.call(this, k, v); };
-    guardarDato('prueba_k', 'nuevo y grande'); Storage.prototype.setItem = orig; DATOS.idb = idbAntes;
+    guardarDato('prueba_k', 'nuevo y grande'); if (typeof vaciarGuardado === 'function') vaciarGuardado(); Storage.prototype.setItem = orig; DATOS.idb = idbAntes;
     return 'sin espacio y sin IndexedDB, queda: ' + localStorage.getItem('prueba_k') + ' | estado: ' + (DATOS.guardado.ok ? 'guardado' : 'NO se pudo guardar (avisa)');
   }));
   // UI: eje + teclado en abscisa, luego deshacer el eje (antes la app quedaba en blanco)

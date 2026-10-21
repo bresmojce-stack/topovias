@@ -14,7 +14,7 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
     localStorage.setItem('topovias_standalone_obras', JSON.stringify([{id:5,nombre:'Carambolo'}])); localStorage.setItem('topovias_standalone_obras__t', String(Date.now()+99999));
     localStorage.setItem('topovias_standalone_activo', '1'); localStorage.setItem('topovias_standalone_nav', JSON.stringify({vista:'via',obraId:5})); }, pr);
   await p.reload(); await p.waitForSelector('header.tv-header'); await p.waitForTimeout(300);
-  const guardado = () => p.evaluate(() => (JSON.parse(localStorage.getItem('topovias_standalone'))[0].dibujos || []));
+  const guardado = () => p.evaluate(() => (typeof vaciarGuardado === 'function' && vaciarGuardado(), JSON.parse(localStorage.getItem('topovias_standalone'))[0].dibujos || []));
   const objs = async () => (await guardado())[0].objs;
   await p.click('.tv-tabs button[data-tab=dibujo]'); await p.waitForTimeout(200);
   await p.click('button:has-text("Crear el primer dibujo")'); await p.waitForTimeout(400);

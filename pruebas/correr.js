@@ -56,6 +56,9 @@ const PRUEBAS = [
   ['abscisa repetida solo en la superficie de abajo', 'abscisarep', '../out/abscisarep'],
   ['tabla de puntos (PC)', 'tablapuntos', '../out/tablapuntos'],
   ['tabla de puntos (celular)', 'tablapuntos', '../out/tablapuntos_m', { W: '390' }],
+  ['unitarias: cálculo (tramos, cotas, abscisas, redondeo)', 'u_calculo', ''],
+  ['unitarias: entrada (coma, azimut, tabla de puntos, calculadora, copia)', 'u_entrada', ''],
+  ['unitarias: datos (guardado, bloqueadas, Drive, Dibujo)', 'u_datos', ''],
   ['Excel tema Claro', 'excel_tema', '../out/xl_claro', { TEMA: 'claro' }],
   ['Excel tema Agua', 'excel_tema', '../out/xl_agua', { TEMA: 'agua' }],
 ];
@@ -91,6 +94,8 @@ const ESPERA = {
   estadovia: ['marcadas: EJE 1:ok EJE 2:falta EJE 3:malo | sigue en la obra: true', 'quitar el amarillo: EJE 1:ok EJE 2:- EJE 3:malo', 'después de recargar: ok malo'],
   tablapuntos: ['Dibujar todos (6 listos · 2 por revisar)', 'nuevos: P3, P4, BM1, P6, BM1, P10, pl 6 abierta | sig: 11', 'quedan en la tabla: P7, P8',
     'nuevos: P7, P8, pl | tabla abierta: false | sig: 11', 'deshacer quita 3 objetos', 'nuevos: E1, P12, E3, pl 3 cerrada | sig: 13', 'Norte/Este cortados: 0', 'barra de arriba cabe: true', 'filas en una línea: true | columna de cota: 0'],
+  // las unitarias fallan con código 1; además deben decir 0 fallas
+  u_calculo: ['unitarias cálculo:', ' 0 fallas'], u_entrada: ['unitarias entrada:', ' 0 fallas'], u_datos: ['unitarias datos:', ' 0 fallas'],
   autoacotar: ['"Área 187.000 m²", "Perím. 56.000 m"', '4. círculo r5: "R 5.000", "Área 78.540 m²", "Perím. 31.416 m", cota 10.000(-)', '"R 5.000", "Cuerda 10.000", "Arco 15.708"', 'pie: Área 187.000 m²   Perímetro 56.000 m', 'movido 25 m al este: 25.000 0.000'],
 };
 

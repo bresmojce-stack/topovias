@@ -35,7 +35,7 @@ async function leerXlsx(p, path) {
   console.log('excav parq label:', await p.innerText('text=/Excavación parqueadero/'));
   await p.screenshot({ path: process.argv[3] + '_parq.png', fullPage: true });
   await p.click('button:has-text("CALCULAR")');
-  const t = await p.evaluate(() => generarTabla(JSON.parse(localStorage.getItem('topovias_standalone'))[0]));
+  const t = await p.evaluate(() => (typeof vaciarGuardado === 'function' && vaciarGuardado(), generarTabla(JSON.parse(localStorage.getItem('topovias_standalone'))[0])));
   const r = t.find(x => x.abs === 15);
   console.log('abs 15 eje', r.cotaEje, 'latDer', r.cotaLatDer, 'parqDer', r.parqDerCota);
   r.capas.forEach(c => console.log(' ', c.nombre.padEnd(10), c.esOculta ? '(oculta)' : '        ', 'eje', c.eje, 'der', c.der, 'parqDer', c.parqDer));

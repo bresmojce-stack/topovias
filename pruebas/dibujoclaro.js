@@ -1,13 +1,7 @@
 // Dibujo: auto acotar un solo lado, diámetro del círculo, acotar solo lo elegido, descomponer una figura y regenerar la imagen
-const { chromium } = require('/opt/node-tools/node_modules/playwright');
+const { abrirApp, cargarVia, leerVias, cerrar } = require('./base');
 (async () => {
-  const W = +(process.env.W || 1280), movil = W < 600;
-  const b = await chromium.launch();
-  const ctx = await b.newContext({ viewport: { width: W, height: movil ? 844 : 900 }, acceptDownloads: true, hasTouch: true, isMobile: movil });
-  const p = await ctx.newPage();
-  const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error') errs.push('console ' + m.text().slice(0, 200)); });
-  p.on('dialog', d => d.accept());
-  await p.goto('file://' + process.argv[2]); await p.waitForSelector('header.tv-header');
+  const { b, p, errs, movil } = await abrirApp();
   const T = () => ({cotaInicio:"100",cotaFin:"",pendiente:"1",distancia:"50",id:1});
   const lat = {modo:"transversal",ancho:"3",modoT:"diferencia",diferencia:"0",pendienteT:"",tramos:[T()],absInicio:""};
   const R = (x0, y0, w, hh) => [{ x: x0, y: y0 }, { x: x0 + w, y: y0 }, { x: x0 + w, y: y0 + hh }, { x: x0, y: y0 + hh }];
@@ -19,12 +13,10 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
     { id: 10, t: "ar", c: { x: 55, y: 25 }, r: 5, a1: 0, a2: Math.PI }];
   const pr = { id: 1, obraId: 5, nombre: "V", absInicio: "0", tramos: [T()], intermedias: [], capas: [], sobreancho:{izq:"",der:""}, lateralIzq: lat, lateralDer: lat, parqueaderos: [], bmEstaciones: [], coordsEje: [], coordsIzq: [], coordsDer: [], nivelaciones: [], volumenes: [],
     dibujos: [{ id: 7, nombre: "D", sig: 3, objs: objs0 }] };
-  const tb = process.env.TB || ''; await p.evaluate(([pr, tb]) => { localStorage.clear(); localStorage.setItem('topovias_standalone', JSON.stringify([pr])); localStorage.setItem('topovias_standalone__t', String(Date.now()+99999));
-    localStorage.setItem('topovias_standalone_obras', JSON.stringify([{id:5,nombre:'O'}])); localStorage.setItem('topovias_standalone_obras__t', String(Date.now()+99999));
-    localStorage.setItem('topovias_standalone_activo', '1'); if (tb) localStorage.setItem('tv_tema', tb); localStorage.setItem('topovias_standalone_nav', JSON.stringify({vista:'via',obraId:5})); }, [pr, tb]);
-  await p.reload(); await p.waitForSelector('header.tv-header'); await p.click('.tv-tabs button[data-tab=dibujo]'); await p.waitForTimeout(500);
-  const objs = () => p.evaluate(() => (typeof vaciarGuardado === 'function' && vaciarGuardado(), JSON.parse(localStorage.getItem('topovias_standalone'))[0].dibujos[0].objs));
-  const dib = () => p.evaluate(() => (typeof vaciarGuardado === 'function' && vaciarGuardado(), JSON.parse(localStorage.getItem('topovias_standalone'))[0].dibujos[0]));
+  await cargarVia(p, pr);
+  await p.click('.tv-tabs button[data-tab=dibujo]'); await p.waitForTimeout(500);
+  const objs = async () => (await leerVias(p))[0].dibujos[0].objs;
+  const dib = async () => (await leerVias(p))[0].dibujos[0];
   const herr = async (g, id) => { await p.click(`.tv-dib-nav button[data-grupo=${g}]`); await p.click(`.tv-dib-hoja button[data-herr="${id}"]`); await p.waitForTimeout(150); };
   const tap = async (x, y) => { if (movil) await p.touchscreen.tap(x, y); else await p.mouse.click(x, y); await p.waitForTimeout(150); };
   let M; const mapa = async () => { const c = await p.$$eval('.tv-dib-svg > g > circle', cs => cs.slice(0, 2).map(x => { const r = x.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })); M = { x0: c[0][0], y0: c[0][1], k: (c[1][0] - c[0][0]) / 40 }; };
@@ -69,5 +61,5 @@ const { chromium } = require('/opt/node-tools/node_modules/playwright');
   await p.evaluate(() => { const s = document.querySelector('.tv-dib-svg'); const r = s.getBoundingClientRect(); for (let i = 0; i < 14; i++) s.dispatchEvent(new WheelEvent('wheel', { deltaY: 300, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2, bubbles: true, cancelable: true })); });
   await p.waitForTimeout(500);
   console.log('9. zoom lejos: textos de cotas visibles =', await p.$$eval('.tv-dib-svg text', ts => ts.filter(t => /^\d+\.\d{3}$/.test(t.textContent)).length));
-  console.log(errs.join('\n') || 'no errors'); await b.close();
+  await cerrar(b, errs);
 })();
