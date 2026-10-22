@@ -1,15 +1,16 @@
 // TopoVías: funciona sin internet.
 // Al publicar una versión nueva, cambiar CACHE_VERSION (y TV_VERSION en index.html).
-const CACHE_VERSION = "topovias-v92";
+const CACHE_VERSION = "topovias-v93";
 const ARCHIVOS = ["./", "./index.html", "./manifest.json", "./icon-topo-192.png", "./icon-topo-512.png", "./icon-topo-maskable.png", "./apple-touch-icon.png", "./favicon.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE_VERSION).then(c => c.addAll(ARCHIVOS.map(a => new Request(a, { cache: "reload" })))).then(() => self.skipWaiting()));
 });
 
+// Solo borra sus propias copias viejas: Mini Civil vive en la misma dirección (bresmojce-stack.github.io)
 self.addEventListener("activate", e => {
   e.waitUntil(caches.keys()
-    .then(ks => Promise.all(ks.filter(k => k !== CACHE_VERSION).map(k => caches.delete(k))))
+    .then(ks => Promise.all(ks.filter(k => k.startsWith("topovias-") && k !== CACHE_VERSION).map(k => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 
