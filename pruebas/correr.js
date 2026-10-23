@@ -53,6 +53,7 @@ const PRUEBAS = [
   ['dibujo → vía: cotas del eje y PI de rasante', 'dibujovia4', '../out/dibujovia4'],
   ['dibujo: lista de puntos (esconder, color, nombre)', 'listapuntos', '../out/listapuntos'],
   ['dibujo: tipos de línea (pantalla y DXF)', 'lineas', '../out/lineas'],
+  ['dibujo: pellizco con un dedo fuera del lienzo', 'pellizco', ''],
   ['abscisa repetida solo en la superficie de abajo', 'abscisarep', '../out/abscisarep'],
   ['tabla de puntos (PC)', 'tablapuntos', '../out/tablapuntos'],
   ['tabla de puntos (celular)', 'tablapuntos', '../out/tablapuntos_m', { W: '390' }],
@@ -66,6 +67,7 @@ const MALO = /PAGEERROR|TimeoutError|Error:|Cannot read properties|is not define
 // Lo que debe salir, tal cual, en la salida de cada prueba (valores revisados a mano y en el Excel, versión 75).
 // Si un cambio mueve un cálculo a propósito, se revisa el número nuevo con Brian y se cambia aquí.
 const ESPERA = {
+  pellizco: ['Todo bien (pellizco).'],
   extremos2: ['100.992 m³', '238.191 m³', '27.372 m³', '99.288 m³', '50.720 m³'],
   cant: ['volúmenes individuales: [ 25.375, 25.375, 76.125 ]', 'Asfalto | 495.000 | 0.050', 'Base | 719.980 | 0.150'],
   saparq: ['subbase | 482.520 | 0.200 | 96.504 m³', 'roca | 461.460 | 0.300 | 138.438 m³', "volumen: [ '99.750 m³' ]"],

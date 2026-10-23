@@ -2088,7 +2088,7 @@ function ponerTema(t) {
 }
 if (typeof document !== "undefined") { hojaTemas(); const t0 = leerTema(); document.documentElement.setAttribute("data-tema", t0);
   const m0 = document.querySelector('meta[name="theme-color"]'); if (m0) m0.setAttribute("content", TEMAS[t0].colores.barra); }
-const TV_VERSION = "93";   // igual que CACHE_VERSION en sw.js
+const TV_VERSION = "94";   // igual que CACHE_VERSION en sw.js
 const TV_VIA_ID = new URLSearchParams(location.search).get('viaId') || 'standalone';
 const TV_KEY = 'topovias_' + TV_VIA_ID;
 
@@ -7064,15 +7064,21 @@ function TabDibujo({ proy, onChange, onArchivo, onVia }) {
   const gesto = React.useRef({ ptrs: new Map(), pinch: null, pan: null, anulado: false, trazo: null });
   // la posición del lienzo se mide una vez al empezar el gesto (medirla en cada movimiento obliga a recalcular la página)
   const posEn = e => { const G = gesto.current; const r = (G.ptrs.size && G.rect) || (G.rect = svgRef.current.parentElement.getBoundingClientRect()); return { X: e.clientX - r.left, Y: e.clientY - r.top }; };
+  // pellizco: empieza con dos dedos a y b (lo que se estaba haciendo con un dedo se anula) y acerca o aleja alrededor del punto medio
+  const empezarPellizco = (G, a, b, extra) => {
+    G.pinch = { d0: Math.hypot(b.X - a.X, b.Y - a.Y) || 1, m0: { X: (a.X + b.X) / 2, Y: (a.Y + b.Y) / 2 }, v0: vistaRef.current, ...extra };
+    G.anulado = true; G.trazo = null; G.pan = null; G.ventana = null; setVentana(null); setTrazo(null); setCursor(null); setLupa(null);
+  };
+  const pellizcar = (P, a, b) => {
+    const v0 = P.v0, k = Math.min(Math.max(v0.k * (Math.hypot(b.X - a.X, b.Y - a.Y) / P.d0), 0.0005), 5000);
+    const wm = aM(P.m0.X, P.m0.Y, v0), m = { X: (a.X + b.X) / 2, Y: (a.Y + b.Y) / 2 };
+    moverVista({ k, cx: wm.x - (m.X - W / 2) / k, cy: wm.y + (m.Y - H / 2) / k });
+  };
   const onDown = e => {
     const G = gesto.current; if (!G.ptrs.size) G.rect = null; const p = posEn(e);
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
     G.ptrs.set(e.pointerId, p);
-    if (G.ptrs.size === 2) {
-      const [a, b] = [...G.ptrs.values()];
-      G.pinch = { d0: Math.hypot(b.X - a.X, b.Y - a.Y) || 1, m0: { X: (a.X + b.X) / 2, Y: (a.Y + b.Y) / 2 }, v0: vistaRef.current };
-      G.anulado = true; G.trazo = null; G.pan = null; G.ventana = null; setVentana(null); setTrazo(null); setCursor(null); setLupa(null); return;
-    }
+    if (G.ptrs.size === 2) { const [a, b] = [...G.ptrs.values()]; empezarPellizco(G, a, b); return; }
     if (G.ptrs.size > 2) return;
     G.anulado = false;
     const panear = e.button === 1 || e.button === 2 || herr === "mano" || (e.pointerType === "mouse" && herr === "elegir" && e.button === 0);
@@ -7084,12 +7090,10 @@ function TabDibujo({ proy, onChange, onArchivo, onVia }) {
   const onMove = e => {
     const G = gesto.current, p = posEn(e);
     if (G.ptrs.has(e.pointerId)) {
+      if (G.pinch && G.pinch.fuera) { G.ptrs.set(e.pointerId, p); return; }   // pellizco con un dedo fuera del lienzo: lo lleva dedosFuera
       if (G.pinch && G.ptrs.size >= 2) {
         G.ptrs.set(e.pointerId, p);
-        const [a, b] = [...G.ptrs.values()], P = G.pinch, v0 = P.v0;
-        const k = Math.min(Math.max(v0.k * (Math.hypot(b.X - a.X, b.Y - a.Y) / P.d0), 0.0005), 5000);
-        const wm = aM(P.m0.X, P.m0.Y, v0), m = { X: (a.X + b.X) / 2, Y: (a.Y + b.Y) / 2 };
-        moverVista({ k, cx: wm.x - (m.X - W / 2) / k, cy: wm.y + (m.Y - H / 2) / k });
+        const [a, b] = [...G.ptrs.values()]; pellizcar(G.pinch, a, b);
         return;
       }
       if (G.pan && !G.trazo) {
@@ -7154,6 +7158,28 @@ function TabDibujo({ proy, onChange, onArchivo, onVia }) {
     tocar(p.X, p.Y);
     if (e.pointerType !== "mouse") setCursor(null);
   };
+  // pellizco con un dedo fuera del lienzo (en un botón, en la barra de arriba o en la de abajo). El lienzo solo recibía el dedo que
+  // cayó en él y lo tomaba como un toque: al soltarlo ponía un punto (o el punto de una línea) donde no iba. Con los toques de toda
+  // la pantalla ese pellizco también acerca y aleja, y el dedo del lienzo ya no dibuja ni elige al soltarlo.
+  React.useEffect(() => {
+    const dedosFuera = e => {
+      // solo cuenta si un dedo empezó en el lienzo (G.rect lo midió al bajar); con los dos en el lienzo lo lleva onMove
+      const G = gesto.current, P = G.pinch; if (P ? !P.fuera : !(e.type === "touchstart" && G.ptrs.size === 1 && e.touches.length >= 2)) return;
+      const r = G.rect, en = t => ({ X: t.clientX - r.left, Y: t.clientY - r.top }), ts = [...e.touches];
+      if (P) {
+        const a = ts.find(t => t.identifier === P.fuera[0]), b = ts.find(t => t.identifier === P.fuera[1]);
+        if (a && b) { if (e.type === "touchmove") pellizcar(P, en(a), en(b)); return; }
+        G.pinch = null; fijarVista();   // se levantó uno de los dos: el que queda en el lienzo sigue sin dibujar
+        const resto = [...G.ptrs.values()][0];
+        G.pan = resto ? { X: resto.X, Y: resto.Y, v0: vistaRef.current, mov: 0, solo: false, noPan: true } : null;
+        return;
+      }
+      empezarPellizco(G, en(ts[0]), en(ts[1]), { fuera: [ts[0].identifier, ts[1].identifier] });
+    };
+    const tipos = ["touchstart", "touchmove", "touchend", "touchcancel"], op = { capture: true, passive: true };
+    tipos.forEach(n => window.addEventListener(n, dedosFuera, op));
+    return () => tipos.forEach(n => window.removeEventListener(n, dedosFuera, op));
+  });
   React.useEffect(() => {
     const el = svgRef.current; if (!el) return;
     const rueda = e => {
