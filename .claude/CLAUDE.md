@@ -1,5 +1,7 @@
 # TopoVías — guía para trabajar en el código
 
+**Primero leer `MANUAL.md` (reglas de Brian para todas las apps, 2026-10-26): manda sobre esta guía si chocan.**
+
 App de topografía de vías (Colombia) para Brian Escobar, topógrafo. Un solo archivo: `index.html`
 (React 18 sin JSX, `React.createElement`; ExcelJS dentro). PWA publicada en GitHub Pages
 (https://bresmojce-stack.github.io/topovias/) al hacer push a `main`. Responder siempre en español.
@@ -126,8 +128,8 @@ Cuando se agregue o cambie una pieza, actualizar ese artefacto y esta guía junt
 - Brian revisa todo en el Excel: valores, carteras y fórmulas deben quedar enlazados.
 
 ## Auditoría con /ponytail-audit (a Brian le ha servido)
-Recordarle a Brian si quiere correr `/ponytail-audit` cuando pasen **1 semana o 5 versiones** desde la
-última (lo que llegue primero), en una línea al final de la respuesta, sin correrla sin su permiso. Primero
+Recordarle a Brian si quiere correr `/ponytail-audit` cada **7 publicaciones** desde la
+última (MANUAL.md), en una línea al final de la respuesta, sin correrla sin su permiso. Primero
 se le muestran los hallazgos y él decide qué se arregla. Al hacerla, actualizar aquí la fecha.
 - Última auditoría: 2026-10-21 (versión 90), con revisión del Dibujo. Arreglados en la 91: restaurar copia, foto en vía duplicada, hora local con localStorage lleno, guardado diferido, revisión de sintaxis en GitHub, código muerto y 10 del Dibujo (ver versión 91). Abierto (Brian no lo pidió): `seccionesParq` no recorta a la abscisa fin (tramos que suman más que el parqueadero dan una sección de largo negativo). Ya no se confirma: pegar CSV mixto en Tabla de puntos (queda en rojo, no se salta).
 - Auditoría anterior: 2026-10-20 (versión 84). Arreglados en la 85: parqueaderos que se tocan (sardinel y extremos), fallos con el ancho de cada fila, código muerto, pruebas sueltas. Abiertos: `seccionesParq` no recorta a la abscisa fin; restaurar copia no guarda antes la copia del día (propuesta: `DATOS.copiaDia = null; copiaAutomatica();`); con `localStorage` lleno `nubeSincronizar` toma `Date.now()` como hora local y siempre gana; borrar foto en vía duplicada la borra del original; pegar CSV mixto en Tabla de puntos. Antes, 2026-10-19 (versión 80). Arreglados en la 81: fila (2) sin lectura cortaba el volumen; Drive sin datos cargados mandaba vías a la papelera. Abiertos (Brian decide): dos parqueaderos que se tocan cuentan doble sardinel y extremos en la unión (uno solo con dos anchos cuenta bien); volumen entre dos nivelaciones ignora la (2) de la de abajo (345 en vez de 360 en la prueba); fallos junto a un 2.º parqueadero o sección más ancha usan el ancho del primero (`cotaSuperficieEn`); `seccionesParq` no recorta a la abscisa fin si los tramos suman más; restaurar copia no guarda antes la copia del día; borrar foto en una vía duplicada la borra del original; pegar CSV mixto en Tabla de puntos salta filas; código muerto `__nSec`, `anchoParqDer/Izq` en `calcVolumen`.
